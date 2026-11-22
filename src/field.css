@@ -1,0 +1,177 @@
+/* The battlefield, phase controls and active workbench share one viewport. */
+.field-shell{--field-edge:#605367;--field-muted:#b9aabb;--field-gold:#efd09a;--field-bar:54px;height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.command-room{display:flex;flex-direction:column;max-width:1780px;width:100%;margin:0 auto;min-height:0;flex:1;padding:0 clamp(12px,2.2vw,38px);box-sizing:border-box}
+.field-stage{flex:none;min-width:0;position:relative}
+.field-head{display:flex;align-items:center;gap:clamp(12px,2vw,30px);min-height:56px}
+.field-title,.field-controls,.field-title .wave-index{display:flex;align-items:center}
+.field-title{gap:12px;white-space:nowrap;flex:1}
+.field-title h1{font:700 clamp(20px,2vw,30px)/1.15 var(--serif);color:#f0ddc8;letter-spacing:.04em;margin:0}
+.wave-index{font:12px monospace;gap:4px;color:#bdabbf;border-right:1px solid var(--field-edge);padding-right:12px}
+.wave-index b{color:#eed1a2;font-size:17px}
+.field-phase{border:1px solid #796471;padding:3px 7px;font-size:11px;color:#dec1b3;background:#2c2532}
+.field-phase.live{color:#e4c388;border-color:#897653}
+.field-controls{gap:5px}.field-controls button,.equipped>button{border:1px solid #615267;background:#28212e;color:#e8d8d5;padding:6px 10px;cursor:pointer;font:inherit;font-size:12px}
+.field-head .resource-strip{width:clamp(285px,29vw,435px);gap:16px;padding:0;margin:0;border:0;box-shadow:none;background:none}
+.field-head .resource-icon{font-size:18px}.field-head .resource-label{font-size:11px}.field-head .resource-label strong{font-size:15px}
+.field-head .resource-track{height:4px;margin-top:4px}
+.field-head .regen-label{display:none}.field-head .gold-resource{min-width:60px}
+.field-stage .battle-topline{inset:12px 14px auto;pointer-events:none}
+.field-stage .battle-timer{background:#201924ed;border:1px solid #927853;padding:3px 8px;color:#f1d6a2;white-space:nowrap;font-variant-numeric:tabular-nums}
+.field-stage .battle-timer small{color:inherit}
+.field-stage .battle-timer.urgent{background:#4b1825;border-color:#e18783;color:#ffcec0}
+.field-caption{position:absolute;left:16px;bottom:14px;padding:8px 13px;border-left:3px solid var(--field-gold);background:#191421ed;color:#f4dfbb;display:flex;align-items:center;gap:12px}
+.field-caption strong{font:700 18px var(--serif)}.field-caption span{font-size:12px;color:#dfcbd2}
+.field-stage .bell-alert{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);z-index:2;width:max-content;max-width:95%;margin:0;background:#382635f2}
+.field-advance{margin-left:auto;white-space:nowrap}
+.desk-body{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:clamp(12px,1.8vw,24px);scrollbar-color:#79637b #211b2a}
+.desk-body h3,.desk-section-title h3,.camp-intel h3,.watch-grid h3{font:700 17px var(--serif);color:#edcfa8;margin:0}
+.desk-section-title,.desk-section-title>div,.watch-grid h3{display:flex;gap:10px;align-items:center;justify-content:space-between}
+.desk-section-title>div{justify-content:flex-start}.desk-section-title small,.watch-grid h3 small,.camp-intel small{color:var(--field-muted);font:12px sans-serif}
+.desk-section-title .secondary-button,.mustered-companies .secondary-button,.vendor-detail .secondary-button{padding:6px 12px;font-size:12px}
+.camp-grid{display:grid;grid-template-columns:minmax(0,3fr) minmax(180px,1fr);gap:clamp(14px,2vw,31px)}
+.desk-body .barracks{border:0;background:transparent;padding:0}
+.desk-body .barracks header{margin:0 0 12px}
+.desk-body .barracks header strong{font:700 17px var(--serif);color:#edcfa8}
+.desk-body .barracks-list{gap:8px}
+.desk-body .barracks-list button{display:flex;justify-content:flex-start;padding:9px;gap:9px;background:#302637;border:1px solid #68576e}
+.desk-body .barracks-list button:hover{border-color:#d6b385;background:#3a2d3b}
+.desk-body .barracks-list .pixel-sprite{width:clamp(35px,3.5vw,58px);height:56px;flex:none}
+.desk-body .barracks-list b{font-size:14px;color:#f2e4d1}.desk-body .barracks-list small{color:#c9b8cc;line-height:1.4}
+.camp-intel{border-left:1px solid #514553;padding-left:20px}.camp-intel p{color:#dbcad4;font-size:13px;margin:9px 0}
+.camp-intel .text-button{margin-left:8px;color:#ebc889}
+.mustered-companies,.equipped{display:flex;gap:8px 12px;align-items:center;flex-wrap:wrap}
+.mustered-companies span{background:#352a3a;color:#e9d4c8;padding:10px;border:1px solid #65536a}
+.desk-body .hand-section{padding:0;margin:0;background:none;border:0;box-shadow:none}
+.desk-body .hand-heading h2{font-size:17px}.desk-body .hand-heading p{font-size:11px}
+.desk-body .hand-cards{min-height:0;justify-content:center;padding:13px 0 10px;gap:clamp(5px,1.2vw,18px)}
+.desk-body .playing-card{height:clamp(91px,13dvh,137px);max-width:102px}
+.desk-body .command-bar{margin:0}.desk-body .hand-footnote{margin-bottom:0}
+.desk-body .embedded-panel{width:100%;max-width:none;max-height:none;overflow:visible;padding:0;border:0;box-shadow:none;background:none}
+.desk-body .forge-header,.desk-body .brief-header{padding-bottom:8px}
+.desk-body .forge-header h2,.desk-body .brief-header h2,.inline-press>h2{font-size:21px}
+.desk-body .forge-performance{max-width:600px}
+.inline-press .press-hand{grid-template-columns:repeat(8,minmax(0,1fr))}
+.desk-body .supply-section,.desk-body .war-college,.desk-body .field-report{margin:0;padding:0;border:0;background:none}
+.desk-body .reward-grid{gap:10px;margin-top:13px}.desk-body .reward-card{padding:13px}
+.stall-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0}
+.stall-item{display:grid;grid-template-columns:clamp(38px,6vw,90px) minmax(0,1fr);gap:12px;align-items:center;background:#2e2435;border:1px solid #67526a;padding:11px}
+.stall-art{width:100%;height:75px;image-rendering:pixelated}
+.stall-item h4{font:700 17px var(--serif);margin:3px 0;color:#f0d6c3}
+.stall-item small{font-size:10px;color:#dbc094}.stall-item p,.vendor-detail span{font-size:12px;color:#c9b8cf;line-height:1.5;margin:3px 0 8px}
+.stall-item .purchase-button{max-width:145px}
+.equipped strong{font-size:12px;color:#c7b3c7}.equipped>button[aria-pressed=true]{border-color:#dab987}
+.vendor-detail{flex-basis:100%;display:flex;align-items:center;gap:10px}.vendor-detail span{margin:0}
+.watch-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:clamp(20px,3vw,50px)}
+.strength-list{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:10px}
+.strength-list>div{background:#302635;border:1px solid #594a5d;padding:6px;display:flex;align-items:center;gap:7px}
+.strength-list canvas,.strength-list svg{width:34px;height:41px;flex:none}.strength-list>div.absent{opacity:.55}
+.strength-list span{flex:1}.strength-list b{color:#e7d9d7;font-size:12px;white-space:nowrap}
+.strength-list i{display:block;height:3px;background:#18131f;margin-top:6px}.strength-list em{display:block;height:100%;background:#c1a97b}
+.field-dispatch p{margin:6px 0 0;font-size:12px;line-height:1.4;color:#cbbbcf}
+@media(max-width:1000px){.field-title{gap:7px}.field-head{gap:12px}.camp-grid{grid-template-columns:minmax(0,3fr) minmax(140px,1fr)}
+  .desk-body .barracks-list button{padding:5px;gap:4px}.desk-body .barracks-list .pixel-sprite{width:30px;height:43px}
+  .watch-grid{grid-template-columns:1.3fr 1fr}.strength-list{gap:4px}.strength-list canvas,.strength-list svg{width:23px;height:31px}
+}
+@media(max-width:760px){
+  .field-shell{--field-bar:44px}.command-room{padding:0 8px}
+  .field-head{min-height:0;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 8px;padding:7px 1px}
+  .field-head .resource-strip{grid-row:2;grid-column:1/-1;max-width:none;width:100%;gap:16px}
+  .field-head .resource-label{font-size:10px;display:flex;gap:5px}.field-head .resource-label strong{font-size:13px}
+  .field-head .resource-icon{font-size:15px}.field-head .resource-track{margin-top:2px;height:3px}
+  .field-head .gold-resource small{display:inline}.field-controls button{font-size:11px;padding:5px 7px}
+  .field-stage .battle-topline{inset:6px 6px auto}.field-caption{left:6px;bottom:6px;gap:6px;padding:5px 7px}.field-caption strong{font-size:14px}.field-caption span{font-size:10px}
+  .desk-body{padding:10px}.camp-grid,.watch-grid{grid-template-columns:1fr;gap:14px}.camp-intel{border-left:0;border-top:1px solid #554657;padding:9px 0 0}
+  .desk-body .barracks-list{grid-template-columns:repeat(2,minmax(0,1fr))}.desk-body .barracks-list button{padding:7px;gap:8px}
+  .desk-body .barracks-list .pixel-sprite{width:34px;height:43px}.desk-body .barracks-list b{font-size:13px}
+  .desk-body .reward-grid,.stall-grid{grid-template-columns:1fr}.desk-body .reward-card{padding:9px 12px}
+  .stall-item{grid-template-columns:54px minmax(0,1fr)}.stall-art{height:51px}.stall-item .purchase-button{padding:4px 8px}
+  .inline-press .press-hand{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .strength-list{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:520px){
+  .desk-body .command-bar{grid-template-columns:minmax(0,1fr);padding:9px}
+  .desk-body .command-actions{min-width:0;gap:5px}
+  .desk-body .deploy-button{min-width:0;gap:5px;padding:0 7px}
+  .desk-body .hand-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px 7px}
+  .desk-body .playing-card{width:100%;max-width:none;height:clamp(88px,25vw,110px)}
+  .desk-body .playing-card.selected,.desk-body .playing-card.selected:hover{transform:translateY(-6px)}
+}
+@media(max-height:540px) and (min-aspect-ratio:3/2){
+  .field-shell{--field-bar:36px}.field-head{min-height:35px;padding:1px;display:flex}
+  .field-head .resource-strip{width:32%;min-width:220px}
+}
+.field-pick-hint{position:absolute;left:12px;bottom:10px;padding:4px 8px;background:#1c1725d9;color:#e8d4b7;font-size:11px;pointer-events:none}
+.field-shell[data-phase=ready] .battle-canvas{cursor:crosshair}
+
+/* The wagon offer sits above the action. The hand stays in the command desk. */
+.convoy-call {
+  position:absolute; top:44px; left:50%; transform:translateX(-50%);
+  display:flex; align-items:center; gap:12px; max-width:95%; padding:7px 12px;
+  background:#231e2dfa; color:#f4e3c4; border:1px solid #b79b77;
+  border-left:4px solid #d6b68a; box-shadow:3px 3px #18121bc4;
+}
+.convoy-call.heavy { border-left-color:#e6a3a2; }
+.convoy-call>div { display:grid; gap:2px; }
+.convoy-call strong { font:700 16px var(--serif); }
+.convoy-call b { color:#ffd487; margin-left:6px; }
+.convoy-call span { font-size:11px; white-space:nowrap; }
+.convoy-call button { min-height:32px; padding:5px 9px; font-size:12px; white-space:nowrap; }
+.convoy-plan { display:flex; flex-wrap:wrap; align-items:baseline; gap:3px 9px; margin-top:8px; color:#e0cbb3; font-size:12px; }
+.convoy-plan b { color:#efc88d; }
+.barracks header .assemble-button { color:#f0cb93; border:1px solid #8f756b; font-size:12px; padding:4px 8px; margin-left:auto; }
+@media(max-width:760px) {
+  .convoy-call { top:33px; gap:6px; padding:4px 6px; width:max-content; }
+  .convoy-call strong { font-size:13px; }
+  .convoy-call button { padding:4px 7px; }
+}
+
+.modal-scrim.deal-scrim{padding:0;align-items:flex-start;background:#100d10}
+.deal-scrim>.joker-entry{margin:auto;width:100%;max-width:1720px}
+.trick-bar{display:flex;align-items:center;gap:12px;padding:6px 13px;background:#282028;color:#e7d5bb;border-top:1px solid #725648;min-height:46px}
+.performer-id img{width:32px;height:35px;object-fit:cover;object-position:50% 28%;border:1px solid #b39771}
+.trick-id{display:grid;gap:1px;white-space:nowrap}.trick-id small{font-size:10px;color:#c6a98e}.trick-id b{font-size:14px}
+.trick-hint,.unit-picker span{font-size:12px;color:#d4c2b0}.trick-toggle,.palm-steps button,.unit-picker select{min-height:31px;padding:4px 10px;border:1px solid #927556;background:#33282b;color:#f5dbaa;font:inherit;font-size:12px}
+.trick-toggle{margin-left:auto;white-space:nowrap}.trick-toggle[aria-pressed=true]{background:#e9cd98;color:#2a1c1a}
+.palm-steps,.unit-picker{display:flex;gap:6px;align-items:center}.unit-picker select{max-width:145px}
+.trick-controls{display:flex;align-items:center;flex-wrap:wrap;gap:5px;flex:1;min-width:0}
+.trick-controls select,.trick-controls button{min-height:31px;max-width:100%;padding:4px 7px;background:#33282b;border:1px solid #927556;color:#f5dbaa;font:inherit;font-size:12px}
+.trick-controls small{font-size:11px;color:#e1c9a5}.trick-controls button:disabled{opacity:.5}
+.hand-cards .playing-card.palming{outline:2px solid #ffdc94;outline-offset:1px}.playing-card.altered .card-key{color:#61411d;background:#f6d392;font-weight:700}
+@media(max-width:760px){.trick-bar{gap:6px;padding:5px 7px;flex-wrap:wrap}.trick-id b{font-size:12px}.performer-id img{width:26px;height:31px}.trick-hint,.unit-picker span{font-size:10px}.unit-picker{flex-wrap:wrap;flex:1}.unit-picker span{display:none}.unit-picker select{max-width:118px}.palm-steps button{padding:4px}.trick-toggle{padding:4px 7px}}
+
+.performer-id{display:flex;align-items:center;gap:8px;text-align:left;padding:0;color:inherit;background:transparent;border:0;cursor:pointer}
+.performer-id:hover .trick-id b,.performer-id:focus-visible .trick-id b{color:#ffdb9e}
+.modal-scrim>.performer-panel{width:min(690px,100%);margin:auto}
+
+/* Keep the command keys in reach when this desk has room for a separate hand. */
+.desk-body[data-section=orders] { container: order-desk / size; }
+@container order-desk (min-height: 250px) {
+  .desk-body .hand-section { height: 100%; display: flex; flex-direction: column; }
+  .order-cards { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-color: #79637b #211b2a; }
+  .desk-body .command-bar, .desk-body .hand-footnote { flex: none; }
+  .desk-body .command-bar { padding-block: 6px; }
+}
+.battlefield-frame .toast-note {
+  position: absolute; z-index: 3; right: 9px; bottom: 8px; left: auto; transform: none;
+  min-width: 0; max-width: min(35em,calc(100% - 18px)); padding: 6px 10px;
+  pointer-events: none; border-width: 1px; box-shadow: 2px 2px #1b101c;
+}
+.field-shell[data-phase=shop] .toast-note { top: 8px; bottom: auto; }
+@media (prefers-reduced-motion:reduce) {
+  .battlefield-frame :is(.toast-enter-active,.toast-leave-active) { transition: none; }
+}
+@media (min-width:1100px) {
+  .desk-body[data-section=orders] { padding-block: clamp(7px,1dvh,11px); }
+  .order-cards { display: grid; grid-template-columns: minmax(0,1fr) auto; align-content: start; align-items: center; }
+  .order-cards :is(.hand-heading,.hand-cards,.synergy-ribbon) { grid-column: 1 / -1; }
+  .order-cards .hand-heading > div:first-child { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+  .order-cards .hand-heading p { margin: 0; }
+  .order-cards .order-targets { margin: 3px 0; }
+  .order-cards .convoy-plan { margin: 0; max-width: min(51vw,68ch); justify-self: end; }
+  .desk-body .hand-footnote { margin-top: 5px; }
+}
+
+/* Inlaid desk surfaces share the warm ink and brass of the printed controls. */
+.field-shell .command-bar { background: linear-gradient(100deg,#352734,#27212d); border-color: #856560; }
+
+

@@ -1,0 +1,11 @@
+整体修改
+以图1为精修底稿，横版16:9《小丑♦军团》像素版画游戏封面。用户非常喜欢这版。保留原镜头、片名、夜空古堡、红发小丑的邪气笑容与服装、飘动的衣袖、底层盾兵骑兵、酒红和靛蓝的色调。只重绘上方玩家、两张鬼牌位置，以及中层小丑的双手。优先保证小丑左右手各五根手指能被肉眼一根根数出来。
+
+上方匿名玩家处于彻底逆光，只见无特征的近黑头肩剪影和两条袖子，以及提红线的手。用暗夜吞掉脸的整个内轮廓，任何眉眼、鼻梁、嘴和可识别的身份特征都不可见。玩家上层的两手分开，分别用一条红线操纵下面一侧上臂。
+
+把原先并拢在上方的两张牌彻底移到中层，像两枚可活动的纸牌臂章。仅两张，各一张。左半画面的彩色大王紧扣小丑**自身右上臂外侧**袖面（肩肘之间），右半画面的黑墨小王紧扣他**自身左上臂外侧**袖面；两牌都在小丑手腕的内侧、紧贴衣料，牌角穿红绳套和黄铜扣，随各自上臂角度倾斜，有贴在袖面上的浅阴影；两牌间隔大半个小丑身宽。大王保留宝石彩衣宽金冠，小王保留纯黑墨印的尖帽侧影和象牙白纸。牌面均可读。上层玩家手里只有线，每根绯红线分别止于一侧牌扣。中层的金线从小丑下方指尖至军旗。
+
+请从手腕开始重画小丑双手，姿势比底稿放松一些，像指挥家招动军旗；舒展并张开各指构成清晰的侧向扇形，双手各稍放大，给每个指尖留干净暗色背景、每个指缝有可见的负形，减少透视压缩。画面左侧低处的白手是他自己的右手，拇指低位侧展，与另外四个从四个独立指根伸出的手指构成自然长短顺序。食指清楚自拇指旁的掌指关节伸出，与中指明显分开，指尖清楚。画面右侧高处的手是他自己的左手，穿原图暗紫手套，以亮边勾出完整手形；小指位于掌外缘，短、分开，从指根到指尖全程可见，和相邻无名指之间保留一块显眼的天空。两手都恰好五根手指，能从拇指数到小指。避免指头对着镜头，避免遮叠、分叉或藏进袖口。两手角度不同，一松一紧，保持原稿的生动和自信。每手让两根必要的金线从指尖向下，勿沿指缝走线、遮指尖或冒充手指。所有金币和军旗的点缀都服从手部清晰度。只有片名，无标注。
+
+紫手套局部修正
+One small inpainting correction to this exact illustration. The only change is ADD THE MISSING SHORT PINKY FINGER on the central clown’s PURPLE GLOVE at the RIGHT OF THE IMAGE. The purple glove currently has one downward thumb and just THREE long fingers pointing right, i.e. four visible tips total. Preserve those four current fingertips and their gold strings. Add ONE little finger with its OWN knuckle along the TOP edge of the hand: shorter and slightly thinner, projecting up and diagonally right from the back/top outside edge of the palm, clearly HIGHER than the current highest fingertip, with a generous wedge of dark sky between the new pinky and existing highest finger. Correct short pinky with two bends in a continuous rim-lit purple leather sleeve of the glove. No string on the new pinky. Aim for a staggered natural fan you can count in silhouette: at the very TOP a new short pinky, below it the existing ring finger, middle finger, index finger, then the opposable thumb at the bottom. Do not replace an existing finger with the new finger. Artist correction at the knuckles as necessary. Clown's other hand at the far left of the image is already perfect with five clear fingers; keep that entire hand, both playing cards fastened to his upper arms, faceless player, title, foreground army, wide framing, movements and colors as in the source. Return the full unchanged 16:9 cover with this single local anatomical correction.

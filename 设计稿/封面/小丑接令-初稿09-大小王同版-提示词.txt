@@ -1,0 +1,4 @@
+底图：《小丑接令-初稿08-并牌牵线.png》，即上一轮第二张。
+从彩色大王的可见印纹取样，以四点透视映射至右侧小王牌面。仅对印纹作黑白调色，保留纸边、手指、投影和牵线。遮住的微小角纹参照同牌的对称角纹与 ImageGen 的修补参考还原。
+ImageGen 局部补纹参考提示词
+Using this exact crop as the existing art master, digitally restore a clean straight-on flat reproduction in neutral black / grey ink on off-white paper. Match the laughing crowned joker, the pose, dark sunburst, the diamond ornaments and frame. Restore the tiny top-right corner where the fingertip hides the ink and lower-left edge covered by the red cord. This is a texture donor to recover obscured printed corner details for a precisely registered copy. Edge-to-edge flat rectangular playing-card scan with its ivory border occupying all four edges of the image. Same original linework and expression, in the original orientation without mirroring. Only one card. No hands, strings, lettering or outside scenery.

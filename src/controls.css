@@ -1,0 +1,192 @@
+/* The four engraved plates use nine-slice borders. Their end caps stay intact
+   across short actions, translated labels and the wide workshop controls. */
+.field-shell {
+  --ink-dark: #281b25;
+  --print-light: #ffebc8;
+  --print-ink: #392029;
+  --brass: #dfb981;
+}
+.field-shell .key-mark {
+  --stamp-size: 1.5em;
+  display: inline-block; flex: none; width: var(--stamp-size); height: var(--stamp-size);
+  vertical-align: -.32em; pointer-events: none;
+  background: var(--control-stamps) var(--stamp-x,0%) var(--stamp-y,0%) / 400% 300% no-repeat;
+}
+.key-mark[data-stamp=allies],.key-mark[data-stamp=forge],.key-mark[data-stamp=time] { --stamp-x: 33.3333%; }
+.key-mark[data-stamp=enemies],.key-mark[data-stamp=coin],.key-mark[data-stamp=press] { --stamp-x: 66.6667%; }
+.key-mark[data-stamp=cards],.key-mark[data-stamp=reroll],.key-mark[data-stamp=order],.key-mark[data-stamp=close] { --stamp-x: 100%; }
+.key-mark:is([data-stamp=trick],[data-stamp=forge],[data-stamp=coin],[data-stamp=order]) { --stamp-y: 50%; }
+.key-mark:is([data-stamp=return],[data-stamp=time],[data-stamp=press],[data-stamp=close]) { --stamp-y: 100%; }
+
+.field-shell button:is(.key-command,.key-ink,.key-tab,.key-index,.key-price,.key-chit) {
+  --plate: var(--control-ink);
+  --letter: var(--print-light);
+  --cap: 12px;
+  --rail: 6px;
+}
+.field-shell button.key-command { --plate: var(--control-banner); --cap: 16px; --letter: #fff3cf; }
+.field-shell button:is(.key-tab,.key-index) { --plate: var(--control-tab); }
+.field-shell button:is(.key-price,.key-tab[aria-pressed=true]) { --plate: var(--control-ticket); --letter: var(--print-ink); }
+.legion-shell.field-shell button:is(.key-command,.key-ink,.key-tab,.key-index,.key-price,.key-chit) {
+  border: 0 solid transparent; border-radius: 0; background: transparent;
+  border-image: var(--plate) 18 46 fill / var(--rail) var(--cap) / 0 stretch;
+  box-shadow: none; color: var(--letter);
+  font-weight: 650; text-shadow: none; touch-action: manipulation;
+  transform: none; transition: filter 120ms ease-out, translate 100ms ease-out;
+}
+.field-shell :is(.key-ink,.key-tab,.key-command,.key-price,.key-link,.key-stall,.key-disclosure) > .key-mark { margin-inline-end: .28em; }
+.field-shell :is(.codex-nav,.field-advance,.suggest-button,.discard-button,.deploy-button,.key-index) > .key-mark { margin-inline-end: 0; }
+.field-shell button.key-ink:not(.icon-button,.suggest-button) { padding-inline: max(.8em,9px); }
+.field-shell button.key-price { min-height: 31px; padding: 5px 12px; justify-content: center; gap: 4px; }
+.field-shell .key-price b { padding-inline-start: 6px; border-inline-start: 1px dashed #9b7258; color: inherit; }
+.field-shell .key-tab[aria-pressed=true] small { color: #62404a; }
+.field-shell .codex-tabs .key-tab[aria-pressed=true] .suit-mark { color: #33232a; }
+.field-shell .codex-tabs .key-tab[aria-pressed=true] [data-suit="♥"],.field-shell .codex-tabs .key-tab[aria-pressed=true] [data-suit="♦"] { color: #993745; }
+.field-shell .key-chit { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; --cap: 9px; }
+.field-shell button.performer-id { padding: 2px 10px 2px 5px; }
+.field-shell .desk-tabs button { min-height: 35px; padding-inline: 11px; font-size: 13px; }
+.field-shell .desk-tabs .key-mark { --stamp-size: 23px; vertical-align: -.46em; }
+.field-shell .desk-tabs button[aria-pressed=true] { --rail: 7px; }
+.field-shell .key-command:not(.deploy-button) {
+  clip-path: polygon(0 0,100% 0,calc(100% - 7px) 50%,100% 100%,0 100%,6px 50%);
+}
+.field-shell .desk-bar button.field-advance { padding: 5px 17px; min-height: 37px; gap: 7px; justify-content: center; }
+.field-shell .field-advance .key-mark { --stamp-size: 25px; }
+.field-shell .command-actions button.deploy-button {
+  --plate: var(--control-ticket); --letter: var(--print-ink); --cap: 13px;
+  min-height: 45px; gap: 6px; padding: 5px 11px; justify-content: center;
+  clip-path: polygon(0 4%,96% 0,100% 7%,100% 92%,97% 100%,0 97%,3px 50%);
+}
+.field-shell .deploy-button .order-seal { --stamp-size: 34px; }
+.field-shell .discard-button .key-mark { --stamp-size: 22px; }
+.field-shell .field-stall b {
+  border: 0; background: transparent; color: var(--print-light); padding: 3px 10px;
+  border-image: var(--control-tab) 18 46 fill / 5px 10px / 0 stretch;
+}
+.field-shell .field-stall[aria-pressed=true] b { border-image-source: var(--control-ticket); color: var(--print-ink); }
+.field-shell .field-stall b .key-mark { --stamp-size: 18px; }
+.field-shell .key-price { clip-path: polygon(0 50%,6px 0,100% 0,100% 100%,6px 100%); }
+
+.field-shell button.key-link,.field-shell summary.key-disclosure {
+  color: #f1d4a9; background: linear-gradient(90deg,#ae785c,#8a675c 66%,transparent) left bottom / 100% 1px no-repeat;
+  font-weight: 600; text-decoration: none; cursor: pointer;
+}
+.field-shell summary.key-disclosure { width: fit-content; max-width: 100%; padding: 5px 6px; list-style: none; }
+.field-shell .key-disclosure::-webkit-details-marker { display: none; }
+.field-shell .key-disclosure::after { content: ''; display: inline-block; margin-inline-start: 8px; border: 4px solid transparent; border-top-color: var(--brass); transform: translateY(2px); }
+.field-shell details[open] > .key-disclosure::after { transform: rotate(180deg) translateY(2px); }
+.field-shell select.key-select {
+  appearance: none; color-scheme: dark; color: #f5dfbb; font-family: inherit;
+  min-height: 31px; max-width: 100%; padding: 4px 23px 4px 11px; border: 1px solid #a17c65;
+  border-radius: 2px; border-image: var(--control-ink) 18 46 / 5px 8px / 0 stretch;
+  background: linear-gradient(45deg,transparent 50%,#e1b67c 50%) right 10px center / 4px 5px no-repeat,
+              linear-gradient(135deg,#e1b67c 50%,transparent 50%) right 6px center / 4px 5px no-repeat,
+              linear-gradient(120deg,#44313a,#281e2a); cursor: pointer;
+}
+.field-shell select.key-select option { color: #ffeac0; background: #30232f; }
+.field-shell button.key-close {
+  display: grid; place-items: center; background: transparent; border: 0; border-radius: 50%; box-shadow: none;
+  padding: 0; width: 34px; height: 34px; color: #ffe3ba;
+}
+.field-shell .key-close .key-mark { --stamp-size: 100%; }
+.field-shell .deal-options button.key-tab,.field-shell .header-actions button.icon-button,.field-shell .field-controls button:first-child {
+  display: inline-grid; place-content: center; justify-items: center; gap: 0; padding: 0;
+  border-image: none; border: 3px dashed #c39d7e; border-radius: 50%;
+  background: radial-gradient(circle,#523340 0 51%,#9a7364 52% 58%,#382532 60%);
+  box-shadow: inset 0 0 0 1px #543546, 0 2px #221721;
+}
+.field-shell .deal-options button.key-tab { width: 40px; height: 40px; font-size: 12px; }
+.field-shell .deal-options button.key-tab[aria-pressed=true],.field-shell .field-controls button:first-child[aria-pressed=true] {
+  background: radial-gradient(circle,#f0d8a8 0 55%,#aa795a 56% 60%,#ddbc89 62%); border-color: #8a4c4a;
+}
+.field-shell .header-actions .icon-button .key-mark { --stamp-size: 17px; }
+.field-shell .field-controls button:first-child { width: 32px; height: 32px; }
+.field-shell .command-actions button.suggest-button { display:inline-flex; align-items:center; justify-content:center; flex:none; gap:4px; min-width:64px; padding:4px 8px; white-space:nowrap; }
+.field-shell .suggest-button .key-mark { --stamp-size: 17px; }
+.field-shell .suggest-button span:not(.key-mark) { display:inline; font-size:14px; }
+.field-shell .trick-bar button.trick-toggle { --plate: var(--control-banner); padding-inline: 11px; min-height: 32px; }
+.field-shell .trick-bar .trick-toggle[aria-pressed=true] { --plate: var(--control-ticket); }
+
+/* Unit choices use their own art as the illustration on a numbered print. */
+.field-shell button.key-ticket {
+  --foil: var(--ticket-ink,var(--formation-color,var(--unit-ink,var(--accent,var(--enemy-color,#cbaa86)))));
+  position: relative; border: 1px solid var(--foil); border-radius: 2px;
+  border-image: var(--control-ink) 18 46 fill / 5px 10px / 0 stretch;
+  box-shadow: none; background: transparent;
+  clip-path: polygon(0 0,100% 0,100% calc(50% - 4px),calc(100% - 3px) 50%,100% calc(50% + 4px),100% 100%,0 100%,0 calc(50% + 4px),3px 50%,0 calc(50% - 4px));
+}
+.field-shell .key-ticket::after {
+  content: ''; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px;
+  border: solid var(--foil); border-width: 1px 1px 0 0; pointer-events: none;
+}
+.field-shell button.key-ticket:is([aria-pressed=true],[aria-expanded=true],.chosen) { border-image-source: var(--control-tab); }
+.field-shell .key-ticket:is([aria-pressed=true],[aria-expanded=true],.chosen)::after { width: 8px; height: 8px; background: var(--foil); clip-path: polygon(0 0,100% 0,100% 100%); }
+.field-shell button.key-face { position: relative; border-image: var(--control-ink) 18 46 / 3px 5px / 0 stretch; }
+.field-shell button.key-face:is(.selected,.active,.chosen,.source) { border-image-source: var(--control-ticket); }
+.field-shell .key-face::after {
+  content: ''; position: absolute; inset: auto 4px 3px; height: 2px; pointer-events: none;
+  background: linear-gradient(90deg,var(--faction,#bc9e7b),transparent 14% 86%,var(--faction,#bc9e7b)); opacity: .8;
+}
+.field-shell .key-face:is(.selected,.active,.chosen,.source)::after { background: #d6ae77; }
+.field-shell .joker-cards { align-items: end; padding: 9px 3px 4px; }
+.field-shell button.key-portrait {
+  --lean: -6deg; --lift: 0px; display: grid; gap: 2px; padding: 3px 3px 1px;
+  color: #4d3532; background: linear-gradient(120deg,#f3ddab,#c8ab84);
+  border: 1px solid #b99b73; border-radius: 6% / 5%; box-shadow: 0 2px #6b5145,1px 4px 5px #120c13b0;
+  transform-origin: center 85%; transform: translateY(var(--lift)) rotate(var(--lean));
+}
+.field-shell .key-portrait:nth-child(2) { --lean: -3.5deg; }
+.field-shell .key-portrait:nth-child(3) { --lean: -1deg; }
+.field-shell .key-portrait:nth-child(4) { --lean: 1deg; }
+.field-shell .key-portrait:nth-child(5) { --lean: 3.5deg; }
+.field-shell .key-portrait:nth-child(6) { --lean: 6deg; }
+.field-shell .key-portrait .avatar-window { overflow: hidden; border: 1px solid #78594f; border-radius: 3px 3px 0 0; outline: none; box-shadow: none; }
+.field-shell .key-portrait.picked {
+  --lift: -6px; --lean: 0deg; z-index: 1; color: #fff0c8; background: #783443; border-color: #efd3a2;
+  box-shadow: 0 2px #b58863,0 6px 9px #0b090d;
+}
+.field-shell .key-portrait.picked .avatar-window:after { display: none; }
+
+/* The same carved icon becomes a full-size bookplate on the title page. */
+.field-shell .table-guides button.key-index {
+  --plate: var(--control-ink); --cap: 13px; --rail: 7px;
+  display: inline-flex; align-items: center; gap: 7px; padding: 6px 13px;
+  font: 750 clamp(12px,1.1vw,16px)/1.2 'Songti SC','STSong',serif;
+}
+.table-guides .key-mark { --stamp-size: clamp(26px,2.7vw,39px); }
+.casting-guides .key-index { padding: 5px 11px; }
+.field-shell .casting-guides .key-mark { margin-inline-end: 4px; }
+.field-shell .cover-menu .deal-resume { --plate: var(--control-ticket); --letter: #382029; padding: 4px 15px; }
+.field-shell :is(button,summary,select):focus-visible { outline: 2px solid #ffedc5; outline-offset: 2px; }
+.field-shell button:is(.key-ticket,.key-command,.key-price,.key-index,.key-tab,.key-ink):focus-visible { outline-offset: -4px; outline-style: dashed; }
+.field-shell button:is(.key-price,.deploy-button,.key-tab[aria-pressed=true]):focus-visible { outline-color: #692b3e; }
+.field-shell button:disabled:not(.chosen),.field-shell select:disabled { filter: grayscale(.9) brightness(.78); cursor: default; }
+@media (hover:hover) and (pointer:fine) {
+  .field-shell button:enabled:is(.key-ink,.key-command,.key-price,.key-tab,.key-index,.key-close,.key-chit,.key-link):hover,
+  .field-shell :is(.key-disclosure,.key-select):hover { filter: brightness(1.16); }
+  .field-shell .key-ticket:enabled:hover { border-color: #f5d09c; }
+  .field-shell .key-stall:hover b { filter: brightness(1.18); }
+}
+@media (prefers-reduced-motion:no-preference) {
+  .field-shell button.key-portrait { transition: transform 140ms ease-out; }
+  .field-shell button.key-portrait:hover { --lift: -5px; --lean: 0deg; z-index: 2; }
+  .field-shell button:enabled:is(.key-ink,.key-command,.key-tab,.key-link,.key-price,.key-ticket,.key-close,.key-hand,.key-chit,.key-index):active { translate: 0 2px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .field-shell :is(button,summary,select) { transition-duration: 0s; }
+  .field-shell .key-portrait.picked { --lift: 0px; }
+  .field-shell .hand-cards .key-face:is(:hover,.selected) { transform: none; }
+}
+@media (max-width:760px) {
+  .field-shell .table-guides button.key-index { gap: 3px; padding: 5px 8px; font-size: 12px; }
+  .table-guides .key-mark { --stamp-size: 23px; }
+  .field-shell .desk-tabs button { padding-inline: 7px; min-height: 30px; font-size: 12px; }
+  .field-shell .desk-tabs .key-mark { --stamp-size: 17px; }
+  .field-shell .deal-options button.key-tab { width: 34px; height: 34px; }
+  .field-shell .desk-bar button.field-advance { min-height: 30px; padding: 3px 12px; }
+  .field-shell .field-advance .key-mark { --stamp-size: 19px; }
+  .field-shell .command-actions button.deploy-button { padding-inline: 6px; gap: 3px; }
+  .field-shell .deploy-button .order-seal { --stamp-size: 24px; }
+  .field-shell .discard-button .key-mark { --stamp-size: 15px; }
+  .field-shell .joker-cards .key-portrait { padding: 2px 2px 0; }
+}
