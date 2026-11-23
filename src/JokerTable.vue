@@ -37,7 +37,10 @@ onMounted(() => table.value?.querySelector('.cover-start')?.focus({preventScroll
     <div v-if="!selecting" class="dealer-cover">
       <img :src="cover" alt="" class="portrait-army" aria-hidden="true"/>
       <img :src="cover" alt="玩家并拢两指按住同图的彩色大王与黑白小王，红线牵动小丑双臂，小丑用金线指挥军团" class="dealer-original"/>
-      <h1 id="intro-title" class="cover-title">小丑<span aria-hidden="true">♦</span>军团</h1>
+      <h1 id="intro-title" class="cover-title" aria-label="小丑军团 · JOKER LEGION">
+        <span class="cover-title-cn">小丑<i aria-hidden="true">♦</i>军团</span>
+        <span class="cover-title-en" lang="en">JOKER LEGION</span>
+      </h1>
       <div class="cover-menu">
         <div class="cover-play">
           <TitleCourt @click="showSelection(true)"/>
@@ -100,17 +103,33 @@ onMounted(() => table.value?.querySelector('.cover-start')?.focus({preventScroll
   /* Anchor the menu to the painted canvas, including on letterboxed displays. */
   position:relative; isolation:isolate; overflow:hidden;
   width:min(100%,calc(100dvh * 1672 / 941)); aspect-ratio:1672 / 941;
+  container-type:inline-size;
   --side:clamp(12px,3%,58px);
 }
 .dealer-original { display:block; width:100%; height:100%; object-fit:contain; }
 .portrait-army { display:none; }
-.cover-title { position:absolute; width:1px; height:1px; clip-path:inset(50%); overflow:hidden; }
+.cover-title {
+  position:absolute;top:14%;left:2.8%;width:21.6%;margin:0;z-index:1;pointer-events:none;
+  color:#f3d3a0;text-align:center;text-shadow:0 1px 2px #120a18,0 2px 8px #120a18;
+}
+/* The landscape print already carries the Chinese gold lettering. */
+.cover-title-cn {position:absolute;width:1px;height:1px;clip-path:inset(50%);overflow:hidden;white-space:nowrap}
+.cover-title-en {
+  display:flex;align-items:center;justify-content:center;gap:.7em;white-space:nowrap;
+  font:600 clamp(11px,1.28cqw,22px)/1.35 'Baskerville','Palatino Linotype','Book Antiqua',Georgia,serif;
+  letter-spacing:.24em;text-indent:.24em;
+}
+.cover-title-en::before,.cover-title-en::after {
+  content:'';flex:1;min-width:10px;height:1px;
+  background:linear-gradient(90deg,transparent,#c69b69);box-shadow:0 1px #1a1019;
+}
+.cover-title-en::after {transform:rotate(180deg)}
 .cover-menu { position:absolute; inset:0; pointer-events:none; }
 .cover-menu button { pointer-events:auto; }
 .cover-score { position:absolute; right:max(var(--side),env(safe-area-inset-right)); bottom:max(4%,env(safe-area-inset-bottom)); }
 .casting-tools { display:flex; align-items:center; gap:8px; }
 .cover-play {
-  position:absolute; top:16%; left:max(var(--side),env(safe-area-inset-left));
+  position:absolute; top:24%; left:max(var(--side),env(safe-area-inset-left));
   display:grid; justify-items:stretch; gap:6px; filter:drop-shadow(0 3px 5px #100b14a6);
 }
 .cover-menu .table-guides {
@@ -129,14 +148,18 @@ onMounted(() => table.value?.querySelector('.cover-start')?.focus({preventScroll
 @media (orientation:portrait) {
   .cover-score { bottom:auto; top:max(2%,env(safe-area-inset-top)); }
   .dealer-cover { width:100%; height:100%; aspect-ratio:auto; }
-  .dealer-original { object-fit:cover; object-position:51% center; }
+  .dealer-original { object-fit:cover; object-position:51% center;transform:translateY(clamp(24px,8vw,40px)); }
   .cover-title {
-    top:max(2.5%,env(safe-area-inset-top)); left:max(5%,env(safe-area-inset-left));
-    width:auto; height:auto; clip-path:none; overflow:visible;
-    font:900 clamp(24px,7vw,50px)/1.2 'Songti SC','STSong',serif;
-    color:#ffe0a3; text-shadow:0 1px #a75c33,0 2px 4px #160c13;
+    top:max(3%,env(safe-area-inset-top));left:max(5%,env(safe-area-inset-left));
+    width:min(60%,300px);display:grid;gap:7px;
+    color:#ffe0a3;text-shadow:0 1px #a75c33,0 2px 4px #160c13,0 3px 12px #100b18;
   }
-  .cover-title span { margin:0 .12em; color:#e74d42; font-size:.67em; vertical-align:.08em; }
+  .cover-title-cn {
+    position:static;width:auto;height:auto;clip-path:none;overflow:visible;
+    font:900 clamp(28px,8.6vw,48px)/1.15 'Songti SC','STSong',serif;letter-spacing:.035em;
+  }
+  .cover-title-cn i {margin:0 .12em;color:#e74d42;font-size:.62em;font-style:normal;vertical-align:.12em}
+  .cover-title-en {font-size:clamp(10px,3.1vw,16px);letter-spacing:.19em;text-indent:.19em;gap:.55em}
   .cover-menu {
     display:grid; align-content:end; justify-items:center; gap:8px;
     padding:0 max(4px,env(safe-area-inset-right)) max(3.5dvh,env(safe-area-inset-bottom),12px) max(4px,env(safe-area-inset-left));
