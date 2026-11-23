@@ -1,5 +1,5 @@
-import { canSelectHand, slotOf, seedNumber, owns, inCamp, copies } from './gameState.js'
-import { REGIMENTS, scoringHand, ORDER_BOOK, handScore, rankOf, orderBonus, describeBonus } from './orders.js'
+import { canSelectHand, slotOf, seedNumber, owns, inCamp } from './gameState.js'
+import { REGIMENTS, scoringHand, ORDER_BOOK, handScore, rankOf, orderBonusFromScore, describeBonus } from './orders.js'
 import { selectedCards, playedFace } from './deck.js'
 import { FIELD_LIMIT } from './campaignRules.js'
 import { recalls, recruitIdentity, muster } from './campArmy.js'
@@ -8,6 +8,7 @@ import { DETACHMENTS, repeatedRank, recruitLook, recruitName, musterBonus, revea
 import { championProgress, veteranLevel } from './training.js'
 import { ROYAL_MARCHES } from './jobs.js'
 import { scoreItemChips } from './itemEffects.js'
+import { buildScoreTrace } from './scoreBreakdown.js'
 
 export function setOrderTarget(game, type) {
   if (!canSelectHand(game) || !Object.hasOwn(REGIMENTS, type)) return false
@@ -16,16 +17,16 @@ export function setOrderTarget(game, type) {
   return true
 }
 
-export function previewHand(game, cardIds = game.selected) {
-  return planHand(game,cardIds,false)
+export function previewHand(game, cardIds = game.selected, options) {
+  return planHand(game,cardIds,false,options)
 }
 
-export function planHand(game, cardIds, reveal) {
+export function planHand(game, cardIds, reveal, {trace=true}={}) {
   const cards = selectedCards(game, cardIds)?.map(card => playedFace(game, card))
   if (!cards) return { name: '选择你的手牌', key: null, cost: 0, power: 0, recruits: [], scoringIds: [], combo: [], canDeploy: false, reason: '请选择 1–5 张手牌' }
   const { key, scoring, points, royal, containsPair, containsFlush } = scoringHand(cards)
   const hand = ORDER_BOOK[key], level = game.handLevels[key]
-  const extraChips = scoreItemChips(game,scoring,key) + (containsPair ? copies(game,'pair-ink') * 3 : 0)
+  const extraChips = scoreItemChips(game,scoring,key,containsPair)
   const score = handScore(key, level, points + extraChips)
   const lead = scoring.reduce((best,card)=>rankOf(card)>rankOf(best)?card:best)
   const sourceSlot = card => slotOf(game.hand.find(c => c.id === card.id))
@@ -65,7 +66,7 @@ export function planHand(game, cardIds, reveal) {
   const type = projected.some(u=>u.type===game.orderTarget) ? game.orderTarget :
     projected.find(u=>u.type===recruit.type)?.type || projected[0]?.type || recruit.type
   const boosted = owns(game, 'flush-crown') && containsFlush
-  const bonus = orderBonus(key, level, points, boosted)
+  const bonus = orderBonusFromScore(key,score.total,boosted)
   const overflow = reserve.length
   const recipients = [...present, ...recruits].filter(u => u.type === type)
   const crown = royal ? recipients.filter(u => !u.crowned).sort((a,b) => rankOf(b) - rankOf(a))[0] : null
@@ -87,10 +88,12 @@ export function planHand(game, cardIds, reveal) {
   const marchSuit = march ? king.suit : null
   if (march) combo.push(king.suit + 'K 御驾亲征 · ' + ROYAL_MARCHES[king.suit].name + ' · ' + ROYAL_MARCHES[king.suit].text)
   const power = Object.values(bonus).reduce((total, v) => total + v, 0)
-  return { key, name: royal ? '皇家同花顺' : hand.name, level, order: hand.order, points, score, extraChips, waiting:!!waiting, returning, bonus, containsPair, containsFlush,
+  const plan = { key, name: royal ? '皇家同花顺' : hand.name, level, order: hand.order, points, score, extraChips, waiting:!!waiting, returning, royalOrder, bonus, containsPair, containsFlush,
     scoringIds: scoring.map(card => card.id), target: type, targetCount: recipients.length, crownId: crown?.id, crownRecruit: recruits.indexOf(crown),
     cost, prepaid, power, grade, captainGrade, variantRank, look, statBonus, strengthDetail, profession:squad.name, count:squad.count, recruits, reserve, trainingXp:xp, trainerName:trainer?.name, trainerId:trainer?.id, trainerRecruit:recruits.indexOf(trainer), march, marchSuit, actualUnits: recruits.length, overflow,
     description: describeBonus(bonus), combo, canDeploy: !reason, reason }
+  if(trace) plan.scoreTrace=buildScoreTrace(game,plan,{cards,scoring,mode:reveal?'resolved':'preview'})
+  return plan
 }
 
 export function recommendHand(game) {
@@ -101,7 +104,7 @@ export function recommendHand(game) {
   const first = targets[0], underFire = targets.some(u => u.hp < u.maxHp)
   const consider = (index, ids) => {
     if (ids.length) {
-      const hand = previewHand(game, ids)
+      const hand = planHand(game,ids,false,{trace:false})
       if (hand.canDeploy) {
         const b = hand.bonus
         const strength = (b.force || 0) * (hand.target === 'healer' ? 2 : 1.6) +

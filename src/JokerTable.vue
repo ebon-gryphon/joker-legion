@@ -9,8 +9,8 @@ import DealKey from './DealKey.vue'
 import TitleCourt from './TitleCourt.vue'
 import ScoreToggle from './ScoreToggle.vue'
 
-const props = defineProps({ doctrine:String, difficulty:String, saved:Object, dailyBest:Object })
-const emit = defineEmits(['choose','difficulty','start','daily','resume','guide'])
+const props = defineProps({ doctrine:String, difficulty:String, seed:String, saved:Object, dailyBest:Object })
+const emit = defineEmits(['choose','difficulty','seed','start','daily','resume','guide'])
 const selected = computed(() => performerOf(props.doctrine))
 const selecting = ref(false)
 const table = ref(null)
@@ -85,6 +85,7 @@ onMounted(() => table.value?.querySelector('.cover-start')?.focus({preventScroll
           <button class="key-tab" v-for="(mode,id) in DIFFICULTIES" :key="id" :aria-pressed="difficulty===id" @click="emit('difficulty',id)">{{ mode.name }}</button>
           <small>{{ DIFFICULTIES[difficulty].castle }} 城门耐久</small>
         </div>
+        <label class="deal-seed">固定种子 <input class="key-input" aria-label="固定种子" :value="seed" maxlength="64" placeholder="留空随机开局" autocomplete="off" spellcheck="false" @input="emit('seed',$event.target.value)"/><small>每日同局仍使用当天种子</small></label>
         <div class="deal-actions intro-buttons">
           <DealKey :actor="selected" class="intro-start" @click="emit('start')">以{{ selected.name }}开局</DealKey>
           <button class="daily-deal key-ink" @click="emit('daily')"><KeyMark name="cards"/><span>每日同局<small>{{ dailyBest ? '本机最佳 · '+dailyBest.waves+' 波 / '+dailyBest.kills+' 击退' : '每日同一开局 · 可重复挑战' }}</small></span></button>
@@ -220,6 +221,7 @@ onMounted(() => table.value?.querySelector('.cover-start')?.focus({preventScroll
 .deal-options{display:flex;align-items:center;gap:7px;padding:14px 0;margin-top:14px;border-top:1px solid #806657}
 .deal-options b{font-size:13px;margin-right:5px}.deal-options button{color:#d7c6b2;border:1px solid #80685a;background:#20181be6;padding:6px 12px;border-radius:2px;font-size:13px}
 .deal-options button[aria-pressed=true]{color:#281813;background:#dcc39b;border-color:#efd4a8}.deal-options small{margin-left:auto}
+.deal-seed{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 12px;font-size:12px;color:#d7c6b2}.deal-seed input{min-width:0;width:130px;border:1px solid #80685a;border-radius:2px;background:#20181be6;color:#f7e9cc;padding:6px 8px;font:inherit}.deal-seed input:focus-visible{outline:2px solid #efd4a8;outline-offset:2px}.deal-seed small{font-size:10px;color:#b4a191}
 .deal-actions.intro-buttons{display:flex;width:100%;align-items:center;justify-content:flex-start}
 @media(max-width:760px){
   .table-guides { gap:6px; }

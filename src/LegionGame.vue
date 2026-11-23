@@ -9,12 +9,13 @@ import DraggedSoldier from './DraggedSoldier.vue'
 import RelicArt from './RelicArt.vue'
 import JokerTable from './JokerTable.vue'
 import ScoreToggle from './ScoreToggle.vue'
+import ScoreBreakdown from './ScoreBreakdown.vue'
+import ScoreSequence from './ScoreSequence.vue'
 import PerformerGuide from './PerformerGuide.vue'
 import { performerOf } from './performers.js'
 import { getSpriteFrame, pixelAssetUrl } from './spriteAtlas.js'
 import ArmyCodex from './ArmyCodex.vue'
 import SuitMark from './SuitMark.vue'
-import { oddsText } from './recruitment.js'
 import { ORDER_BOOK } from './orders.js'
 import { GRADES, QUALITIES } from './quality.js'
 import SquadBench from './SquadBench.vue'
@@ -34,8 +35,9 @@ import { PAY_WAGONS, plannedWagon, activeWagon } from './convoy.js'
 import { REGIMENTS, describeBonus } from './orders.js'
 import EnemyPortrait from './EnemyPortrait.vue'
 import { DIFFICULTIES, FORMATION_BY_ID, nextChime, scoutWave, tollDamage } from './tactics.js'
-import { FUSION_BY_ID, FUSION_COST, workshopPairs } from './forge.js'
+import { FUSION_BY_ID, FUSION_COST, workshopPairs, mergeWarning } from './forge.js'
 import { fusionProfessionNames } from './professionFusion.js'
+import MergeWarning from './MergeWarning.vue'
 import WaveReport from './WaveReport.vue'
 import FeintTable from './FeintTable.vue'
 import { dailySeed, dailyRecordKey, betterDailyRun, validDailyRecord } from './daily.js'
@@ -104,6 +106,8 @@ const controlArt = Object.fromEntries(['stamps','ink','ticket','banner','tab'].m
 ]))
 const orderDetails = ref(false)
 const rarityReceipt=ref(null)
+// Visual receipts are deliberately outside the saved game. Reloading never replays a settlement.
+const scoreReceipt=ref(null)
 let receiptTimer
 const campTabs = [['orders','出牌征兵'],['feint','亮假旗'],['forge','升星融合'],['brief','阵型军议'],['press','牌匠改印']]
 const shopTabs = [['brief','下波军情'],['report','本波战报']]
@@ -145,9 +149,9 @@ function playTrick(id, step) {
   if (!trickArmed.value || !rules.useTrick(game.value,id,step)) return
   updateOnboarding(game.value,'trick')
   cancelTrick()
-  if (hero.value.id === 'voice') showRarity()
+  if (hero.value.id === 'voice') { scoreReceipt.value=game.value.lastDeploy?.scoreTrace || null; showRarity() }
   audio.play(hero.value.id)
-  note(game.value.logs[0].text)
+  if (hero.value.id!=='voice' || !scoreReceipt.value) note(game.value.logs[0].text)
   save()
 }
 function openGuide(id) {
@@ -198,7 +202,10 @@ function enterPhase() {
   setDesk(game.value.phase === 'ready' ? 'orders' : game.value.phase === 'shop' ? postBattleDesk.value : 'field')
 }
 const intro = ref(true), help = ref(false), confirmRestart = ref(false), inspectedJoker = ref(null)
+const promotionPending = ref(null)
+const quickPromotionWarning = computed(()=>promotionPending.value && mergeWarning(game.value,promotionPending.value.leaderId,promotionPending.value.donorId,'promote'))
 const pickedDifficulty = ref('standard')
+const pickedSeed = ref('')
 const pickedDoctrine = ref(doctrines[0].id), manualPaused = ref(false), hidden = ref(document.hidden)
 const guideHero = computed(() => intro.value ? performerOf(pickedDoctrine.value) : hero.value)
 const guidePartner = computed(() => {
@@ -237,7 +244,7 @@ try {
 } catch { storageAvailable.value = false }
 audio.setEnabled(sound.value)
 const inPlay = computed(() => ['ready', 'battle'].includes(game.value.phase))
-const hasModal = computed(() => intro.value || pokerPanel.value || briefing.value || codex.value || help.value || confirmRestart.value || !!inspectedJoker.value || ['won', 'lost'].includes(game.value.phase))
+const hasModal = computed(() => intro.value || pokerPanel.value || briefing.value || codex.value || help.value || confirmRestart.value || !!promotionPending.value || !!inspectedJoker.value || ['won', 'lost'].includes(game.value.phase))
 const paused = computed(() => manualPaused.value || (desk.value !== 'field' && desk.value !== 'watch') || trickArmed.value || hidden.value || hasModal.value || game.value.phase !== 'battle')
 const musicScene = computed(() => {
   if (!musicActive.value || hidden.value) return null
@@ -444,7 +451,7 @@ const deployLabel = computed(() => {
   if (!selectedCount.value) return '选牌征兵'
   if (preview.value.reason) return preview.value.reason
   if (preview.value.waiting) return '打出' + preview.value.name + ' · 传说候补'
-  if (!preview.value.actualUnits) return '打出' + preview.value.name + ' · +' + preview.value.trainingXp + '经验'
+  if (!preview.value.actualUnits) return '打出' + preview.value.name + ' · 转训／候补'
   return '打出' + preview.value.name + ' · ' + preview.value.actualUnits + '人'
 })
 const phaseLabel = computed(() => ({ ready:'战前准备', shop:'战后商店', won:'远征胜利', lost:'城门失守' }[game.value.phase] || (paused.value?'战术暂停':'交战中')))
@@ -482,29 +489,33 @@ function showRunSelection() {
 }
 function requestStart(daily = false) {
   dealDay.value = dailySeed()
-  requestedSeed.value = daily ? dealDay.value : newSeed()
+  requestedSeed.value = daily ? dealDay.value : pickedSeed.value.trim() || newSeed()
   if (savedGame.value) confirmRestart.value = true
   else startRun()
 }
 function startRun(seed = requestedSeed.value ?? newSeed(), doctrine = pickedDoctrine.value, difficulty = pickedDifficulty.value) {
   requestedSeed.value = null
   game.value = createGame({ seed, doctrine, difficulty })
+  scoreReceipt.value=null
   initializeCombatStats(game.value,{runId:globalThis.crypto?.randomUUID?.() || 'run-'+Date.now()+'-'+newSeed()})
   initOnboarding(game.value,{enabled:true})
   historySelection.value=''
-  enterPhase(); briefing.value = false; manualPaused.value = false; intro.value = false; confirmRestart.value = false
+  enterPhase(); briefing.value = false; manualPaused.value = false; intro.value = false; confirmRestart.value = false; promotionPending.value=null
   audio.play('deploy'); save()
   nextTick(() => window.scrollTo({ top: 0, behavior: 'instant' }))
 }
 function resumeRun() {
   if (!savedGame.value) return
+  scoreReceipt.value=null
   game.value = savedGame.value; enterPhase(); pickedDifficulty.value = game.value.difficulty; intro.value = false; manualPaused.value = game.value.phase === 'battle'; audio.unlock()
   recordCombatHistory()
-  note(game.value.phase === 'battle' ? '战斗已恢复，点击继续即可推进。' : game.value.phase === 'shop' ? '已返回战后商店。' : '已恢复本波备战进度。')
+  if (!game.value.selected.length) note(game.value.phase === 'battle' ? '战斗已恢复，点击继续即可推进。' : game.value.phase === 'shop' ? '已返回战后商店。' : '已恢复本波备战进度。')
 }
 function chooseCard(id) {
   if (trickArmed.value && hero.value.id === 'ghost') { palmId.value = id; return }
   if (!ordersOpen.value || intro.value || !selectCard(game.value,id)) return
+  // The selected hand now supplies its own feedback; keep its formula clear of an older notice.
+  clearTimeout(toastTimer);toast.value=null
   audio.play('select')
   save()
 }
@@ -513,20 +524,21 @@ function showRarity() {
   clearTimeout(receiptTimer)
   rarityReceipt.value=null
   if (deal.captainGrade>deal.grade || deal.captainGrade===4) {
-    rarityReceipt.value=deal
     audio.play('combo')
-    receiptTimer=setTimeout(()=>{rarityReceipt.value=null},2200)
+    if (!scoreReceipt.value) {
+      rarityReceipt.value=deal
+      receiptTimer=setTimeout(()=>{rarityReceipt.value=null},2200)
+    }
   }
 }
 function doDeploy() {
   if (!canDeploy.value || trickArmed.value) return
   const name = preview.value.name
-  const hand = preview.value
   if (deploy(game.value) !== false) {
+    scoreReceipt.value=game.value.lastDeploy?.scoreTrace || null
     updateOnboarding(game.value,'deploy')
     audio.play(['高牌', '对子'].includes(name) ? 'deploy' : 'combo')
-    note(name + ' · ' + hand.profession + (game.value.lastDeploy.waiting ? ' 已到候补席 · ' : ' ' + hand.actualUnits + ' 人入阵 · ') + REGIMENTS[hand.target].name + '获' + hand.order +
-      (game.value.lastDeploy.trainingXp ? ' · ' + hand.trainerName + ' +' + game.value.lastDeploy.trainingXp + '经验' : ''))
+    if (!scoreReceipt.value) note(name+' · '+game.value.lastDeploy.score+' 分 · '+game.value.lastDeploy.profession+' '+game.value.lastDeploy.count+' 人入阵')
     showRarity();save()
   }
 }
@@ -544,7 +556,30 @@ function suggest() {
 const quickPair = computed(() => pairs.value.promote[0])
 function quickPromote() {
   const pair = quickPair.value
-  if (pair && forge(pair.leader.id, pair.donor.id, 'promote')) note(pair.leader.name + '升至' + pair.leader.level + '星 · 腾出 1 个兵位')
+  if (!pair) return
+  const warning=mergeWarning(game.value,pair.leader.id,pair.donor.id,'promote')
+  if (!warning) return
+  if (warning.requiresConfirmation) {
+    promotionPending.value={leaderId:pair.leader.id,donorId:pair.donor.id,fingerprint:warning.fingerprint,changed:false}
+    return
+  }
+  commitQuickPromotion(pair.leader.id,pair.donor.id)
+}
+function commitQuickPromotion(leaderId,donorId) {
+  const unit=game.value.allies.find(u=>u.id===leaderId)
+  if (unit && forge(leaderId,donorId,'promote')) {
+    promotionPending.value=null
+    note(displayName(unit)+'升至'+unit.level+'星 · 腾出 1 个兵位')
+  }
+}
+function confirmQuickPromotion() {
+  const pending=promotionPending.value,warning=quickPromotionWarning.value
+  if (!pending || !warning) return
+  if (pending.fingerprint!==warning.fingerprint) {
+    promotionPending.value={...pending,fingerprint:warning.fingerprint,changed:true}
+    return
+  }
+  commitQuickPromotion(pending.leaderId,pending.donorId)
 }
 function purchase(joker) {
   if (buyJoker(game.value, joker.id) !== false) { audio.play('buy'); note(joker.name + ' 已购入 · −' + joker.price + ' 金币'); save() }
@@ -591,6 +626,7 @@ function keydown(event) {
     else if (codex.value) codex.value = false
     else if (help.value) help.value = false
     else if (inspectedJoker.value) inspectedJoker.value = null
+    else if (promotionPending.value) promotionPending.value = null
     else if (confirmRestart.value) confirmRestart.value = false
     else if (trickArmed.value) cancelTrick()
     else if (!intro.value && desk.value !== 'field') closeDesk()
@@ -611,6 +647,8 @@ function keydown(event) {
 }
 function visibility() { hidden.value = document.hidden; if (!hidden.value) dealDay.value = dailySeed(); if (hidden.value) { manualPaused.value = game.value.phase === 'battle'; save() } }
 watch(() => game.value.phase, (phase, previous) => {
+  scoreReceipt.value=null
+  if (phase!=='ready') promotionPending.value=null
   updateOnboarding(game.value,'phase')
   if (['shop','won','lost'].includes(phase)) {recordCombatHistory();historySelection.value=''}
   enterPhase()
@@ -623,7 +661,7 @@ watch(() => game.value.phase, (phase, previous) => {
 })
 watch(paused, value => { if (value) audio.quietBattle() })
 watch(() => chime.value?.id, id => { if (id && !hidden.value && !hasModal.value) audio.play('bell') })
-const modalIdentity = computed(() => pokerPanel.value || (briefing.value ? 'brief' : codex.value ? 'codex' : help.value ? 'help' : confirmRestart.value ? 'restart' : inspectedJoker.value ? `joker-${inspectedJoker.value.id}` : intro.value ? 'intro' : ['won', 'lost'].includes(game.value.phase) ? game.value.phase : null))
+const modalIdentity = computed(() => pokerPanel.value || (briefing.value ? 'brief' : codex.value ? 'codex' : help.value ? 'help' : promotionPending.value ? 'promotion' : confirmRestart.value ? 'restart' : inspectedJoker.value ? `joker-${inspectedJoker.value.id}` : intro.value ? 'intro' : ['won', 'lost'].includes(game.value.phase) ? game.value.phase : null))
 watch(modalIdentity, async (open, previous) => {
   if (open) {
     const menuTrigger = open === 'intro' && previous === 'performer' ? introEl.value?.querySelector('.build-link') : null
@@ -794,12 +832,13 @@ onBeforeUnmount(() => {
           <button v-if="feature('forge') && (game.reserves.length || pairs.ascend.length)" class="key-ticket recruit-ascend" @click="setDesk('forge')"><KeyMark name="forge"/>{{ pairs.ascend.length?'可融合升品质':'传说候补' }}<span v-if="game.reserves.length"> · 候补 {{ game.reserves.length }} 名</span> ↗</button>
           <HandCards :cards="sortedHand" :game="game" :preview="preview" :palm-id="palmId" :palming="trickArmed && hero.id==='ghost'"
             :orders-open="ordersOpen" @choose="chooseCard" @inspect="openCodex"/>
-          <div class="draft-result" v-if="preview.score" aria-live="polite" :style="{'--grade-ink':QUALITIES[preview.grade].color}">
+          <div class="draft-result" v-if="preview.score" :style="{'--grade-ink':QUALITIES[preview.grade].color}">
             <PixelSprite class="draft-portrait" v-bind="getSpriteFrame(preview.recruits[0] || preview.reserve[0])"/>
             <div class="draft-contract"><strong>{{ displayName(preview.recruits[0] || preview.reserve[0] || preview.look.design) }} · {{ preview.profession }}</strong>
-              <span v-if="preview.returning">♛ 主将归队 · {{ championProgress(game.champion) }}</span><span class="muster-strength" :title="preview.strengthDetail">{{ preview.look.name }} · {{ preview.look.design.type==='healer' ? '生命、攻疗' : '生命、攻击' }} +{{ preview.statBonus }}%</span><small v-if="preview.strengthDetail" class="muster-detail">{{ preview.strengthDetail }}</small><span v-if="preview.overflow">{{ preview.waiting ? '满编 · 传说进入候补席' : '满编 · 转训至少 +'+preview.trainingXp+'经验；若出传说则候补' }}</span></div>
-            <div class="draft-odds"><b class="grade-seal"><small v-if="preview.extraChips">道具 +{{ preview.extraChips }} 筹码 · </small>{{ preview.score.total }}分 · {{ QUALITIES[preview.grade].name }}保底</b><small>{{ preview.grade===4?'必出传说':oddsText(preview.grade) }}</small></div>
+              <span v-if="preview.returning">♛ 主将归队 · {{ championProgress(game.champion) }}</span><span class="muster-strength" :title="preview.strengthDetail">{{ preview.look.name }} · {{ preview.strengthDetail }}</span></div>
           </div>
+          <ScoreBreakdown v-if="selectedCount && preview.scoreTrace" :trace="preview.scoreTrace"/>
+          <ScoreSequence v-if="scoreReceipt" v-show="!selectedCount" :trace="scoreReceipt" :speed="speed" :reduced-motion="reducedMotion" @speed="speed=$event"/>
           </div>
           <div class="command-bar"><div class="hand-preview"><span class="preview-sigil">{{ selectedCount ? '✧' : '♧' }}</span><div><strong>{{ selectedCount ? preview.order + ' → ' + REGIMENTS[preview.target].name : '军令 ' + game.energy + ' / ' + game.maxEnergy }}<span v-if="selectedCount" class="cost-tag">{{ preview.prepaid ? '免军令' : '✦ ' + preview.cost }}</span></strong><small>{{ selectedCount ? `受令 ${preview.targetCount} 人 · ${preview.description}` : '可继续组牌，或集结完毕后出战' }}</small></div></div><div class="command-actions"><button class="suggest-button key-tab" aria-label="提示手牌" @click="suggest" :disabled="!ordersOpen || trickArmed || (!game.paidHandsLeft && game.energy<2)" title="选中一手可出的牌（H）"><KeyMark name="cards"/><span>提示</span></button><button class="discard-button key-ink" @click="doDiscard" :disabled="!canDiscard || trickArmed"><KeyMark name="cards"/>换牌<small>{{ game.discards > 0 ? `免费 ${game.discards} 次` : game.phase === 'ready' ? `${redrawFee} 金币` : '次数已尽' }}</small><kbd>D</kbd></button><button class="deploy-button key-command" @click="doDeploy" :disabled="!canDeploy || trickArmed"><KeyMark name="order" class="order-seal"/><span class="order-inscription">{{ deployLabel }}</span></button></div></div>
           <div v-if="orderDetails" id="order-details" class="order-details"><div class="hand-tools">
@@ -809,7 +848,7 @@ onBeforeUnmount(() => {
           <div class="wave-plan">
 
             <template v-if="game.phase==='ready' && feature('forge')">
-              <button v-if="quickPair" class="key-ink quick-promote" @click="quickPromote"><KeyMark name="forge"/>升星 · {{ displayName(quickPair.leader) }} → {{ quickPair.leader.level+1 }}★</button>
+              <button v-if="quickPair" class="key-ink quick-promote" :title="'预览消耗'+displayName(quickPair.donor)+'，保留'+displayName(quickPair.leader)+'的品质'" @click="quickPromote"><KeyMark name="forge"/>升星预览 · {{ displayName(quickPair.leader) }} → {{ quickPair.leader.level+1 }}★</button>
               <button class="key-tab open-forge" @click="setDesk('forge',$event.currentTarget)"><KeyMark name="forge"/>兵种工坊</button>
             </template>
           </div>
@@ -894,8 +933,8 @@ onBeforeUnmount(() => {
 
     <div v-if="intro" class="modal-scrim deal-scrim" :inert="modalIdentity!=='intro'" @keydown="trapFocus">
       <section ref="introEl" class="joker-entry" role="dialog" aria-modal="true" aria-labelledby="intro-title">
-        <JokerTable :doctrine="pickedDoctrine" :difficulty="pickedDifficulty" :saved="savedGame" :daily-best="selectedDailyBest"
-          @choose="id => { pickedDoctrine=id; audio.play('select') }" @difficulty="pickedDifficulty=$event"
+        <JokerTable :doctrine="pickedDoctrine" :difficulty="pickedDifficulty" :seed="pickedSeed" :saved="savedGame" :daily-best="selectedDailyBest"
+          @choose="id => { pickedDoctrine=id; audio.play('select') }" @difficulty="pickedDifficulty=$event" @seed="pickedSeed=$event"
           @guide="openGuide" @resume="resumeRun" @start="requestStart(false)" @daily="requestStart(true)"/>
       </section>
     </div>
@@ -914,6 +953,8 @@ onBeforeUnmount(() => {
       <section v-else-if="help" ref="modalEl" class="modal help-modal" role="dialog" aria-modal="true" aria-labelledby="help-title">
         <FieldManual @close="help=false" @book="pokerPanel='book'"/>
       </section>
+
+      <section v-else-if="promotionPending" ref="modalEl" class="modal confirm-modal quick-promotion-confirm" role="dialog" aria-modal="true" aria-labelledby="promotion-title"><h2 id="promotion-title">消耗副兵并升星？</h2><MergeWarning v-if="quickPromotionWarning" :warning="quickPromotionWarning"/><p v-else>材料已不可用，请返回重新选择。</p><p v-if="promotionPending.changed">材料信息已更新，请重新核对后确认。</p><div class="modal-button-row"><button class="secondary-button key-ink" @click="promotionPending=null"><KeyMark name="return"/>保留两名士兵</button><button class="gold-button key-command" :disabled="!quickPromotionWarning" @click="confirmQuickPromotion"><KeyMark name="forge"/>确认消耗并升星</button></div></section>
 
       <section v-else-if="confirmRestart" ref="modalEl" class="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="restart-title"><p class="eyebrow">A NEW PERFORMANCE</p><h2 id="restart-title">开启新的远征？</h2><p>当前军团和本局进度会被新的远征替换。</p><div class="modal-button-row"><button class="secondary-button key-ink" @click="confirmRestart = false"><KeyMark name="return"/>返回选择</button><button class="gold-button key-command" @click="startRun()"><KeyMark name="allies"/>替换存档并启程 ↗</button></div></section>
 

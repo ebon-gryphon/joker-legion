@@ -1,14 +1,9 @@
 import { copies, owns, spendCharge, trigger, effect } from './gameState.js'
 import { waveChange } from './standingArmy.js'
+import { scoreContributionRows } from './itemTrace.js'
 
-export function scoreItemChips(game, scoring, key) {
-  const red = scoring.filter(c => ['♥','♦'].includes(c.suit)).length
-  const black = scoring.length - red
-  const court = scoring.filter(c => ['J','Q','K'].includes(c.rank)).length
-  return copies(game,'score-chalk') * 2 + copies(game,'red-thread') * red +
-    copies(game,'black-wax') * black + copies(game,'court-seal') * court * 2 +
-    (['straight','straightFlush'].includes(key) ? copies(game,'straight-compass') * 4 : 0) +
-    (copies(game,'score-ticket') ? 10 : 0)
+export function scoreItemChips(game, scoring, key, containsPair) {
+  return scoreContributionRows(game,scoring,key,containsPair).reduce((sum,row)=>sum+row.delta,0)
 }
 
 export function applyRecruitItems(game, recipient) {

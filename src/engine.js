@@ -11,7 +11,7 @@ export {
 } from './deck.js'
 export {
   designateChampion, toggleSoldierLock, drillPreview, drill, fieldReserve, moveInCamp, addUnit, setFormation,
-  promotionPreview, forgeUnit, promote, commission, vanguard
+  promotionPreview, promotionWarning, drillMaterialWarning, forgeUnit, promote, commission, vanguard
 } from './campArmy.js'
 export {
   setOrderTarget, previewHand, recommendHand

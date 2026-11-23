@@ -1,4 +1,4 @@
-import { validCombatRecord } from './combatStats.js'
+import { validCombatRecord, discardInvalidScoreMetadata } from './combatStats.js'
 
 export const combatHistoryKey='joker.legion.combat-history.v1'
 export const COMBAT_HISTORY_LIMIT=1000
@@ -13,7 +13,7 @@ export function loadCombatHistory(storage) {
     const parsed=JSON.parse(storage.getItem(combatHistoryKey) || '[]')
     if(!Array.isArray(parsed)) return []
     const distinct=new Map()
-    for(const record of parsed) if(validCombatRecord(record)) distinct.set(record.waveId,record)
+    for(const raw of parsed) {const record=discardInvalidScoreMetadata(raw);if(validCombatRecord(record)) distinct.set(record.waveId,record)}
     return bounded([...distinct.values()])
   } catch {return []}
 }

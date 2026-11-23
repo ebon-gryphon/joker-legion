@@ -308,7 +308,7 @@ export function unitStep(game, unit, dt, onAction) {
     if (unit.bellTimer <= 0 && game.baseHp > 0) {
       const damage = Math.min(game.baseHp, tollDamage(game.wave))
       game.baseHp -= damage
-      recordGateDamage(game,damage)
+      recordGateDamage(game,damage,'bell')
       perform(game, unit, 'toll', { x: 68 }, onAction)
       game.tacticsReport.tolls++
       game.tacticsReport.gateDamage += damage
@@ -363,7 +363,7 @@ export function unitStep(game, unit, dt, onAction) {
   if (unit.side === 'enemy' && unit.x <= 56) {
     const breach = breachDamage(unit.type, game.baseHp)
     game.baseHp -= breach
-    recordGateDamage(game,breach)
+    recordGateDamage(game,breach,'breach')
     effect(game, 'damage', 65, 180, `城堡 −${breach}`, '#ef778b')
     log(game, `${unit.name}突破防线 · 城堡 −${breach}`, 'danger')
     unit.hp = 0

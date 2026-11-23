@@ -4,9 +4,10 @@ import {displayName} from './soldierIdentity.js'
 import { jobOf } from './recruitment.js'
 import {computed,ref,watch} from 'vue'
 import DraggedSoldier from './DraggedSoldier.vue'
+import MergeWarning from './MergeWarning.vue'
 import PixelSprite from './PixelSprite.vue'
 import {getSpriteFrame} from './spriteAtlas.js'
-import {drillPreview,FIELD_LIMIT} from './engine.js'
+import {drillPreview,drillMaterialWarning,FIELD_LIMIT} from './engine.js'
 import {ORDER_BOOK} from './orders.js'
 import {gradeOf, QUALITIES} from './quality.js'
 import {veteranLevel} from './training.js'
@@ -16,6 +17,7 @@ const emit = defineEmits(['drill','champion','lock'])
 const selected = ref(''), hover = ref(''), drag = ref(null)
 const chosen = computed(()=>props.game.allies.find(u=>u.id===selected.value))
 const staged = computed(()=>drillPreview(props.game,selected.value,hover.value))
+const materialWarning = computed(()=>drillMaterialWarning(props.game,selected.value,hover.value))
 const members = computed(()=>props.game.allies.filter(u=>u.hp>0))
 const milestones = ['8经验后，K计分可发动御驾亲征','15经验后，每三次行动发动将威','已习得将威 · K计分可亲征']
 const title = u=>jobOf(u).name
@@ -66,11 +68,13 @@ function up(e) {
         <small v-if="chosen.id===game.champion?.unitId">{{ milestones[chosen.trainingXp<8?0:chosen.trainingXp<15?1:2] }}</small>
         <button class="key-ink" :disabled="game.champion?.unitId===chosen.id" @click="emit('champion',chosen.id)">{{ game.champion?.unitId===chosen.id ? championProgress(game.champion) : '立为主将' }}</button>
         <button class="lock-unit key-tab" :aria-pressed="chosen.locked" @click="emit('lock',chosen.id)">{{ chosen.locked?'已锁定 · 解锁':'锁定此兵' }}</button>
-        <select class="key-select" v-if="members.length>1 && !chosen.locked" aria-label="选择并入目标" :value="''" @change="e=>{emit('drill',chosen.id,e.target.value);selected=e.target.value;e.target.value=''}"><option value="" disabled>并入其他兵…</option><option v-for="u in members.filter(m=>m.id!==chosen.id)" :key="u.id" :value="u.id">{{ drillPreview(game,chosen.id,u.id)?.text }}</option></select>
+        <small v-if="!chosen.locked">作为副手会被消耗，原品质不会转移；升星继承80%基础属性，请在工坊核对材料。</small>
+        <select class="key-select" v-if="members.length>1 && !chosen.locked" aria-label="消耗此兵并选择接收者" :value="''" @change="e=>{emit('drill',chosen.id,e.target.value);selected=e.target.value;e.target.value=''}"><option value="" disabled>消耗此兵，选择接收者…</option><option v-for="u in members.filter(m=>m.id!==chosen.id)" :key="u.id" :value="u.id">{{ drillPreview(game,chosen.id,u.id)?.text }}</option></select>
       </template>
       <span v-else-if="game.champion">主将 {{ game.champion.pattern ? ORDER_BOOK[game.champion.pattern].name : game.champion.slot }} · {{ game.champion.xp }}经验 · {{ game.champion.unitId ? championProgress(game.champion) : (game.champion.pattern?'再打此牌型即可归队':'让本命牌计分可归队') }}</span>
       <span v-else>拖副手给目标传授经验与职业传承技；两名传说可融合为神话 · 点兵可锁定或立主将</span>
     </div>
+    <MergeWarning v-if="materialWarning" compact :warning="materialWarning"/>
   </section>
 </template>
 <style scoped>

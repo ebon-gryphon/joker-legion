@@ -22,7 +22,7 @@ import { createGame } from './campaign.js'
 import { makeSchedule, spawnEnemies } from './waveSchedule.js'
 import { PERFORMANCES } from './performance.js'
 import { BOSS_SKILLS, isBoss } from './bossRules.js'
-import { validCombatStats, migrateCombatStats } from './combatStats.js'
+import { validCombatStats, migrateCombatStats, discardInvalidScoreMetadata } from './combatStats.js'
 import { validOnboarding, migrateOnboarding } from './onboarding.js'
 
 const RESERVED = new Set(['__proto__', 'constructor', 'prototype'])
@@ -42,6 +42,7 @@ export function restoreGame(snapshot) {
   // Never merge persisted data into live objects; whitelist and validate a full snapshot.
   try {
     const data = typeof snapshot === 'string' ? JSON.parse(snapshot) : JSON.parse(JSON.stringify(snapshot))
+    discardInvalidScoreMetadata(data)
     if (!validExpedition(data) || !validDeck(data) || !validHandAndTricks(data) ||
         !validArmies(data) || !validWave(data) || !validResources(data) || !validProgress(data)) return null
     return migrateExpedition(data)

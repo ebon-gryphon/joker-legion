@@ -61,6 +61,7 @@ function choose(id) {
         </button>
       </div>
       <p class="formation-rule" :style="{ '--formation-color': selected.color }"><b>{{ selected.name }}</b>{{ selected.rule }}</p>
+      <p v-if="!inShop" class="brief-warning formation-placement-note">切换阵型会清除手动站位，并按新阵型重新布阵；请在换阵后再调整士兵位置。</p>
     </section>
   </div>
   <footer v-if="!guideOpen" class="brief-footer"><p v-if="intel.bells.length">战前打过对子或更高牌型，可自动打断本波首次鸣钟。守住此波且全程无钟击，额外获得 {{ SILENT_BOUNTY }} 金币。</p>

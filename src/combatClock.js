@@ -19,7 +19,7 @@ function resolveTimeout(game) {
   if (!remaining.length) return
   const before = game.baseHp
   for (const unit of remaining) game.baseHp -= breachDamage(unit.type, game.baseHp)
-  recordGateDamage(game,before-game.baseHp)
+  recordGateDamage(game,before-game.baseHp,'timeout')
   game.waveTimeout = { count: remaining.length, damage: before - game.baseHp, boss: remaining.some(unit => isBoss(unit.type)),
     ...(remaining.some(unit => unit.type === 'finalBoss') ? {bossName:'缀命皇后'} : {}) }
   game.enemies = []

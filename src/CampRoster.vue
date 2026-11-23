@@ -1,10 +1,11 @@
 <script setup>
 import SoldierSheet from './SoldierSheet.vue'
+import MergeWarning from './MergeWarning.vue'
 import KeyMark from './KeyMark.vue'
 import { computed, nextTick, ref, watch } from 'vue'
 import ActionPreview from './ActionPreview.vue'
 import PixelSprite from './PixelSprite.vue'
-import { FUSION_BY_ID, FUSION_COST, ROLE_NAMES, mergePreview } from './forge.js'
+import { FUSION_BY_ID, FUSION_COST, ROLE_NAMES, mergePreview, mergeWarning } from './forge.js'
 import { FUSION_PROFESSIONS, professionId, professionName, professionJobs, fusionProfessionNames } from './professionFusion.js'
 import { JOBS } from './jobs.js'
 import { gradeOf, QUALITIES } from './quality.js'
@@ -24,6 +25,7 @@ const continueButton = ref(null)
 const ascendKey = ref('')
 const ascendPair = computed(()=>props.pairs.ascend.find(p=>p.leader.id+'/'+p.donor.id===ascendKey.value) || props.pairs.ascend[0])
 const ascension = computed(()=>ascendPair.value && mergePreview(props.game,ascendPair.value.leader.id,ascendPair.value.donor.id,'ascend'))
+const ascendWarning = computed(()=>ascendPair.value && mergeWarning(props.game,ascendPair.value.leader.id,ascendPair.value.donor.id,'ascend'))
 function ascend() {
   const pair = ascendPair.value, result = ascension.value
   if (!pair || !result) return
@@ -49,6 +51,7 @@ watch(donors, list => {
 const leader = computed(() => leaders.value.find(unit => unit.id === selectedLeader.value))
 const donor = computed(() => donors.value.find(unit => unit.id === selectedDonor.value))
 const result = computed(() => mergePreview(props.game, selectedLeader.value, selectedDonor.value, kind.value))
+const consumptionWarning = computed(() => mergeWarning(props.game,selectedLeader.value,selectedDonor.value,kind.value))
 const serving = computed(() => props.game.allies.find(unit => unit.command))
 watch(() => props.game.allies.map(unit => unit.id), ids => {
   if (!ids.includes(chosenId.value)) chosenId.value = serving.value?.id || props.game.allies.find(unit => unit.level >= 2)?.id || ids[0] || ''
@@ -147,6 +150,7 @@ function merge() {
       <button class="key-command" @click="ascend"><KeyMark name="forge"/>免费融合为{{ QUALITIES[ascension.grade].name }}</button>
       </div>
       <div class="forge-stats"><span v-for="stat in statRows(ascendPair.leader,ascension)" :key="stat.label">{{ stat.label }} <del>{{ stat.before }}</del> → <b>{{ stat.after }}</b></span></div>
+      <MergeWarning v-if="ascendWarning" :warning="ascendWarning"/>
     </template>
     <p v-else class="forge-note">需要两名同品质的传说或神话，副手需解锁。候补席的成员也可互相融合。战阵中也可将副手直接拖到保留者身上。</p>
   </section>
@@ -205,9 +209,12 @@ function merge() {
       </div>
       <div v-if="result" class="forge-stats"><span v-for="stat in stats" :key="stat.label">{{ stat.label }} <del>{{ stat.before }}</del> → <b>{{ stat.after }}</b></span></div>
       </div>
-      <footer class="forge-commit"><small>{{ donor ? displayName(donor)+' 将并入主将，腾出一个兵位。' : isFusion ? '选一名在营主兵，再选不同职业的副手。上锁的士兵可接收，不能被消耗。' : '再招募一名同职业、同星的士兵。' }}</small>
-        <button class="gold-button key-command" :disabled="!result || !affordable" @click="merge"><KeyMark name="forge"/>{{ !result ? '材料未齐' : !affordable ? '还缺 '+(price-game.gold)+' 金币' : isFusion ? '确认职业融合' : '升至'+result.level+'星' }}<small class="forge-price">{{ isFusion ? price+' 金币' : '免费' }}</small></button>
+      <footer class="forge-commit"><div class="forge-warning-stack"><MergeWarning v-if="consumptionWarning" compact :warning="consumptionWarning"/><small v-else>{{ isFusion ? '职业融合消耗副兵，保留主兵身份与品质；副兵永久基础属性全部并入。' : '升星消耗一名同职业同星副兵，保留主兵品质；副兵基础属性仅继承80%。' }}上锁的士兵不能作为材料。</small></div>
+        <button class="gold-button key-command" :disabled="!result || !affordable" @click="merge"><KeyMark name="forge"/>{{ !result ? '材料未齐' : !affordable ? '还缺 '+(price-game.gold)+' 金币' : isFusion ? '消耗副兵并融合' : '消耗副兵升至'+result.level+'星' }}<small class="forge-price">{{ isFusion ? price+' 金币' : '免费' }}</small></button>
       </footer>
     </section>
   </div>
 </template>
+<style scoped>
+.forge-warning-stack{min-width:0;flex:1}.forge-warning-stack>small{display:block}.forge-warning-stack .merge-warning{margin:0}
+</style>

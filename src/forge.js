@@ -1,7 +1,9 @@
 import { lastingStat } from './standingArmy.js'
-import { ascendedGrade } from './quality.js'
-import { earnedTraining, trainingBonus, soldierValue, inheritLessons } from './training.js'
-import { professionId, combinedProfessionJobs } from './professionFusion.js'
+import { ascendedGrade, QUALITIES } from './quality.js'
+import { earnedTraining, trainingBonus, soldierValue, inheritLessons, LESSONS } from './training.js'
+import { professionId, combinedProfessionJobs, professionJobs } from './professionFusion.js'
+import { getCardDesign } from './cardCatalog.js'
+import { JOBS } from './jobs.js'
 export const FUSION_COST = 5
 export const ROLE_NAMES = { knight: '铁卫', healer: '牧师', ranger: '游侠', mage: '术士' }
 
@@ -77,4 +79,36 @@ export function mergePreview(game, leaderId, donorId, kind) {
     trainingXp:xp, trainingGrowth:{hp:retained.hp + gainHp, atk:retained.atk + gainAtk}, level: ascending ? Math.max(leader.level, donor.level) : profession ? leader.level : leader.level + 1, maxHp, hp: Math.min(maxHp, leader.hp + gainHp + Math.round(Math.max(0,donor.hp-trained.hp) * share)),
     atk: leader.atk + gainAtk + Math.round((lastingStat(donor,'atk')-trained.atk) * share), heal: leader.heal + (leader.type === 'healer' || profession && (leader.heal>0 || donor.heal>0) ? gainAtk : 0) + Math.round(Math.max(0,lastingStat(donor,'heal')-trained.atk) * share),
   }
+}
+
+export function materialIdentity(unit) {
+  const skills=[...new Set([
+    ...professionJobs(unit).map(id=>JOBS[id].name+' · '+JOBS[id].skill),
+    ...(unit.lessons || []).map(id=>LESSONS[id]?.name).filter(Boolean),
+    ...[unit.fusion,...(unit.fusionSkills || [])].filter(Boolean).map(id=>FUSION_BY_ID[id]?.skill).filter(Boolean),
+  ])]
+  return {id:unit.id,name:getCardDesign(unit)?.name || unit.name,quality:QUALITIES[unit.grade || 0].name,
+    grade:unit.grade || 0,level:unit.level,xp:unit.trainingXp || 0,skills}
+}
+
+// Presentation only. Calling this helper never reserves or spends a material.
+export function mergeWarning(game, leaderId, donorId, kind='promote') {
+  const preview=mergePreview(game,leaderId,donorId,kind)
+  if(!preview) return null
+  const members=[...game.allies,...(game.reserves || [])]
+  const leader=members.find(u=>u.id===leaderId),donor=members.find(u=>u.id===donorId)
+  const main=materialIdentity(leader),material=materialIdentity(donor)
+  const share=kind==='ascend'?.5:kind==='profession'?1:kind==='promote'?.8:.6
+  const lostXp=Math.max(0,main.xp+material.xp-preview.trainingXp)
+  const quality=QUALITIES[preview.grade ?? main.grade].name
+  const warning={kind,leader:main,donor:material,share,retainedQuality:quality,
+    title:kind==='promote'?'升星会消耗一名副兵':'合编会消耗一名副兵',
+    identity:kind==='ascend'?'保留主兵身份，品质升为'+quality+'。':'保留主兵身份与'+quality+'品质，副兵的'+material.quality+'品质不会转移。',
+    attributes:'副兵永久基础属性按 '+Math.round(share*100)+'% 并入'+(share<1?'，其余 '+Math.round((1-share)*100)+'% 不保留（按项取整）。':'；临时战令加成不会转成永久属性。'),
+    training:'副兵 '+material.xp+' 经验及已学能力合入主兵；重复能力只保留一份。',lostXp,
+    requiresConfirmation:kind==='promote' && (share<1 || material.grade>0 || material.xp>0 || material.skills.length>1),
+    highValue:material.grade>main.grade || material.grade>=2 || material.xp>0 || material.skills.length>1,
+    nextLevel:preview.level}
+  warning.fingerprint=JSON.stringify([main,material,preview])
+  return warning
 }

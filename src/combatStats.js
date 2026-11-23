@@ -1,7 +1,8 @@
 import { getCardDesign } from './cardCatalog.js'
 import { JOBS } from './jobs.js'
 import { QUALITIES } from './quality.js'
-import { WAVES } from './campaignRules.js'
+import { WAVES, JOKER_BY_ID, RANKS, SUITS } from './campaignRules.js'
+import { ORDER_BOOK } from './orders.js'
 import { soldierIdentity } from './soldierIdentity.js'
 import { FORMATION_BY_ID } from './tactics.js'
 import { FUSION_BY_ID } from './forge.js'
@@ -12,6 +13,7 @@ const fallbackRunId = g => JSON.stringify([g.seed,g.doctrine,g.difficulty || 'st
 const identity = (g,runId) => JSON.stringify([runId,g.battleId,g.wave])
 const safe = n => Number.isFinite(n) && n >= 0 && n <= 1e12
 const text = s => typeof s === 'string' && s.length <= 500
+const TRACKED_ITEMS=['score-chalk','pair-ink','third-act','iron-banner','red-echo','heart-engine']
 
 export function initializeCombatStats(game, {runId, partial = false} = {}) {
   const id = runId || game.combatLedger?.runId || fallbackRunId(game)
@@ -20,8 +22,8 @@ export function initializeCombatStats(game, {runId, partial = false} = {}) {
     difficulty:game.difficulty || 'standard', wave:game.wave, battleId:game.battleId,
     partial, started:game.phase==='battle', ended:false, result:null, fromWaveTime:game.waveTime || 0,
     duration:0, gate:{start:game.baseHp,battleStart:game.phase==='battle'?game.baseHp:null,end:game.baseHp,damage:0,repaired:0,untracked:0,
-      preparationDamage:0,preparationRepaired:0,battleDamage:0,battleRepaired:0},
-    energyStart:game.energy, energyLeft:game.energy, units:[], systems:[], orders:[], pendingKills:[], creditedKills:[],
+      preparationDamage:0,preparationRepaired:0,battleDamage:0,battleRepaired:0,sources:{bell:0,breach:0,timeout:0,unknown:0}},
+    energyStart:game.energy, energyLeft:game.energy, units:[], systems:[], orders:[], itemEvents:[], pendingKills:[], creditedKills:[],
   }
   game.lastCombatReport = null
   registerArmy(game)
@@ -111,9 +113,11 @@ export function recordDeath(game, unit) {
   }
 }
 
-export function recordGateDamage(game, amount) {
+export function recordGateDamage(game, amount, source='unknown') {
   const ledger=ledgerFor(game)
   if (!ledger.ended) {
+    ledger.gate.sources ??= {bell:0,breach:0,timeout:0,unknown:ledger.gate.damage}
+    ledger.gate.sources[['bell','breach','timeout'].includes(source)?source:'unknown']+=amount
     ledger.gate.damage+=amount
     const part=ledger.started?'battleDamage':'preparationDamage'
     if(ledger.gate[part]!==undefined) ledger.gate[part]+=amount
@@ -127,13 +131,51 @@ export function recordGateRepair(game, amount) {
     if(ledger.gate[part]!==undefined) ledger.gate[part]+=amount
   }
 }
-export function recordOrder(game, preview, secondary) {
+export function recruitmentOutcome(preview,{joined=[],reserve=null,trainer=null,xpGain=0}={}) {
+  const recruit=preview.recruits[0] || preview.reserve[0]
+  return {status:joined.length?'fielded':reserve?'reserve':trainer?'training':'unresolved',
+    profession:preview.profession,grade:preview.captainGrade,minimumGrade:preview.grade,level:recruit?.level || 1,
+    appearanceId:recruit?.appearanceId || '',recruitId:joined[0]?.id || reserve?.id || null,
+    recipientId:trainer?.id || null,recipientName:trainer?soldierIdentity(trainer).name:'',
+    plannedXp:preview.trainingXp || 0,xpGain}
+}
+
+export function recordItemEvent(game,actual,{orderId=null,orderOrdinal=null,targetIds=[]}={}) {
+  const ledger=ledgerFor(game)
+  if(ledger.ended) return
+  ledger.itemEvents ??= []
+  const event={index:ledger.itemEvents.length,at:game.waveTime || 0,phase:game.phase,
+    orderId,orderOrdinal,targetIds:[...new Set(targetIds)],...copy(actual)}
+  ledger.itemEvents.push(event)
+  return event
+}
+
+export function compactScoreTrace(trace) {
+  if(!trace) return null
+  return copy({version:trace.version,id:trace.id,mode:trace.mode,
+    hand:{key:trace.hand.key,name:trace.hand.name,level:trace.hand.level},
+    scoringCards:trace.scoringCards.map(({suit,rank,points})=>({suit,rank,points})),
+    nonScoringCards:trace.nonScoringCards.map(({suit,rank})=>({suit,rank})),
+    chipsBeforeMult:trace.chipsBeforeMult,mult:trace.mult,finalScore:trace.finalScore,
+    chipBonuses:trace.chipBonuses.map(({id,delta,quantity})=>({id,delta,quantity})),
+    quality:{floor:trace.quality.floor,rolled:trace.quality.rolled},recruit:trace.recruit,
+    order:trace.order,items:trace.items.map(({id,quantity,actual})=>({id,quantity,actual}))})
+}
+
+export function recordOrder(game, preview, secondary, resolution={}) {
   const ledger=ledgerFor(game)
   if (ledger.ended || ledger.orders.some(order=>order.id===game.lastDeploy.id)) return
   registerArmy(game)
   ledger.orders.push({id:game.lastDeploy.id,key:preview.key,name:preview.name,target:preview.target,
     secondary:secondary || null,score:preview.score.total,cost:preview.cost,phase:game.phase,
-    at:game.waveTime || 0,energyLeft:game.energy})
+    at:game.waveTime || 0,energyLeft:game.energy,
+    ...(resolution.recruit?{recruitment:copy(resolution.recruit)}:{}),
+    ...(resolution.scoreTrace?{scoreTrace:compactScoreTrace(resolution.scoreTrace)}:{})})
+  for(const event of ledger.itemEvents || []) if(event.orderId===null && event.phase==='ready' && event.orderOrdinal===game.stats.deploys)
+    event.orderId=game.lastDeploy.id
+  for(const actual of resolution.items || []) if(actual.id!=='heart-engine' || !actual.triggered)
+    recordItemEvent(game,{...actual,quantity:resolution.scoreTrace?.items.find(item=>item.id===actual.id)?.quantity},
+      {orderId:game.lastDeploy.id,orderOrdinal:game.stats.deploys})
   ledger.energyLeft=game.energy
 }
 
@@ -158,6 +200,9 @@ function reportOf(game, ledger) {
   current.tacticsReport=copy(game.tacticsReport)
   current.fusionUses=copy(game.fusionUses)
   current.regimentReport=copy(game.waveReport)
+  const status=!ledger.ended?'ongoing':ledger.result==='lost'?'defeat':game.wave===(game.campaignLength || WAVES.length)?'victory':'wave-cleared'
+  current.runOutcome={status,wave:game.wave,clearedWaves:game.stats.wavesCleared,
+    terminal:['defeat','victory'].includes(status),finalWave:['defeat','victory'].includes(status)?game.wave:null}
   current.units.forEach(row=> {if(row.participated) row.alive=game.allies.some(u=>u.id===row.unitId && u.hp>0)})
   current.totals=[...current.units,...current.systems].reduce((sum,row)=> {
     for(const key of Object.keys(sum)) sum[key]+=row[key]
@@ -202,6 +247,55 @@ function validRow(row, system=false) {
     (system || text(row.appearanceId) && text(row.type) && text(row.jobId) && text(row.jobLabel) && text(row.qualityLabel) &&
       Number.isSafeInteger(row.grade) && row.grade>=0 && row.grade<=6 && ['echo','participated','alive'].every(k=>typeof row[k]==='boolean'))
 }
+
+function validRecruitment(value) {
+  return !!value && ['fielded','reserve','training','unresolved'].includes(value.status) && text(value.profession) &&
+    Number.isSafeInteger(value.grade) && value.grade>=0 && value.grade<=6 && Number.isSafeInteger(value.minimumGrade) && value.minimumGrade>=0 && value.minimumGrade<=value.grade &&
+    Number.isSafeInteger(value.level) && value.level>=1 && value.level<=3 && text(value.appearanceId) &&
+    [value.recruitId,value.recipientId].every(id=>id===null || text(id)) && text(value.recipientName) && safe(value.plannedXp) && safe(value.xpGain)
+}
+
+function validItemActual(value) {
+  return value && TRACKED_ITEMS.includes(value.id) && typeof value.triggered==='boolean' && typeof value.effective==='boolean' &&
+    (value.quantity===undefined || Number.isSafeInteger(value.quantity) && value.quantity>=0) &&
+    (!value.effective || value.triggered) && text(value.reason) && value.effects && !Array.isArray(value.effects) && Object.values(value.effects).every(safe)
+}
+
+export function validOrderScoreTrace(value,full=false) {
+  const card=c=>c && Object.hasOwn(SUITS,c.suit) && RANKS.includes(c.rank)
+  return !!value && value.version===1 && value.mode==='resolved' && text(value.id) &&
+    value.hand && Object.hasOwn(ORDER_BOOK,value.hand.key) && text(value.hand.name) && Number.isSafeInteger(value.hand.level) && value.hand.level>=1 && value.hand.level<=3 &&
+    Array.isArray(value.scoringCards) && value.scoringCards.length>=1 && value.scoringCards.length<=5 && value.scoringCards.every(c=>card(c) && safe(c.points)) &&
+    Array.isArray(value.nonScoringCards) && value.nonScoringCards.length<=5 && value.nonScoringCards.every(card) &&
+    value.scoringCards.length+value.nonScoringCards.length<=5 &&
+    ['chipsBeforeMult','mult','finalScore'].every(k=>safe(value[k])) && value.chipsBeforeMult*value.mult===value.finalScore &&
+    Array.isArray(value.chipBonuses) && value.chipBonuses.length<=20 && value.chipBonuses.every(r=>r && Object.hasOwn(JOKER_BY_ID,r.id) && safe(r.delta) && safe(r.quantity)) &&
+    value.quality && [value.quality.floor,value.quality.rolled].every(n=>Number.isSafeInteger(n) && n>=0 && n<=6) && value.quality.rolled>=value.quality.floor &&
+    value.recruit && text(value.recruit.profession) && text(value.recruit.summary) && safe(value.recruit.actualCount) && safe(value.recruit.xp) &&
+    typeof value.recruit.reserve==='boolean' && typeof value.recruit.overflow==='boolean' &&
+    (value.recruit.receiver===null || value.recruit.receiver && text(value.recruit.receiver.id) && text(value.recruit.receiver.name)) &&
+    value.order && value.order.sourceScore===value.finalScore && value.order.bonus && Object.entries(value.order.bonus).every(([key,n])=>['force','shield','vitality','haste'].includes(key) && safe(n)) &&
+    Array.isArray(value.items) && value.items.length<=6 && new Set(value.items.map(item=>item?.id)).size===value.items.length && value.items.every(r=>r && TRACKED_ITEMS.includes(r.id) && safe(r.quantity) && (r.actual===null || validItemActual(r.actual) && r.actual.id===r.id)) &&
+    (value.steps===undefined || Array.isArray(value.steps) && value.steps.length<=30 && value.steps.every(step=>step && text(step.kind) && text(step.id) && text(step.label))) &&
+    (value.selectedCards===undefined || Array.isArray(value.selectedCards) && value.selectedCards.length<=5 && value.selectedCards.every(c=>card(c) && text(c.id) && typeof c.scoring==='boolean')) &&
+    (!full || Array.isArray(value.selectedCards) && value.selectedCards.length>=1 && Array.isArray(value.steps) &&
+      ['baseChips','levelChips','baseMult','levelMult','mult'].every(key=>safe(value.hand[key])) && text(value.quality.name) &&
+      Array.isArray(value.quality.odds) && value.quality.odds.length<=7 && value.quality.odds.every(row=>row && Number.isSafeInteger(row.grade) && row.grade>=0 && row.grade<=6 && text(row.name) && safe(row.chance) && row.chance<=100) &&
+      text(value.order.label) && safe(value.order.crownMultiplier) &&
+      value.items.every(item=>text(item.label) && text(item.reason) && text(item.condition) && ['chips','muster','afterOrder','combat'].includes(item.phase) &&
+        typeof item.eligible==='boolean' && typeof item.applied==='boolean' && item.potential && Object.values(item.potential).every(safe)) &&
+      value.chipBonuses.every(item=>text(item.label)) &&
+      value.steps.every(step=>['delta','chips','mult','total'].every(key=>step[key]===undefined || safe(step[key]))))
+}
+
+export function discardInvalidScoreMetadata(container) {
+  if(!container || typeof container!=='object') return container
+  for(const orders of [container.orders,container.combatLedger?.orders,container.lastCombatReport?.orders]) {
+    if(Array.isArray(orders)) for(const order of orders) if(order?.scoreTrace!==undefined && !validOrderScoreTrace(order.scoreTrace)) delete order.scoreTrace
+  }
+  if(container.lastDeploy?.scoreTrace!==undefined && !validOrderScoreTrace(container.lastDeploy.scoreTrace,true)) delete container.lastDeploy.scoreTrace
+  return container
+}
 export function validCombatRecord(value, ledger=false) {
   if(!value || value.version!==1 || ![value.runId,value.waveId,value.seed,value.doctrine,value.difficulty].every(text) ||
     !Number.isSafeInteger(value.wave) || value.wave<1 || value.wave>WAVES.length || !Number.isSafeInteger(value.battleId) || value.battleId<1 ||
@@ -218,7 +312,9 @@ export function validCombatRecord(value, ledger=false) {
     new Set(value.systems.map(r=>r.id)).size!==value.systems.length ||
     !Array.isArray(value.orders) || value.orders.length>2048 || !value.orders.every(o=>o &&
       [o.id,o.key,o.name,o.target].every(text) && (o.secondary===null || text(o.secondary)) &&
-      ['ready','battle'].includes(o.phase) && ['score','cost','at','energyLeft'].every(k=>safe(o[k]))) ||
+      ['ready','battle'].includes(o.phase) && ['score','cost','at','energyLeft'].every(k=>safe(o[k])) &&
+      (o.recruitment===undefined || validRecruitment(o.recruitment)) &&
+      (o.scoreTrace===undefined || validOrderScoreTrace(o.scoreTrace))) ||
     new Set(value.orders.map(o=>o.id)).size!==value.orders.length) return false
   if((value.formation!==undefined && !Object.hasOwn(FORMATION_BY_ID,value.formation)) ||
     (value.tacticsReport!==undefined && (!value.tacticsReport || Array.isArray(value.tacticsReport) ||
@@ -230,7 +326,18 @@ export function validCombatRecord(value, ledger=false) {
     !['preparationDamage','preparationRepaired','battleDamage','battleRepaired'].every(key=>value.gate[key]===undefined || safe(value.gate[key])) ||
     (value.gate.combatNetLoss!==undefined && value.gate.combatNetLoss!==null &&
       (!Number.isFinite(value.gate.combatNetLoss) || value.gate.battleStart===null ||
-        Math.abs(value.gate.combatNetLoss-value.gate.battleStart+value.gate.end)>1e-6))) return false
+        Math.abs(value.gate.combatNetLoss-value.gate.battleStart+value.gate.end)>1e-6)) ||
+    (value.gate.sources!==undefined && (!value.gate.sources || Array.isArray(value.gate.sources) ||
+      Object.keys(value.gate.sources).length!==4 || !['bell','breach','timeout','unknown'].every(key=>safe(value.gate.sources[key])) ||
+      Math.abs(Object.values(value.gate.sources).reduce((sum,n)=>sum+n,0)-value.gate.damage)>1e-6)) ||
+    (value.itemEvents!==undefined && (!Array.isArray(value.itemEvents) || value.itemEvents.length>16384 || !value.itemEvents.every((event,index)=>
+      validItemActual(event) && event.index===index && safe(event.at) && ['ready','battle'].includes(event.phase) &&
+      (event.orderId===null || text(event.orderId)) && (event.orderOrdinal===null || Number.isSafeInteger(event.orderOrdinal) && event.orderOrdinal>=0) &&
+      Array.isArray(event.targetIds) && event.targetIds.length<=100 && event.targetIds.every(text)))) ||
+    (value.runOutcome!==undefined && (!value.runOutcome || !['ongoing','defeat','victory','wave-cleared'].includes(value.runOutcome.status) ||
+      value.runOutcome.wave!==value.wave || !Number.isSafeInteger(value.runOutcome.clearedWaves) || value.runOutcome.clearedWaves<0 || value.runOutcome.clearedWaves>value.wave ||
+      value.runOutcome.terminal!==['defeat','victory'].includes(value.runOutcome.status) ||
+      value.runOutcome.finalWave!==(value.runOutcome.terminal?value.wave:null)))) return false
   if(ledger) return Array.isArray(value.pendingKills) && value.pendingKills.length<=100 &&
     value.pendingKills.every(k=>k && text(k.targetId) && (k.unitId===null || text(k.unitId)) && (k.systemId===null || text(k.systemId)) &&
       (k.unitId ? value.units.some(r=>r.unitId===k.unitId) : value.systems.some(r=>r.id===k.systemId))) &&

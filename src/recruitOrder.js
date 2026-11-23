@@ -9,7 +9,9 @@ import { QUALITIES } from './quality.js'
 import { settleDeaths, healUnit } from './combatHealth.js'
 import { ROYAL_MARCHES } from './jobs.js'
 import { applyRecruitItems } from './itemEffects.js'
-import { recordOrder } from './combatStats.js'
+import { recordOrder, recruitmentOutcome } from './combatStats.js'
+import { resolveScoreTrace } from './scoreBreakdown.js'
+import { displayName } from './soldierIdentity.js'
 
 export function deploy(game) {
   return issueOrder(game, null)
@@ -23,6 +25,9 @@ export function issueOrder(game, secondary) {
   const preview = planHand(game,game.selected,true)
   if (!preview.canDeploy) return false
   const cards = selectedCards(game, game.selected).map(card => playedFace(game, card))
+  const actualItems=new Map((preview.scoreTrace?.items || []).map(item=>[item.id,{id:item.id,triggered:false,effective:false,reason:item.reason,effects:{}}]))
+  const itemCursor=game.combatLedger?.itemEvents?.length || 0
+  const baseStar=Math.max(1,preview.returning?game.champion?.level || 1:1,preview.royalOrder?3:1)
   spendCharge(game,'score-ticket')
   game.handsLeft--
   if (preview.prepaid) game.paidHandsLeft--
@@ -44,19 +49,22 @@ export function issueOrder(game, secondary) {
     game.stats.bestHand = preview.name
   }
   const joined = preview.recruits.map(recruit => addUnit(game, recruit.type, 'ally', recruit.level, { identity: recruit }))
+  let reserveUnit = null
   if (preview.waiting) {
     const recruit = preview.reserve[0]
-    addUnit(game,recruit.type,'ally',recruit.level,{identity:recruit,reserve:true})
+    reserveUnit = addUnit(game,recruit.type,'ally',recruit.level,{identity:recruit,reserve:true})
   }
   const trainer = game.allies.find(u => u.id === preview.trainerId) || joined[preview.trainerRecruit]
+  const trainingBefore = trainer?.trainingXp || 0
   if (preview.trainingXp && trainer) {
     grantExperience(game,trainer,preview.trainingXp)
-    effect(game,'burst',trainer.x,trainer.y, '+' + preview.trainingXp + '经验','#efce81')
+    const gained=trainer.trainingXp-trainingBefore
+    effect(game,'burst',trainer.x,trainer.y, gained?'+'+gained+'经验':'经验已满','#efce81')
   }
   if (preview.march) applyRoyalMarch(game, preview.marchSuit)
   const echo = secondary && echoOrderBonus(preview.bonus)
   applyRegimentOrder(game, preview, joined, secondary, echo)
-  applyRecruitRelics(game, preview, cards, joined[0] || trainer)
+  applyRecruitRelics(game, preview, cards, joined[0] || trainer,actualItems)
   applyRecruitItems(game,joined[0] || (preview.waiting ? game.reserves.at(-1) : trainer))
   const ids = new Set(game.selected)
   if (ids.has(game.palmedCard?.id)) game.palmedCard = null
@@ -66,13 +74,40 @@ export function issueOrder(game, secondary) {
   arrangeCamp(game)
   for (const unit of joined) effect(game, 'summon', unit.x, unit.y, unit.level > 1 ? '★' + unit.level : '', unit.color)
   let squad = REGIMENTS[preview.target].name + ' ×' + preview.targetCount + ' · ' + preview.description
-  if (preview.trainingXp) squad += ' · ' + preview.trainerName + ' +' + preview.trainingXp + '经验'
+  if (preview.trainingXp) squad += ' · ' + preview.trainerName + ' 实得 ' + ((trainer?.trainingXp || 0)-trainingBefore) + '经验'
   if (secondary) squad += ' / ' + REGIMENTS[secondary].name + '复令 · ' + describeBonus(echo)
   game.lastDeploy = { variantName:preview.look.name, variantRank:preview.variantRank, statBonus:preview.statBonus, grade:preview.grade, captainGrade:preview.captainGrade, profession:preview.profession, trainingXp:preview.trainingXp, trainerName:preview.trainerName,
     waiting:preview.waiting, contracted:preview.count, squad, target: preview.target, id: uid(game, 'deploy'), name: preview.name, key: preview.key, count: joined.length,
     leadFace: (preview.recruits[0] || preview.reserve[0])?.appearanceId ?? null,
     score: preview.score.total, power: preview.power, chain: game.chain, time: game.time }
-  recordOrder(game,preview,secondary)
+  const recruitResult=recruitmentOutcome(preview,{joined,reserve:reserveUnit,trainer,xpGain:(trainer?.trainingXp || 0)-trainingBefore})
+  const source=preview.recruits[0] || preview.reserve[0]
+  const third=actualItems.get('third-act')
+  if(third?.triggered) {
+    const extraStar=Math.max(0,(source?.level || 1)-baseStar)
+    const potentialXp=extraStar>0?2**source.level-2**baseStar:0
+    const xpWithout=Math.max(0,preview.trainingXp-potentialXp)
+    const actualXp=trainer?Math.max(0,recruitResult.xpGain-Math.min(999-trainingBefore,xpWithout)):0
+    const starGain=joined.length || reserveUnit?extraStar:0
+    Object.assign(third,{effective:starGain>0 || actualXp>0,effects:{starGain,xpGain:actualXp},
+      reason:starGain>0?'第三手生效，领队实际提高 '+starGain+' 星。':actualXp>0?'第三手升星转为满编集训，本次额外获得 '+actualXp+' 经验。':extraStar>0?'已满编且接收者经验达到上限，本次没有新增培养收益。':'已有返场星级或皇家密令，未额外提高星级。'})
+  }
+  for(const item of preview.scoreTrace?.items || []) if(item.phase==='chips') actualItems.set(item.id,{id:item.id,
+    triggered:item.quantity>0 && item.applied,effective:item.quantity>0 && item.potential.chips>0,
+    reason:item.reason,effects:{chips:item.potential.chips || 0}})
+  const heart=actualItems.get('heart-engine')
+  if(heart && (preview.scoreTrace.items.find(item=>item.id==='heart-engine')?.quantity || 0)>0) {
+    const events=(game.combatLedger?.itemEvents || []).slice(itemCursor).filter(event=>event.id==='heart-engine')
+    const damage=events.reduce((sum,event)=>sum+(event.effects.damage || 0),0)
+    const shieldDamage=events.reduce((sum,event)=>sum+(event.effects.shieldDamage || 0),0)
+    Object.assign(heart,{triggered:events.length>0,effective:damage>0 || shieldDamage>0,
+      reason:events.length?damage>0?'本手治疗触发 '+events.length+' 次圣杯，伤害按实际生命损失记录。':events[0].reason:'本手未累计满70有效治疗，当前蓄能 '+Number(game.healedCharge.toFixed(1))+'/70。',
+      effects:{damage,shieldDamage,targets:new Set(events.flatMap(event=>event.targetIds)).size}})
+  }
+  game.lastDeploy.scoreTrace=resolveScoreTrace(preview.scoreTrace,{recruit:{actualCount:joined.length,reserve:!!reserveUnit,overflow:joined.length===0,
+    xp:recruitResult.xpGain,plannedXp:preview.trainingXp,receiver:trainer?{id:trainer.id,name:displayName(trainer)}:null,
+    summary:joined.length?preview.profession+' ×'+joined.length+' 实际入阵，征召属性 +'+preview.statBonus+'%。':reserveUnit?'上阵已满，传说领队已进入候补，保留身份、品质与星级。':'上阵已满，本手实际提供 '+recruitResult.xpGain+' 经验给'+(trainer?displayName(trainer):'接收者')+'。'},items:[...actualItems.values()]})
+  recordOrder(game,preview,secondary,{recruit:recruitResult,scoreTrace:game.lastDeploy.scoreTrace,items:[...actualItems.values()]})
   game.stats.maxChain = Math.max(game.stats.maxChain, game.chain)
   if (preview.captainGrade>preview.grade || preview.captainGrade===4) {
     const stars = QUALITIES[preview.captainGrade].name + preview.profession
@@ -140,25 +175,40 @@ function applyRegimentOrder(game, preview, joined, secondary, echo) {
   }
 }
 
-function applyRecruitRelics(game, preview, cards, leader) {
+function applyRecruitRelics(game, preview, cards, leader,actualItems) {
   const scoring = cards.filter(c => preview.scoringIds.includes(c.id))
   if (owns(game, 'iron-banner') && preview.containsPair) {
     trigger(game, 'iron-banner', '领队护盾 · 前排恢复')
-    if (leader) leader.shield += 24
-    for (const unit of game.allies.filter(unit => unit.type === 'knight')) healUnit(game, unit, 18, 0, {system:'iron-banner',label:'铁壁旗手'})
+    let shield=0,healed=0;const targets=new Set()
+    if (leader) {leader.shield += 24;shield=24;targets.add(leader.id)}
+    for (const unit of game.allies.filter(unit => unit.type === 'knight')) {
+      const gain=healUnit(game, unit, 18, 0, {system:'iron-banner',label:'铁壁旗手'})
+      healed+=gain;if(gain>0) targets.add(unit.id)
+    }
+    actualItems.set('iron-banner',{id:'iron-banner',triggered:true,effective:shield>0 || healed>0,
+      reason:shield>0 || healed>0?'对子条件生效，记录实际赋盾与有效治疗。':'对子条件生效，但无在阵领队或集训接收者且前排无需治疗。',effects:{shield,healed,targets:targets.size}})
   }
   if (owns(game, 'third-act') && game.stats.deploys % 3 === 0) {
     trigger(game,'third-act','本手领队升星')
+    actualItems.set('third-act',{id:'third-act',triggered:true,effective:false,reason:'第三手星级结算待记录。',effects:{}})
   }
   if (owns(game, 'red-echo')) {
     const hearts = scoring.filter(card => card.suit === '♥').length
     if (hearts) {
+      let healed=0;const targets=new Set(),beforeGate=game.baseHp
       trigger(game, 'red-echo', `${hearts} 次即时治疗`)
       for (let i = 0; i < hearts; i++) {
         const weakest = game.allies.slice().sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0]
-        if (weakest) healUnit(game, weakest, 16, 0, {system:'red-echo',label:'红心回响'})
+        if (weakest) {
+          const gain=healUnit(game, weakest, 16, 0, {system:'red-echo',label:'红心回响'})
+          healed+=gain;if(gain>0) targets.add(weakest.id)
+        }
       }
       if (hearts >= 2) restoreBase(game, 3)
+      const gateRepaired=game.baseHp-beforeGate
+      actualItems.set('red-echo',{id:'red-echo',triggered:true,effective:healed>0 || gateRepaired>0,
+        reason:healed>0 || gateRepaired>0?'计分红心生效，按友军实际缺血和城门缺损结算。':hearts>=2?'计分红心满足条件，但友军与城门均已满。':'计分红心满足治疗条件，但友军满血；不足两张红心，不修复城门。',
+        effects:{healed,gateRepaired,targets:targets.size}})
     }
   }
   if (owns(game, 'diamond-bank')) {

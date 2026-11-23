@@ -5,7 +5,7 @@ import { endWave } from './campaign.js'
 import { damageUnit, healUnit, settleDeaths } from './combatHealth.js'
 import { unitStep } from './combatActions.js'
 import { restoreBase } from './gameState.js'
-import { initializeCombatStats, combatSummary, finishCombatStats, validCombatStats, validCombatRecord } from './combatStats.js'
+import { initializeCombatStats, combatSummary, finishCombatStats, validCombatStats, validCombatRecord, recordGateDamage } from './combatStats.js'
 import { loadCombatHistory, saveCombatHistory, exportCombatHistory, combatHistoryKey, COMBAT_HISTORY_LIMIT, COMBAT_HISTORY_BYTES } from './combatHistory.js'
 import { getCardDesign } from './cardCatalog.js'
 
@@ -190,6 +190,30 @@ test('failure records timeout gate damage once and completing a report twice is 
   assert.deepEqual(finishCombatStats(g,'lost'),report)
   assert.equal(tick(g,1),false)
   assert.deepEqual(combatSummary(g),report)
+  assert.deepEqual(report.runOutcome,{status:'defeat',wave:1,clearedWaves:0,terminal:true,finalWave:1})
+})
+
+test('gate damage preserves exact bell, breach and timeout sources, with old unclassified damage kept separate',()=>{
+  const g=practice({enemies:['bellkeeper','raider']})
+  g.enemies[0].bellTimer=.01;unitStep(g,g.enemies[0],1/30)
+  g.enemies[1].x=50;unitStep(g,g.enemies[1],1/30);settleDeaths(g)
+  g.waveTime=37.99;tick(g,1/30)
+  assert.deepEqual(combatSummary(g).gate.sources,{bell:11,breach:6,timeout:8,unknown:0})
+  assert.equal(combatSummary(g).gate.damage,25)
+  const old=practice();old.baseHp-=5;recordGateDamage(old,5,'bell')
+  const saved=snapshotGame(old);delete saved.combatLedger.gate.sources
+  const resumed=restoreGame(saved);assert.ok(resumed)
+  resumed.baseHp-=3;recordGateDamage(resumed,3,'breach')
+  assert.deepEqual(combatSummary(resumed).gate.sources,{bell:0,breach:3,timeout:0,unknown:5})
+})
+
+test('final victory records the completion wave while earlier cleared waves remain nonterminal',()=>{
+  const g=practice();g.enemies=[];g.spawnIndex=g.schedule.length;g.waveTime=4;endWave(g)
+  assert.deepEqual(combatSummary(g).runOutcome,{status:'wave-cleared',wave:1,clearedWaves:1,terminal:false,finalWave:null})
+  const final=practice();final.wave=12;final.stats.wavesCleared=11
+  initializeCombatStats(final);final.enemies=[];final.spawnIndex=final.schedule.length;final.waveTime=4;endWave(final)
+  assert.deepEqual(combatSummary(final).runOutcome,{status:'victory',wave:12,clearedWaves:12,terminal:true,finalWave:12})
+  assert.ok(validCombatRecord(combatSummary(final)))
 })
 
 test('mid-battle resume continues exact counters, while old or corrupted measurement data restarts explicitly as partial',()=>{

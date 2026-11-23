@@ -23,6 +23,7 @@ export const TRAINING_COST = 5
 export const MAX_ORDER_LEVEL = 3
 const ranks = ['2','3','4','5','6','7','8','9','10','J','Q','K','A']
 export function rankOf(card) { return ranks.indexOf(card.rank) + 2 }
+export function scoreCardPoints(card) { return card.rank === 'A' ? 11 : Math.min(10,rankOf(card)) }
 
 export function scoringHand(cards) {
   const counts = new Map()
@@ -46,7 +47,7 @@ export function scoringHand(cards) {
   else key = groups[0] === 2 ? 'pair' : 'high'
   const scoring = key === 'high' ? [sorted[0]] :
     ['pair','twoPair','three','four'].includes(key) ? cards.filter(card => counts.get(card.rank) > 1) : cards
-  const points = scoring.reduce((total, card) => total + (card.rank === 'A' ? 11 : Math.min(10, rankOf(card))), 0)
+  const points = scoring.reduce((total, card) => total + scoreCardPoints(card), 0)
   return { key, scoring, points, containsPair: groups[0] >= 2, containsFlush: flush, royal: key === 'straightFlush' && sorted[4].rank === '10' }
 }
 export function handScore(key, level, points = 0) {
@@ -57,8 +58,12 @@ export function handScore(key, level, points = 0) {
 }
 
 export function orderBonus(key, level, points, crown = false) {
+  return orderBonusFromScore(key,handScore(key,level,points).total,crown)
+}
+
+export function orderBonusFromScore(key, total, crown = false) {
   const rule = ORDER_BOOK[key]
-  const magnitude = (1 + Math.sqrt(handScore(key, level, points).total) / 48) * (crown ? 1.25 : 1)
+  const magnitude = (1 + Math.sqrt(total) / 48) * (crown ? 1.25 : 1)
   const result = {}
   for (const stat of ['force', 'shield', 'vitality', 'haste']) {
     if (rule[stat]) result[stat] = Math.round(rule[stat] * magnitude)

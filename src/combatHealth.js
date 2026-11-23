@@ -3,7 +3,7 @@ import { restedSoldier } from './standingArmy.js'
 import { applyFallenItems } from './itemEffects.js'
 import { FIELD_LIMIT, MAX_ENEMIES, OLD_FIELD_LIMIT } from './campaignRules.js'
 import { isBoss } from './bossRules.js'
-import { recordHealing, recordDamage, recordDeath } from './combatStats.js'
+import { recordHealing, recordDamage, recordDeath, recordItemEvent } from './combatStats.js'
 
 export function healUnit(game, unit, amount, delay = 0, source = null) {
   if (unit.hp <= 0) return 0
@@ -20,7 +20,17 @@ export function healUnit(game, unit, amount, delay = 0, source = null) {
     while (game.healedCharge >= 70 && budget-- > 0) {
       game.healedCharge -= 70
       trigger(game, 'heart-engine', '治疗共鸣 · 全场 15 伤害')
-      for (const enemy of game.enemies) damageUnit(game, enemy, 15, 0, {system:'heart-engine',label:'荆棘圣杯'})
+      let damage=0,shieldDamage=0
+      const targetIds=game.enemies.filter(enemy=>enemy.hp>0).map(enemy=>enemy.id)
+      for (const enemy of game.enemies) {
+        const shield=enemy.shield || 0
+        damage+=damageUnit(game, enemy, 15, 0, {system:'heart-engine',label:'荆棘圣杯'})
+        shieldDamage+=shield-(enemy.shield || 0)
+      }
+      recordItemEvent(game,{id:'heart-engine',quantity:copies(game,'heart-engine'),triggered:true,effective:damage>0 || shieldDamage>0,
+        reason:!targetIds.length?'有效治疗达到70，但当前没有存活敌军。':damage>0?'有效治疗达到70，按敌军实际生命损失结算伤害。':'本次伤害被敌方护盾吸收。',
+        effects:{damage,shieldDamage,targets:targetIds.length}},
+        {orderOrdinal:game.phase==='ready'?game.stats.deploys:null,targetIds})
       effect(game, 'burst', 500, 235, '荆棘共鸣', '#ef778b')
     }
   } else game.healedCharge = Math.min(69, game.healedCharge)

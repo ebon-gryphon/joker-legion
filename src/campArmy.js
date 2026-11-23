@@ -8,7 +8,7 @@ import { DETACHMENTS, recruitName } from './recruitment.js'
 import { JOBS } from './jobs.js'
 import { GRADES, QUALITIES, ascendedGrade } from './quality.js'
 import { campSlots, inCampArea } from './formation.js'
-import { mergePreview, FUSION_COST, FUSION_BY_ID } from './forge.js'
+import { mergePreview, mergeWarning, materialIdentity, FUSION_COST, FUSION_BY_ID } from './forge.js'
 import { professionId, professionName, fusionProfessionNames } from './professionFusion.js'
 import { isBoss } from './bossRules.js'
 
@@ -198,6 +198,22 @@ export function setFormation(game, id) {
 
 export function promotionPreview(game, leaderId, donorId) {
   return mergePreview(game, leaderId, donorId, 'promote')
+}
+
+export function promotionWarning(game,leaderId,donorId) {
+  return mergeWarning(game,leaderId,donorId,'promote')
+}
+
+export function drillMaterialWarning(game,donorId,targetId) {
+  const plan=drillPreview(game,donorId,targetId)
+  if(!plan) return null
+  if(plan.kind!=='drill') return mergeWarning(game,targetId,donorId,plan.kind)
+  const donor=game.allies.find(u=>u.id===donorId),target=game.allies.find(u=>u.id===targetId)
+  const main=materialIdentity(target),material=materialIdentity(donor)
+  return {kind:'drill',leader:main,donor:material,title:'传授会消耗副兵',
+    identity:'保留接收者身份与'+main.quality+'品质，副兵品质不会转移。',
+    attributes:'同职业传授只提供经验与已学传承技，不合入副兵基础属性；升星请使用工坊。',
+    training:'本次提供 '+plan.xp+' 经验，受 999 经验上限限制。',lostXp:Math.max(0,main.xp+plan.xp-999)}
 }
 
 export function forgeUnit(game, leaderId, donorId, kind) {
