@@ -1,4 +1,5 @@
 import { SUITS, RANKS, ALLIED } from './campaignRules.js'
+import { recordGateRepair } from './combatStats.js'
 
 export function seedNumber(seed) {
   if (/^\d+$/.test(String(seed)) && Number.isSafeInteger(Number(seed))) return Number(seed) >>> 0
@@ -82,7 +83,7 @@ export function gainGold(game, amount) { game.gold += amount; game.stats.goldEar
 
 export function restoreBase(game, amount) {
   const healed = Math.min(amount, game.maxBaseHp - game.baseHp)
-  if (healed > 0) { game.baseHp += healed; effect(game, 'heal', 62, 190, `城堡 +${Math.round(healed)}`, '#80d9b0') }
+  if (healed > 0) { game.baseHp += healed; recordGateRepair(game,healed); effect(game, 'heal', 62, 190, `城堡 +${Math.round(healed)}`, '#80d9b0') }
 }
 
 export function emptyTacticsReport() {

@@ -9,6 +9,7 @@ import { QUALITIES } from './quality.js'
 import { settleDeaths, healUnit } from './combatHealth.js'
 import { ROYAL_MARCHES } from './jobs.js'
 import { applyRecruitItems } from './itemEffects.js'
+import { recordOrder } from './combatStats.js'
 
 export function deploy(game) {
   return issueOrder(game, null)
@@ -71,6 +72,7 @@ export function issueOrder(game, secondary) {
     waiting:preview.waiting, contracted:preview.count, squad, target: preview.target, id: uid(game, 'deploy'), name: preview.name, key: preview.key, count: joined.length,
     leadFace: (preview.recruits[0] || preview.reserve[0])?.appearanceId ?? null,
     score: preview.score.total, power: preview.power, chain: game.chain, time: game.time }
+  recordOrder(game,preview,secondary)
   game.stats.maxChain = Math.max(game.stats.maxChain, game.chain)
   if (preview.captainGrade>preview.grade || preview.captainGrade===4) {
     const stars = QUALITIES[preview.captainGrade].name + preview.profession
@@ -143,7 +145,7 @@ function applyRecruitRelics(game, preview, cards, leader) {
   if (owns(game, 'iron-banner') && preview.containsPair) {
     trigger(game, 'iron-banner', '领队护盾 · 前排恢复')
     if (leader) leader.shield += 24
-    for (const unit of game.allies.filter(unit => unit.type === 'knight')) healUnit(game, unit, 18)
+    for (const unit of game.allies.filter(unit => unit.type === 'knight')) healUnit(game, unit, 18, 0, {system:'iron-banner',label:'铁壁旗手'})
   }
   if (owns(game, 'third-act') && game.stats.deploys % 3 === 0) {
     trigger(game,'third-act','本手领队升星')
@@ -154,7 +156,7 @@ function applyRecruitRelics(game, preview, cards, leader) {
       trigger(game, 'red-echo', `${hearts} 次即时治疗`)
       for (let i = 0; i < hearts; i++) {
         const weakest = game.allies.slice().sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0]
-        if (weakest) healUnit(game, weakest, 16)
+        if (weakest) healUnit(game, weakest, 16, 0, {system:'red-echo',label:'红心回响'})
       }
       if (hearts >= 2) restoreBase(game, 3)
     }

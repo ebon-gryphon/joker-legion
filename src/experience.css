@@ -1,0 +1,20 @@
+.desk-body>.tutorial-coach{margin:0 0 14px}
+.desk-body>.tutorial-coach header{padding-right:27px}
+.tutorial-field-dock{position:absolute;z-index:4;right:var(--rim);top:calc(var(--hud-top) + 100px);width:min(340px,calc(100% - 2 * var(--rim)));max-height:42dvh;overflow:auto}
+.battle-history-tools{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:8px 0 14px}
+.battle-history-tools label{display:grid;gap:5px;color:#ddc7a8;font-size:12px;min-width:0;flex:1}
+.battle-history-tools select{max-width:100%;min-height:36px}
+.battle-history-tools button{min-height:36px;padding:5px 12px}
+.history-notice{font-size:12px;line-height:1.5;color:#d2bea8}
+.scene-shell .reward-card.unavailable{filter:grayscale(.75);border-color:#776d70;opacity:.8}
+.scene-shell .reward-card.unavailable small{color:#e5c9a5}
+.scene-shell .reward-card.unavailable .reward-plus{color:#d8c4a9;font-size:12px}
+.tutorial-unlock-note{margin:6px 0;color:#d8c19e;font-size:12px;line-height:1.5}
+@media(max-width:680px) and (orientation:portrait){
+  .battle-history-tools{display:grid;grid-template-columns:minmax(0,1fr);align-items:stretch;gap:10px}
+  .battle-history-tools select{width:100%;box-sizing:border-box}
+  .battle-history-tools button{justify-self:start}
+  .tutorial-field-dock{top:calc(var(--hud-top) + 120px);width:min(300px,calc(100% - 2 * var(--rim)));max-height:34dvh}
+  .tutorial-field-dock .tutorial-coach{padding:7px 9px}
+}
+@media(max-height:470px) and (orientation:landscape){.tutorial-field-dock{top:calc(var(--hud-top) + 72px);width:280px;max-height:45dvh}}

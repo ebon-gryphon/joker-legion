@@ -5,10 +5,10 @@ import { PERFORMANCES, bombardmentOf, performanceOf } from './performance.js'
 import { actionPose, walkingPose, restingPose, paintGesture } from './choreography.js'
 import { ENEMY_CATALOG } from './enemyCatalog.js'
 import { BELL_WINDUP } from './tactics.js'
-import { JOBS } from './jobs.js'
 import { gradeOf } from './quality.js'
 import { isBoss } from './bossRules.js'
 import { HOSTILE } from './tactics.js'
+import { displayName } from './soldierIdentity.js'
 import { CROWN } from './battlefieldScenery.js'
 
 const FACTION = { spades: C.steel, hearts: C.red, clubs: C.amber, diamonds: C.violet }
@@ -113,14 +113,13 @@ export function drawUnit(c, unit, sample, time, lag, yMap, enemyArt, cameraTop, 
   }
   c.textAlign = 'center'
   if (!enemy) {
-    const profession = FUSION_BY_ID[unit.fusion]?.name || JOBS[unit.jobId]?.name || ''
-    const label = unit.fusion ? profession : unit.pattern ? unit.name || profession : inCamp || unit.standard ? (unit.suit || '') + unit.rank + ' ' + profession : unit.rank
+    const label = displayName(unit)
     if (unit.locked) {
       const lockX=snap(x+barWidth/2+4)
       rect(c,lockX+1,barY-5,5,4,'#f3c977');rect(c,lockX+2,barY-4,3,3,'#322734')
       rect(c,lockX,barY-2,7,6,'#f5d38b');rect(c,lockX+3,barY,1,3,'#413140')
     }
-    labels.push({unit:unit.id,text:unit.grade >= 4 ? gradeOf(unit).name + '·' + label : label,x,y:barY-4,size:12,color:unit.grade ? gradeOf(unit).color : (royal || unit.standard ? '#ffdc96' : '#f6f0e6')})
+    labels.push({unit:unit.id,text:label,x,y:barY-4,size:12,color:unit.grade ? gradeOf(unit).color : (royal || unit.standard ? '#ffdc96' : '#f6f0e6')})
   }
   if (unit.fusion) {
     for (let i = 0; i < 3; i++) rect(c, x - 8 + i * 6, barY + 5, 4, 2, i < unit.skillCharge ? faction : '#585064')

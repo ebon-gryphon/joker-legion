@@ -35,7 +35,7 @@ export {
   createGame, beginBattle, nextWave
 } from './campaign.js'
 export {
-  trainOrder, buyJoker, sellJoker, rerollShop, chooseReward
+  trainOrder, buyJoker, sellJoker, rerollShop, chooseReward, rewardAvailability
 } from './fieldShop.js'
 export {
   snapshotGame, restoreGame

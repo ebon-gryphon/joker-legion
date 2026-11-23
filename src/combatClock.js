@@ -7,6 +7,7 @@ import { WAVES, STEP } from './campaignRules.js'
 import { resolvePreparedTactics, settleFeint } from './battlePlans.js'
 import { endWave, regroupArmy } from './campaign.js'
 import { isBoss } from './bossRules.js'
+import { recordGateDamage, finishCombatStats } from './combatStats.js'
 
 export function describeWaveTimeout({ count, damage, boss, bossName }) {
   return boss ? `时间到，${bossName || '无冕之王'}突破城门` : `时间到，${count} 名残敌突围，城门耐久 −${damage}`
@@ -18,6 +19,7 @@ function resolveTimeout(game) {
   if (!remaining.length) return
   const before = game.baseHp
   for (const unit of remaining) game.baseHp -= breachDamage(unit.type, game.baseHp)
+  recordGateDamage(game,before-game.baseHp)
   game.waveTimeout = { count: remaining.length, damage: before - game.baseHp, boss: remaining.some(unit => isBoss(unit.type)),
     ...(remaining.some(unit => unit.type === 'finalBoss') ? {bossName:'缀命皇后'} : {}) }
   game.enemies = []
@@ -75,6 +77,7 @@ function simulationStep(game, dt, onAction) {
   if (game.baseHp <= 0) {
     settleFeint(game)
     game.baseHp = 0
+    finishCombatStats(game,'lost')
     regroupArmy(game)
     game.phase = 'lost'
     game.selected = []

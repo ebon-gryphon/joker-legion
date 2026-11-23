@@ -5,19 +5,20 @@ import PixelSprite from './PixelSprite.vue'
 import { gradeOf } from './quality.js'
 import { jobOf } from './recruitment.js'
 import { championProgress, trainingProgress, LESSONS } from './training.js'
-import { FUSION_BY_ID, ROLE_NAMES } from './forge.js'
+import { FUSION_BY_ID } from './forge.js'
 import { getSpriteFrame } from './spriteAtlas.js'
 import { getCardDesign } from './cardCatalog.js'
 import { inheritedProfessionJobs } from './professionFusion.js'
+import { displayName, secondaryIdentity } from './soldierIdentity.js'
 import { JOBS } from './jobs.js'
 
-const props = defineProps({ unit:{type:Object,required:true}, champion:Object })
+const props = defineProps({ unit:{type:Object,required:true}, champion:Object, advanced:{type:Boolean,default:true} })
 const emit = defineEmits(['champion','lock'])
 const fusion = computed(()=>FUSION_BY_ID[props.unit.fusion])
 const profession = computed(()=>jobOf(props.unit))
 const quality = computed(()=>gradeOf(props.unit))
 const captain = computed(()=>props.unit.id === props.champion?.unitId)
-const title = computed(()=>fusion.value?.name || props.unit.name)
+const title = computed(()=>displayName(props.unit))
 const inheritedJobs = computed(()=>inheritedProfessionJobs(props.unit).map(id=>JOBS[id]))
 const inheritedSkills = computed(()=>(props.unit.fusionSkills || []).filter(id=>id!==props.unit.fusion).map(id=>FUSION_BY_ID[id]))
 const training = computed(()=>trainingProgress(props.unit.trainingXp))
@@ -28,7 +29,7 @@ const number = value => Math.round(value*10)/10
   <article class="soldier-sheet" :style="{'--soldier-ink':quality.color}" aria-label="士兵战前数值">
     <header>
       <PixelSprite class="sheet-portrait" v-bind="getSpriteFrame(unit)"/>
-      <div><small>{{ quality.name }} · {{ profession.name===title ? ROLE_NAMES[unit.type] : profession.name }} · {{ '★'.repeat(unit.level) }}</small>
+      <div><small>{{ secondaryIdentity(unit) }} · {{ '★'.repeat(unit.level) }}</small>
         <h3>{{ title }}</h3>
         <span>{{ captain ? '主将 · ' : '' }}历练 Lv.{{ training.level }} · {{ unit.trainingXp || 0 }}{{ training.next ? ' / '+training.next : '' }} 经验<template v-if="unit.command"> · {{ unit.command==='guard'?'壁垒':'先遣' }}统领</template></span></div>
     </header>
@@ -43,15 +44,15 @@ const number = value => Math.round(value*10)/10
       <div v-if="unit.heal"><dt>治疗力</dt><dd>{{ number(unit.heal) }}</dd></div>
     </dl>
     <p><b>{{ profession.skill }}</b>　{{ profession.text }}</p>
-    <p v-for="job in inheritedJobs" :key="job.name"><b>融合 · {{ job.name }} · {{ job.skill }}</b>　{{ job.text }}</p>
+    <p v-for="job in (advanced ? inheritedJobs : [])" :key="job.name"><b>融合 · {{ job.name }} · {{ job.skill }}</b>　{{ job.text }}</p>
     <p v-if="fusion"><b>{{ fusion.skill }}</b>　{{ fusion.description }}</p>
-    <p v-for="skill in inheritedSkills" :key="skill.id"><b>传承战技 · {{ skill.skill }}</b>　{{ skill.description }}</p>
-    <p v-if="fusion" class="sheet-source">由 {{ unit.name }}<template v-if="unit.fusionPartner"> 与 {{ getCardDesign(unit.fusionPartner)?.name }}</template>融合</p>
+    <p v-for="skill in (advanced ? inheritedSkills : [])" :key="skill.id"><b>传承战技 · {{ skill.skill }}</b>　{{ skill.description }}</p>
+    <p v-if="fusion" class="sheet-source">由 {{ displayName(unit) }}<template v-if="unit.fusionPartner"> 与 {{ getCardDesign(unit.fusionPartner)?.name }}</template>融合</p>
     <p v-if="unit.grade >= 5"><b>{{ quality.name }}号令</b>　每波首次行动，为全军加上自身生命上限 {{ unit.grade === 5 ? 15 : 20 }}% 的护盾。</p>
-    <p v-for="type in unit.lessons" :key="type"><b>传承 · {{ LESSONS[type].name }}</b>　{{ LESSONS[type].text }}</p>
-    <small>每次参战归营 +1 经验，吞噬副手可传授经验和职业传承技。</small>
+    <p v-for="type in (advanced ? unit.lessons : [])" :key="type"><b>传承 · {{ LESSONS[type].name }}</b>　{{ LESSONS[type].text }}</p>
+    <small v-if="advanced">每次参战归营 +1 经验，吞噬副手可传授经验和职业传承技。</small>
     <small v-if="unit.statBonus">征召加成 +{{ unit.statBonus }}% 已计入属性</small>
-    <footer><button class="key-ink" :disabled="captain" @click="emit('champion',unit.id)"><KeyMark name="allies"/>{{ captain ? championProgress(champion) : '立为主将' }}</button>
+    <footer v-if="advanced"><button class="key-ink" :disabled="captain" @click="emit('champion',unit.id)"><KeyMark name="allies"/>{{ captain ? championProgress(champion) : '立为主将' }}</button>
       <button class="key-tab" :aria-pressed="unit.locked" @click="emit('lock',unit.id)">{{ unit.locked ? '已锁定 · 解锁' : '锁定此兵' }}</button></footer>
   </article>
 </template>

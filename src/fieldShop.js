@@ -51,8 +51,14 @@ export function rerollShop(game) {
   return true
 }
 
+export function rewardAvailability(game, id) {
+  if (game.phase !== 'shop' || game.rewardChosen || !game.rewards.some(reward => reward.id === id)) return {available:false,reason:'本波补给已领取或尚未开放。'}
+  if (id === 'repair' && game.baseHp >= game.maxBaseHp) return {available:false,reason:'城门耐久已满，无需修复。请选择其他补给。'}
+  return {available:true,reason:''}
+}
+
 export function chooseReward(game, id) {
-  if (game.phase !== 'shop' || game.rewardChosen || !game.rewards.some(reward => reward.id === id)) return false
+  if (!rewardAvailability(game,id).available) return false
   if (id === 'repair') restoreBase(game, 20)
   else if (id === 'power') game.upgrades.power = Math.min(1, game.upgrades.power + 0.08)
   else if (id === 'supply') { gainGold(game, 6); game.bonusDiscard = 1 }

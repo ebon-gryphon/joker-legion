@@ -9,6 +9,7 @@ import { LURE_REVEAL, LURE_TRAVEL } from './performers.js'
 import { FEINT } from './battlePlans.js'
 import { isBoss, bossSkill, BOSS_SKILLS } from './bossRules.js'
 import { professionJobs, inheritedProfessionJobs } from './professionFusion.js'
+import { recordGateDamage } from './combatStats.js'
 
 function moveUnit(unit, target, dt, direction) {
   if (target) {
@@ -24,12 +25,12 @@ function moveUnit(unit, target, dt, direction) {
   unit.y = clamp(unit.y, CAMP_AREA.top, CAMP_AREA.bottom)
 }
 
-function formationDamage(game, target, amount, area, delay = 0) {
+function formationDamage(game, target, amount, area, delay = 0, source = null) {
   const fraction = area && game.formation === 'spread' ? .6 :
     !area && game.formation === 'guard' && target.type === 'knight' ? .8 : 1
   const remaining = target.hp + (target.shield || 0)
   game.tacticsReport.prevented += Math.min(remaining, amount) - Math.min(remaining, amount * fraction)
-  damageUnit(game, target, amount * fraction, delay)
+  damageUnit(game, target, amount * fraction, delay, source)
 }
 
 function perform(game, unit, kind, target, onAction, profile = performanceOf(unit, kind)) {
@@ -72,7 +73,7 @@ function applyLessons(game,unit,healing) {
       const friend = game.allies.filter(a => a.hp > 0 && (type==='ward' || a.hp < a.maxHp)).sort((a,b) => a.hp/a.maxHp-b.hp/b.maxHp)[0]
       if (!friend) continue
       if (type === 'ward') friend.shield += 6 + Math.round(unit.atk*.10)
-      else report.healed += healUnit(game,friend,6 + Math.round(unit.atk*.15))
+      else report.healed += healUnit(game,friend,6 + Math.round(unit.atk*.15), 0, unit)
     } else {
       const range = lesson.reach || Math.max(170,unit.range + 35)
       const foes = game.enemies.filter(e => e.hp > 0 && distance(unit,e) <= range && (!lesson.execute || e.hp < e.maxHp*.5))
@@ -80,7 +81,7 @@ function applyLessons(game,unit,healing) {
       const targets = foes.filter(e=>!lesson.line || Math.abs(e.y-foes[0].y)<27).slice(0,lesson.targets || (type==='mage' ? 2 : 1))
       if (!targets.length) continue
       for (const foe of targets) {
-        const dealt = damageUnit(game,foe,Math.round(unit.atk*(lesson.power || (type === 'mage' ? .2 : .3))),launchMissile(game,unit,foe))
+        const dealt = damageUnit(game,foe,Math.round(unit.atk*(lesson.power || (type === 'mage' ? .2 : .3))),launchMissile(game,unit,foe), unit)
         if (healing) report.damage += dealt
       }
     }
@@ -107,7 +108,7 @@ function professionAction(game, unit, target, healing, flight) {
     unit.royalStars--
     const foes = enemies.slice().sort((a,b)=>b.hp-a.hp)
     for (const foe of [foes[0],foes[1] || foes[0]]) {
-      const dealt = damageUnit(game,foe,unit.atk*.7,launchMissile(game,unit,foe,'attack','#cca2ff'))
+      const dealt = damageUnit(game,foe,unit.atk*.7,launchMissile(game,unit,foe,'attack','#cca2ff'), unit)
       if (healing) game.waveReport[unit.type].damage += dealt
     }
   }
@@ -118,7 +119,7 @@ function professionAction(game, unit, target, healing, flight) {
       .sort((a,b)=>a.hp/a.maxHp-b.hp/b.maxHp)[0]
     if (friend) {
       const boost = jobs.includes('medic') && friend.hp < friend.maxHp*.5 ? 2 : 1
-      game.waveReport[unit.type].healed += healUnit(game,friend,unit.heal * boost * (game.formation==='spread'?.8:1),flight)
+      game.waveReport[unit.type].healed += healUnit(game,friend,unit.heal * boost * (game.formation==='spread'?.8:1),flight, unit)
     }
   }
   let foe = healing ? null : target
@@ -126,7 +127,7 @@ function professionAction(game, unit, target, healing, flight) {
   // A fused healer keeps healing, and its inherited weapon can still strike in reach.
   if (healing && inheritedProfessionJobs(unit).some(id=>!healJobs.includes(id))) {
     foe = nearest(unit,enemies)
-    if (foe && distance(unit,foe)<=unit.range+5) damageUnit(game,foe,professionDirect(unit,foe),launchMissile(game,unit,foe))
+    if (foe && distance(unit,foe)<=unit.range+5) damageUnit(game,foe,professionDirect(unit,foe),launchMissile(game,unit,foe), unit)
     else foe = null
   }
   for (const id of jobs) {
@@ -138,28 +139,28 @@ function professionAction(game, unit, target, healing, flight) {
       if (id === 'ward') friend.shield += Math.ceil(unit.heal * .4)
       if (id === 'bell') {
         const other = game.allies.filter(u => u !== friend && u.hp > 0 && u.hp < u.maxHp).sort((a,b)=>a.hp/a.maxHp-b.hp/b.maxHp)[0]
-        if (other) game.waveReport[unit.type].healed += healUnit(game,other,unit.heal*.5,flight)
+        if (other) game.waveReport[unit.type].healed += healUnit(game,other,unit.heal*.5,flight, unit)
       }
       if (id === 'thorn') {
         const victim = nearest(unit,enemies)
         if (victim && distance(unit,victim) <= unit.range+35) {
-          const dealt = damageUnit(game,victim,unit.atk,flight)
+          const dealt = damageUnit(game,victim,unit.atk,flight, unit)
         }
       }
     }
     if (foe) {
       if (id === 'shield' && third) unit.shield += Math.ceil(unit.maxHp * .13)
       if ((id === 'hammer' && third) || (id === 'frost' && unit.attacks % 2 === 0)) foe.cooldown = Math.max(foe.cooldown,.95)
-      if (third && ['crossbow','outrider','mirror'].includes(id) && foe.hp > 0) damageUnit(game,foe,unit.atk,flight+.12)
+      if (third && ['crossbow','outrider','mirror'].includes(id) && foe.hp > 0) damageUnit(game,foe,unit.atk,flight+.12, unit)
       if (id === 'oracle' && third && enemies.length) {
         const victim = enemies.reduce((best,e)=>e.hp>best.hp?e:best)
-        damageUnit(game,victim,unit.atk,launchMissile(game,unit,victim,'attack','#d3a5ff'))
+        damageUnit(game,victim,unit.atk,launchMissile(game,unit,victim,'attack','#d3a5ff'), unit)
       }
       if (['pike','blade','alchemist'].includes(id) || (id === 'fire' && third)) {
         const nearby = enemies.filter(e => e !== foe && (id === 'pike' ?
           Math.abs(e.y-foe.y)<27 && e.x >= foe.x-5 && e.x-foe.x<95 : distance(e,foe)<78))
           .sort((a,b)=>distance(a,foe)-distance(b,foe)).slice(0,id === 'fire' ? 3 : 1)
-        for (const e of nearby) damageUnit(game,e,unit.atk*.8,flight)
+        for (const e of nearby) damageUnit(game,e,unit.atk*.8,flight, unit)
       }
     }
   }
@@ -168,11 +169,11 @@ function professionAction(game, unit, target, healing, flight) {
   if (third && unit.id === game.champion?.unitId && veteranLevel(unit.trainingXp) >= 4) {
     const foes = enemies.filter(e => e.hp>0 && distance(unit,e)<Math.max(140,unit.range+20)).slice(0,4)
     for (const e of foes) {
-      const dealt = damageUnit(game,e,unit.atk*.85,flight)
+      const dealt = damageUnit(game,e,unit.atk*.85,flight, unit)
       if (healing) game.waveReport[unit.type].damage += dealt
     }
     if (foes.length) {
-      healUnit(game,unit,unit.maxHp*.08)
+      healUnit(game,unit,unit.maxHp*.08, 0, unit)
       effect(game,'burst',unit.x,unit.y,'将威','#ffd888')
     }
   }
@@ -208,24 +209,24 @@ function attack(game, unit, target, onAction) {
     const remaining = target.hp + (target.shield || 0)
     game.tacticsReport.extraDamage += Math.min(remaining, direct) - Math.min(remaining, beforeFormation)
   }
-  if (unit.side === 'enemy') formationDamage(game, target, direct, false, flight)
-  else damageUnit(game, target, direct, flight)
+  if (unit.side === 'enemy') formationDamage(game, target, direct, false, flight, unit)
+  else damageUnit(game, target, direct, flight, unit)
   if (unit.side === 'ally' && unit.type === 'mage') {
     const extras = game.enemies.filter(enemy => enemy.id !== target.id && enemy.hp > 0 && distance(enemy, target) < 85).slice(0, 2)
-    for (const enemy of extras) damageUnit(game, enemy, unit.atk * 0.55, flight)
+    for (const enemy of extras) damageUnit(game, enemy, unit.atk * 0.55, flight, unit)
     effect(game, 'burst', target.x, target.y, '', '#d9ad6a', { life: .4+flight, maxLife: .4 })
   }
   if (unit.side === 'enemy' && (['brute', 'warlock'].includes(unit.type) || isBoss(unit.type))) {
     const radius = unit.type === 'brute' ? 58 : 92
     const extras = game.allies.filter(ally => ally.id !== target.id && ally.hp > 0 && distance(ally, target) < radius).slice(0, isBoss(unit.type) ? 4 : 2)
-    for (const ally of extras) formationDamage(game, ally, unit.atk * 0.5, true, flight)
+    for (const ally of extras) formationDamage(game, ally, unit.atk * 0.5, true, flight, unit)
     if (extras.length) effect(game, 'burst', target.x, target.y, '', unit.color, { life: .4+flight, maxLife: .4 })
   }
   if (unit.side === 'ally' && unit.type === 'ranger' && owns(game, 'crossfire') && unit.attacks % 3 === 0) {
     const other = nearest(unit, game.enemies.filter(enemy => enemy.id !== target.id))
     if (other && distance(unit, other) <= unit.range + 55) {
       trigger(game, 'crossfire', '双生箭 · 追加射击')
-      damageUnit(game, other, unit.atk * .8, launchMissile(game, unit, other, 'attack', '#80d9b0'))
+      damageUnit(game, other, unit.atk * .8, launchMissile(game, unit, other, 'attack', '#80d9b0'), unit)
     }
   }
   if (unit.side === 'ally') {
@@ -256,7 +257,7 @@ function activateFusion(game, unit, onAction, fusionId) {
   const report = game.waveReport[unit.type]
   const strike = (enemy, factor) => {
     const flight = launchMissile(game, unit, enemy, 'skill', recipe.color)
-    const damage = damageUnit(game, enemy, Math.round(unit.atk * factor), flight)
+    const damage = damageUnit(game, enemy, Math.round(unit.atk * factor), flight, unit)
     report.damage += damage
     return damage
   }
@@ -267,7 +268,7 @@ function activateFusion(game, unit, onAction, fusionId) {
     effect(game, 'burst', ally.x, ally.y, '护盾', recipe.color)
   } else if (fusionId === 'bard') {
     if (!wounded.length) return
-    for (const ally of wounded.slice(0, 2)) report.healed += healUnit(game, ally, 12 + Math.round(unit.heal * .6))
+    for (const ally of wounded.slice(0, 2)) report.healed += healUnit(game, ally, 12 + Math.round(unit.heal * .6), 0, unit)
   } else {
     if (!foes.length) return
     if (fusionId === 'warden') strike(foes.reduce((best, enemy) => enemy.hp > best.hp ? enemy : best), 1.4)
@@ -276,7 +277,7 @@ function activateFusion(game, unit, onAction, fusionId) {
     }
     if (fusionId === 'priest') {
       const damage = strike(foes[0], .9)
-      if (wounded.length) report.healed += healUnit(game, wounded[0], 8 + Math.round(damage / 2))
+      if (wounded.length) report.healed += healUnit(game, wounded[0], 8 + Math.round(damage / 2), 0, unit)
     }
     if (fusionId === 'frostbow') for (const enemy of foes.slice(0, 2)) {
       strike(enemy, .5)
@@ -307,6 +308,7 @@ export function unitStep(game, unit, dt, onAction) {
     if (unit.bellTimer <= 0 && game.baseHp > 0) {
       const damage = Math.min(game.baseHp, tollDamage(game.wave))
       game.baseHp -= damage
+      recordGateDamage(game,damage)
       perform(game, unit, 'toll', { x: 68 }, onAction)
       game.tacticsReport.tolls++
       game.tacticsReport.gateDamage += damage
@@ -341,7 +343,7 @@ export function unitStep(game, unit, dt, onAction) {
       const flight = launchMissile(game, unit, hurt, 'heal', '#ef778b')
       unit.attacks++
       const emergency = professionJobs(unit).includes('medic') && hurt.hp < hurt.maxHp*.5 ? 2 : 1
-      game.waveReport.healer.healed += healUnit(game, hurt, unit.heal * emergency * (game.formation === 'spread' ? .8 : 1), flight)
+      game.waveReport.healer.healed += healUnit(game, hurt, unit.heal * emergency * (game.formation === 'spread' ? .8 : 1), flight, unit)
       professionAction(game,unit,hurt,true,flight)
       if (unit.fusion || unit.fusionSkills?.length) activateFusions(game, unit, onAction)
       return
@@ -361,6 +363,7 @@ export function unitStep(game, unit, dt, onAction) {
   if (unit.side === 'enemy' && unit.x <= 56) {
     const breach = breachDamage(unit.type, game.baseHp)
     game.baseHp -= breach
+    recordGateDamage(game,breach)
     effect(game, 'damage', 65, 180, `城堡 −${breach}`, '#ef778b')
     log(game, `${unit.name}突破防线 · 城堡 −${breach}`, 'danger')
     unit.hp = 0
@@ -393,7 +396,7 @@ export function bossStep(game, dt, onAction) {
       const strength = boss.type === 'finalBoss' && boss.hp <= boss.maxHp / 2 ? 1.2 : 1
       for (const unit of targets) {
         const ward = mark.mode === 'pulse' && unit.shield > 0 ? .5 : 1
-        formationDamage(game, unit, skill.damage * strength * ward, true)
+        formationDamage(game, unit, skill.damage * strength * ward, true, 0, boss)
         if (mark.mode === 'rupture' && unit.hp > 0) unit.cooldown += 1.2
       }
       effect(game, 'burst', mark.x, mark.y, mark.name, boss.color)

@@ -495,3 +495,47 @@
 .scene-shell .recruit-ascend{justify-self:start;max-width:100%;font:700 13px/1.25 system-ui;color:#a4ece5;padding:5px 12px}
 
 .sold-print{font:900 14px/1.1 system-ui,sans-serif;letter-spacing:.05em;color:#29222b}
+
+/* Compact screens keep camp controls in a separate strip above the deployment floor. */
+@media(max-width:960px) {
+  .scene-shell[data-phase=ready] .scene-tools {
+    top:calc(var(--hud-top) + 112px);left:var(--rim);right:var(--rim);bottom:auto;
+    transform:none;flex-direction:row;flex-wrap:wrap;gap:4px;align-items:stretch;
+  }
+  .scene-shell[data-phase=ready] .scene-tools button {flex:0 1 auto;min-height:32px;padding:5px 8px;font-size:12px}
+  .scene-shell[data-phase=ready] .scene-tools .key-mark {--stamp-size:18px}
+}
+@media(max-height:540px) and (orientation:landscape) {
+  .scene-shell[data-phase=ready] .scene-tools {top:calc(var(--hud-top) + 67px);right:auto}
+  .scene-shell[data-phase=ready] .scene-tools button {min-height:27px;padding:3px 7px;font-size:11px}
+}
+
+/* A permanent transparent envelope keeps transient notices from moving the army. */
+.scene-shell[data-phase=ready] .camp-notification-slot {
+  position:absolute;z-index:9;right:var(--rim);bottom:calc(var(--hud-bottom) + 66px);
+  width:min(340px,calc(100% - 2 * var(--rim)));height:44px;pointer-events:none;
+}
+.scene-shell[data-phase=ready] .camp-notification-slot .toast-note {
+  position:relative;inset:auto;transform:none;width:100%;max-width:none;max-height:44px;
+  box-sizing:border-box;margin:0;overflow:hidden;font-size:11px;line-height:16px;padding:6px 9px;
+}
+.scene-shell[data-phase=ready] .field-stage .field-pick-hint {
+  bottom:calc(var(--hud-bottom) + 76px);max-width:min(340px,calc(100% - 2 * var(--rim)));
+  padding:3px 7px;box-sizing:border-box;font-size:11px;line-height:14px;
+}
+
+/* The coach gets its own row below camp tools instead of covering their buttons. */
+@media(max-width:960px) and (orientation:portrait) {
+  .scene-shell .tutorial-field-dock {top:calc(var(--hud-top) + 156px)}
+}
+@media(max-width:680px) and (orientation:portrait) {
+  .scene-shell .tutorial-field-dock {left:var(--rim);right:var(--rim);width:auto;max-height:35dvh}
+}
+@media(max-height:470px) and (orientation:landscape) {
+  .scene-shell .tutorial-field-dock {max-height:calc(100dvh - 140px)}
+  .scene-shell .tutorial-field-dock .tutorial-coach {padding:7px 9px;font-size:12px;line-height:1.4}
+  .scene-shell .tutorial-field-dock .tutorial-coach h3 {font-size:14px}
+  .scene-shell .tutorial-field-dock .tutorial-hint {font-size:11px}
+  .scene-shell .tutorial-field-dock .tutorial-coach nav {margin-top:5px;gap:3px 9px}
+  .scene-shell .tutorial-field-dock .tutorial-coach button {min-height:30px;font-size:11px}
+}

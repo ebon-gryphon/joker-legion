@@ -12,6 +12,7 @@ import { refreshShop } from './fieldShop.js'
 import { DETACHMENTS } from './recruitment.js'
 import { addUnit, recruitIdentity, arrangeCamp, muster } from './campArmy.js'
 import { applyOpeningItems } from './itemEffects.js'
+import { initializeCombatStats, beginCombatStats, finishCombatStats } from './combatStats.js'
 
 export function createGame({ seed = 'JOKER-LEGION', doctrine = 'iron', difficulty = 'standard' } = {}) {
   const selected = DOCTRINES.find(item => item.id === doctrine) || DOCTRINES[0]
@@ -34,6 +35,7 @@ export function createGame({ seed = 'JOKER-LEGION', doctrine = 'iron', difficult
   }
   replenish(game)
   makeSchedule(game)
+  initializeCombatStats(game)
   log(game, `${performerOf(selected.id).name}已就位 · 起始搭档 ${game.jokers[0].name}`, 'good')
   return game
 }
@@ -53,6 +55,7 @@ export function beginBattle(game) {
   }
   game.selected = []
   game.phase = 'battle'
+  beginCombatStats(game)
   const shield = 3 * copies(game,'ward-pin')
   if (shield) {
     for (const ally of game.allies) ally.shield += shield
@@ -73,6 +76,7 @@ export function endWave(game) {
   const repair = copies(game,'gate-rivet')
   if (repair && game.baseHp < game.maxBaseHp) { restoreBase(game,repair); trigger(game,'gate-rivet','修复城门') }
   game.stats.wavesCleared = game.wave
+  finishCombatStats(game,'cleared')
   if (game.wave === WAVES.length) {
     regroupArmy(game)
     game.phase = 'won'
@@ -182,6 +186,7 @@ export function nextWave(game) {
   game.trainedHere = false
   game.printsLeft = PRINTS_PER_WAVE
   makeSchedule(game)
+  initializeCombatStats(game)
   log(game, `${WAVES[game.wave - 1].name}即将来袭 · 可整编驻军或继续征兵`, 'danger')
   if (kept) log(game,'夹层从袖底取回 ' + faceOf(kept),'good')
   return true

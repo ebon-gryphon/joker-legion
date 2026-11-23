@@ -1,5 +1,6 @@
 <script setup>
 import { championProgress } from "./training.js"
+import {displayName} from './soldierIdentity.js'
 import { jobOf } from './recruitment.js'
 import {computed,ref,watch} from 'vue'
 import DraggedSoldier from './DraggedSoldier.vue'
@@ -51,17 +52,17 @@ function up(e) {
       :hint="chosen.locked?'已锁定':staged?.kind==='ascend'?'松手融合 · '+QUALITIES[staged.grade].name:staged?'松手传授 · +'+staged.xp+'经验':''"/>
     <div class="squad-slots">
       <button v-for="u in members" :key="u.id" type="button" class="squad-token key-face" :data-soldier="u.id" :data-lifted="drag?.moving && drag.id===u.id" :data-chosen="selected===u.id" :data-over="hover===u.id && staged ? 'yes':''" :style="{'--ink':u.color}"
-        :aria-pressed="selected===u.id" :aria-label="u.name+'，'+title(u)+'，'+u.level+'星，'+gradeOf(u).name+(u.locked?'，已锁定，':'，')+(u.trainingXp||0)+'经验'"
-        :title="u.name+' · '+gradeOf(u).name+(u.locked?' · 已锁定':'')+' · '+jobOf(u).text" @pointerdown="down($event,u.id)" @pointermove="move" @pointerup="up" @pointercancel="cancel" @lostpointercapture="cancel" @keydown.esc="cancel" @click="e=>{if(e.detail===0) selected=u.id}">
+        :aria-pressed="selected===u.id" :aria-label="displayName(u)+'，'+title(u)+'，'+u.level+'星，'+gradeOf(u).name+(u.locked?'，已锁定，':'，')+(u.trainingXp||0)+'经验'"
+        :title="displayName(u)+' · '+gradeOf(u).name+(u.locked?' · 已锁定':'')+' · '+jobOf(u).text" @pointerdown="down($event,u.id)" @pointermove="move" @pointerup="up" @pointercancel="cancel" @lostpointercapture="cancel" @keydown.esc="cancel" @click="e=>{if(e.detail===0) selected=u.id}">
         <PixelSprite v-bind="getSpriteFrame(u)"/>
-        <i v-if="u.locked" class="soldier-padlock" aria-hidden="true"></i><span><strong>{{ u.id===game.champion?.unitId?'♛ ':'' }}{{ u.pattern ? u.name : title(u) }}</strong><small><template v-if="u.grade>=4">{{ gradeOf(u).name }} · </template>{{ u.suit }}{{ u.rank }} · {{ '★'.repeat(u.level) }}</small></span>
+        <i v-if="u.locked" class="soldier-padlock" aria-hidden="true"></i><span><strong>{{ u.id===game.champion?.unitId?'♛ ':'' }}{{ displayName(u) }}</strong><small>{{ title(u) }} · {{ u.suit }}{{ u.rank }} · {{ '★'.repeat(u.level) }}</small></span>
       </button>
       <i v-for="n in Math.max(0,FIELD_LIMIT-members.length)" :key="'slot'+n" class="vacancy" aria-hidden="true">◇</i>
     </div>
     <div class="squad-instruction" aria-live="polite">
       <b v-if="staged">{{ staged.text }} · 松手完成</b>
       <template v-else-if="chosen">
-        <strong>{{ chosen.name }} · {{ gradeOf(chosen).name }} · 历练{{ veteranLevel(chosen.trainingXp) }}阶 · {{ chosen.trainingXp || 0 }}经验</strong>
+        <strong>{{ displayName(chosen) }} · {{ gradeOf(chosen).name }} · 历练{{ veteranLevel(chosen.trainingXp) }}阶 · {{ chosen.trainingXp || 0 }}经验</strong>
         <small v-if="chosen.id===game.champion?.unitId">{{ milestones[chosen.trainingXp<8?0:chosen.trainingXp<15?1:2] }}</small>
         <button class="key-ink" :disabled="game.champion?.unitId===chosen.id" @click="emit('champion',chosen.id)">{{ game.champion?.unitId===chosen.id ? championProgress(game.champion) : '立为主将' }}</button>
         <button class="lock-unit key-tab" :aria-pressed="chosen.locked" @click="emit('lock',chosen.id)">{{ chosen.locked?'已锁定 · 解锁':'锁定此兵' }}</button>
@@ -78,7 +79,7 @@ function up(e) {
 .squad-slots{display:flex;gap:5px;align-items:stretch}.squad-token,.vacancy{flex:1;max-width:130px;min-width:0}
 .squad-token{display:flex;gap:3px;align-items:center;text-align:left;cursor:grab;touch-action:none;user-select:none;color:#f2e7d5;background:linear-gradient(125deg,#363044,#201e2a);border:1px solid var(--ink);border-radius:1px 6px 1px 4px;padding:1px 3px;min-height:32px}
 .squad-token{position:relative}.soldier-padlock{position:absolute;top:2px;right:3px;width:9px;height:7px;background:#ffda8c;border:1px solid #413342;border-radius:1px}.soldier-padlock::before{content:'';position:absolute;width:5px;height:4px;border:1px solid #ffd88c;border-bottom:0;border-radius:3px 3px 0 0;left:0;top:-5px}.soldier-padlock::after{content:'';position:absolute;left:3px;top:2px;width:1px;height:3px;background:#493337}
-.squad-token[data-chosen=true],.squad-token[data-over=yes]{outline:2px solid #f3ce84;outline-offset:-2px;background:#57432e}.squad-token .pixel-sprite{width:28px;height:30px;flex:none}.squad-token span{min-width:0}.squad-token strong,.squad-token small{display:block;white-space:nowrap}.squad-token strong{font-size:11px}.squad-token small,.squad-instruction{font-size:10px;color:#d4c4b2}
+.squad-token[data-chosen=true],.squad-token[data-over=yes]{outline:2px solid #f3ce84;outline-offset:-2px;background:#57432e}.squad-token .pixel-sprite{width:28px;height:30px;flex:none}.squad-token span{min-width:0}.squad-token strong,.squad-token small{display:block;white-space:nowrap}.squad-token strong{font-size:11px;overflow:hidden;text-overflow:ellipsis;max-width:100%}.squad-token small,.squad-instruction{font-size:10px;color:#d4c4b2}
 .vacancy{display:grid;place-items:center;border:1px dashed #675a71;color:#a18ca4;font-style:normal}.squad-instruction{min-height:17px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:3px}.squad-instruction button,.squad-instruction select{font:inherit;color:#f7dfae;background:#38303f;border:1px solid #9a805b;padding:2px 6px}.squad-instruction b{color:#ffdb8d}
 @media(max-width:600px){.squad-token{display:grid;justify-items:center;gap:0}.squad-token .pixel-sprite{width:23px;height:23px}.squad-token span{text-align:center}.squad-token small{font-size:9px}.squad-slots{gap:2px}}
 </style>

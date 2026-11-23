@@ -65,7 +65,7 @@ test('opening items apply actual shields and tempo once, and temporary boosts ex
   assert.ok(unit.period<basePeriod);assert.ok(g.enemies.every(e=>e.cooldown>=.8))
   assert.equal(copies(g,'ward-flask'),0);assert.equal(beginBattle(g),false)
   endWave(g);assert.equal(g.allies[0].period,basePeriod)
-  assert.ok(chooseReward(g,'repair'));assert.ok(nextWave(g));assert.equal(g.discards,4)
+  assert.ok(chooseReward(g,'power'));assert.ok(nextWave(g));assert.equal(g.discards,4)
   assert.ok(restoreGame(snapshotGame(g)))
 })
 

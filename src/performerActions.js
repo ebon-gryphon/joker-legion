@@ -5,6 +5,7 @@ import { REGIMENTS } from './orders.js'
 import { issueOrder } from './recruitOrder.js'
 import { shiftedRank } from './deck.js'
 import { FIELD_LIMIT } from './campaignRules.js'
+import { registerArmy } from './combatStats.js'
 
 export function useTrick(game, targetId, step) {
   if (game.trickUsed) return false
@@ -44,6 +45,7 @@ export function useTrick(game, targetId, step) {
         echoUntil:game.time+6, motion:null, aim:null, impactAt:null, attackTimer:0, hitTimer:0 }
       delete echo.command
       game.allies.push(echo)
+      registerArmy(game)
       effect(game,'summon',echo.x,echo.y,'镜像','#cfb0ff')
       text = unit.name + '的分身登场 · 6 秒'
     } else {

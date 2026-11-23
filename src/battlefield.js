@@ -23,7 +23,7 @@ export function createBattlefield(canvas) {
   c.imageSmoothingEnabled = bg.imageSmoothingEnabled = false; bg.scale(.5, .5); backdrop(bg)
   const atlasSubscription = loadFactionAtlases(), enemyArt = new Map(), previous = new Map()
   let cameraX = W / 2, cameraPhase, viewScale = 1, viewLeft = 0, viewTop = 0
-  let laneStart=192, laneScale=1
+  let laneStart=192, laneScale=1, formationKey='', formationView=null
   const campAreas = []
   const campNames = []
   let sampledGame, sampledAt = -1, sampledWave = 0, previousEffects = []
@@ -107,7 +107,9 @@ export function createBattlefield(canvas) {
     const allies = game.phase === 'shop' ? closingArmy : game.allies
     const now = options.time ?? performance.now() / 1000, dt = Math.min(.1, Math.max(0, now - lastTime)); lastTime = now
     const paused = !!options.paused, reduced = !!options.reducedMotion; if (!paused && !reduced) artTime += dt
-    const framing=game.phase==='ready' ? fitFormation(width,height,options.panelBounds) : null
+    const layoutKey=game.phase==='ready'?JSON.stringify([width,height,options.panelBounds?.left,options.panelBounds?.top,(options.reservedRects || []).map(r=>[r.left,r.top,r.right ?? r.left+r.width,r.bottom ?? r.top+r.height])]):''
+    if(layoutKey && layoutKey!==formationKey){formationView=fitFormation(width,height,options.panelBounds,options.reservedRects || []);formationKey=layoutKey}
+    const framing=game.phase==='ready'?formationView:null
     const t = artTime, cropSky = !framing && width / height > W / H
     const allyFront = allies.length ? Math.max(...allies.map(u => u.x)) : 140
     const enemyFront = game.enemies.length ? Math.min(...game.enemies.map(u => u.x)) : allyFront + 160
@@ -224,10 +226,21 @@ export function createBattlefield(canvas) {
       if (label.unit) {
         if (x < -10 || x > width+10) continue
         const half=display.measureText(label.text).width/2+3
-        x=Math.min(width-half,Math.max(half,x))
-        for (let row=0;row<4 && nameBoxes.some(b=>Math.abs(x-b.x)<half+b.half && Math.abs(y-b.y)<size+2);row++) y-=size+3
+        const safe=framing?.viewport || {left:0,top:0,right:width,bottom:height}
+        const minX=safe.left+half,maxX=safe.right-half
+        x=minX>maxX?(safe.left+safe.right)/2:Math.min(maxX,Math.max(minX,x))
+        const minY=safe.top+size+2,maxY=safe.bottom-3
+        y=Math.min(maxY,Math.max(minY,y))
+        const collides=yy=>nameBoxes.some(b=>Math.abs(x-b.x)<half+b.half && Math.abs(yy-b.y)<size+2)
+        if(collides(y)){
+          const step=size+3
+          for(let row=1;row<12;row++){const above=y-row*step,below=y+row*step
+            if(above>=minY && !collides(above)){y=above;break}
+            if(below<=maxY && !collides(below)){y=below;break}
+          }
+        }
         nameBoxes.push({x,y,half})
-        if (framing) campNames.push({id:label.unit,x,y,half,size})
+        if (framing) campNames.push({id:label.unit,text:label.text,x,y,half,size})
         if (y<anchorY-3) {
           display.save();display.strokeStyle='#d1bb91';display.lineWidth=1
           display.beginPath();display.moveTo(x+half-2,y+1);display.lineTo(anchorX,anchorY+3);display.stroke();display.restore()
@@ -237,5 +250,5 @@ export function createBattlefield(canvas) {
     }
     display.restore()
   }
-  return { render, resize, campPoint, pickUnit, dragGrip, captureStep, destroy() { disposed = true; observer?.disconnect(); atlasSubscription.dispose(); backdropImage.onload = null; backdropImage.onerror = null; previous.clear() } }
+  return { render, resize, deploymentGeometry:()=>({scale:viewScale,left:viewLeft,top:viewTop,laneStart,laneScale,viewport:formationView?.viewport,units:campAreas.map(r=>({...r})),names:campNames.map(r=>({...r}))}), campPoint, pickUnit, dragGrip, captureStep, destroy() { disposed = true; observer?.disconnect(); atlasSubscription.dispose(); backdropImage.onload = null; backdropImage.onerror = null; previous.clear() } }
 }

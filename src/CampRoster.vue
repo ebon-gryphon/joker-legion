@@ -8,8 +8,8 @@ import { FUSION_BY_ID, FUSION_COST, ROLE_NAMES, mergePreview } from './forge.js'
 import { FUSION_PROFESSIONS, professionId, professionName, professionJobs, fusionProfessionNames } from './professionFusion.js'
 import { JOBS } from './jobs.js'
 import { gradeOf, QUALITIES } from './quality.js'
-import { recruitName } from './recruitment.js'
 import { FIELD_LIMIT } from './campaignRules.js'
+import { displayName, secondaryIdentity } from './soldierIdentity.js'
 import { getSpriteFrame } from './spriteAtlas.js'
 
 const props = defineProps({
@@ -29,8 +29,8 @@ function ascend() {
   if (!pair || !result) return
   const before = {...pair.leader}
   if (!props.applyMerge(before.id,pair.donor.id,'ascend')) return
-  receipt.value = {unit:{...pair.leader}, name:gradeOf(pair.leader).name+' · '+unitTitle(pair.leader),
-    from:before.name, other:pair.donor.name, ascended:true, stats:statRows(before,pair.leader)}
+  receipt.value = {unit:{...pair.leader}, name:unitTitle(pair.leader)+' · '+gradeOf(pair.leader).name,
+    from:displayName(before), other:displayName(pair.donor), ascended:true, stats:statRows(before,pair.leader)}
   nextTick(()=>continueButton.value?.focus())
 }
 const isFusion = computed(() => pane.value === 'fusion')
@@ -55,7 +55,7 @@ watch(() => props.game.allies.map(unit => unit.id), ids => {
 }, { immediate: true })
 const inspected = computed(() => props.game.allies.find(unit => unit.id === chosenId.value))
 const selectedProfession = computed(()=>FUSION_PROFESSIONS.find(job=>job.id===role.value) || FUSION_PROFESSIONS[0])
-const outputName = computed(() => leader.value?.name || selectedProfession.value.name)
+const outputName = computed(() => leader.value ? displayName(leader.value) : selectedProfession.value.name)
 const previewUnit = computed(()=>leader.value && result.value ? {...leader.value,...result.value} : leader.value)
 const sourceList = computed(() => [
   { label: '保留主将', unit: leader.value, type:selectedProfession.value.type, available:leaders.value.length },
@@ -98,13 +98,13 @@ function chooseSlot(unit) {
   picker.value = ''
 }
 function grade(unit) { return '★'.repeat(unit.level) }
-function unitTitle(unit) { return FUSION_BY_ID[unit?.fusion]?.name || unit?.name }
+function unitTitle(unit) { return displayName(unit) }
 function merge() {
   if (!result.value || !affordable.value) return
-  const before = { ...leader.value }, other = donor.value.name, id = kind.value
+  const before = { ...leader.value }, other = displayName(donor.value), id = kind.value
   if (!props.applyMerge(before.id, donor.value.id, id)) return
   const after = props.game.allies.find(unit => unit.id === before.id)
-  receipt.value = { unit: { ...after }, name: unitTitle(after), from: before.name, other,
+  receipt.value = { unit: { ...after }, name: unitTitle(after), from: displayName(before), other,
     profession: id==='profession', stats: statRows(before, after) }
   picker.value = ''
   nextTick(() => continueButton.value?.focus())
@@ -133,17 +133,17 @@ function merge() {
   <section v-else-if="pane==='ascend'" class="forge-roster ascension-pane">
     <p>两名传说合成神话，两名神话合成棱彩。兵系与星级可以不同，锁定的士兵可以接收融合。</p>
     <div v-if="game.reserves.length" class="reserve-list"><h4>候补席</h4>
-      <div v-for="unit in game.reserves" :key="unit.id"><PixelSprite v-bind="portrait(unit)"/><span>{{ gradeOf(unit).name }} · {{ unit.name }}</span>
+      <div v-for="unit in game.reserves" :key="unit.id"><PixelSprite v-bind="portrait(unit)"/><span>{{ displayName(unit) }} · {{ gradeOf(unit).name }}</span>
         <button class="key-ticket" :disabled="game.allies.length>=FIELD_LIMIT" @click="emit('field-reserve',unit.id)">{{ game.allies.length>=FIELD_LIMIT?'阵位已满':'上阵' }}</button></div>
     </div>
     <template v-if="ascendPair && ascension">
       <label>选择保留者与副手
         <select @change="ascendKey=$event.target.value" class="key-select" :value="ascendPair.leader.id+'/'+ascendPair.donor.id">
-          <option v-for="p in pairs.ascend" :key="p.leader.id+'/'+p.donor.id" :value="p.leader.id+'/'+p.donor.id">保留 {{ p.leader.name }}{{ game.reserves.includes(p.leader) ? '（候补）' : '' }} #{{ p.leader.id.split('-').pop() }} ← {{ p.donor.name }}{{ game.reserves.includes(p.donor) ? '（候补）' : '' }} #{{ p.donor.id.split('-').pop() }}</option>
+          <option v-for="p in pairs.ascend" :key="p.leader.id+'/'+p.donor.id" :value="p.leader.id+'/'+p.donor.id">保留 {{ displayName(p.leader) }}{{ game.reserves.includes(p.leader) ? '（候补）' : '' }} #{{ p.leader.id.split('-').pop() }} ← {{ displayName(p.donor) }}{{ game.reserves.includes(p.donor) ? '（候补）' : '' }} #{{ p.donor.id.split('-').pop() }}</option>
         </select>
       </label>
       <div class="ascend-preview" :style="{'--quality':QUALITIES[ascension.grade].color}"><PixelSprite v-bind="portrait({...ascendPair.leader,grade:ascension.grade})"/>
-        <div><small>融合结果</small><h3>{{ QUALITIES[ascension.grade].name }} · {{ ascendPair.leader.pattern && !ascendPair.leader.fusion ? recruitName(ascendPair.leader.pattern,ascension.grade) : unitTitle(ascendPair.leader) }}</h3><span>{{ '★'.repeat(ascension.level) }} · {{ ascension.trainingXp }} 经验</span></div>
+        <div><small>融合结果</small><h3>{{ displayName(ascendPair.leader) }}</h3><span>{{ QUALITIES[ascension.grade].name }} · {{ '★'.repeat(ascension.level) }} · {{ ascension.trainingXp }} 经验</span></div>
       <button class="key-command" @click="ascend"><KeyMark name="forge"/>免费融合为{{ QUALITIES[ascension.grade].name }}</button>
       </div>
       <div class="forge-stats"><span v-for="stat in statRows(ascendPair.leader,ascension)" :key="stat.label">{{ stat.label }} <del>{{ stat.before }}</del> → <b>{{ stat.after }}</b></span></div>
@@ -156,7 +156,7 @@ function merge() {
     <template v-else>
       <h3>在营成员</h3>
       <div class="forge-members"><button class="key-ticket" v-for="unit in game.allies" :key="unit.id" :class="{ active: unit.id === chosenId }"
-        :aria-pressed="unit.id === chosenId" @click="chosenId = unit.id"><PixelSprite v-bind="portrait(unit)"/><span>{{ unit.locked?'已锁 · ':'' }}{{ unitTitle(unit) }}<small>{{ unit.suit }}{{ unit.rank }} · {{ grade(unit) }} {{ unit.command ? '统领' : '' }}</small></span></button></div>
+        :aria-pressed="unit.id === chosenId" @click="chosenId = unit.id"><PixelSprite v-bind="portrait(unit)"/><span>{{ unit.locked?'已锁 · ':'' }}{{ unitTitle(unit) }}<small>{{ secondaryIdentity(unit) }} · {{ grade(unit) }} {{ unit.command ? '统领' : '' }}</small></span></button></div>
       <div v-if="inspected" class="forge-service">
         <SoldierSheet :unit="inspected" :champion="game.champion" @lock="id=>emit('lock',id)" @champion="id=>emit('champion',id)"/>
         <p v-if="serving">现任{{ serving.command === 'guard' ? '壁垒' : '先遣' }}统领 · {{ unitTitle(serving) }}</p>
@@ -187,7 +187,7 @@ function merge() {
           <span v-if="index" class="forge-sign" aria-hidden="true">＋</span>
           <button class="forge-source key-ticket" :disabled="!slot.available" :aria-expanded="picker===slot.label" @click="picker=picker===slot.label?'':slot.label">
             <small>{{ slot.label }}<span v-if="slot.available">⌄</span></small><PixelSprite v-bind="portrait(slot.unit,slot.type)"/>
-            <b>{{ slot.unit?.name || (index ? '选择副手' : selectedProfession.name) }}</b><em>{{ slot.unit ? professionName(slot.unit)+' · '+grade(slot.unit) : (isFusion ? '一星即可' : '需要同职业同星') }}</em>
+            <b>{{ slot.unit ? displayName(slot.unit) : (index ? '选择副手' : selectedProfession.name) }}</b><em>{{ slot.unit ? professionName(slot.unit)+' · '+grade(slot.unit) : (isFusion ? '一星即可' : '需要同职业同星') }}</em>
           </button>
         </template>
         <span class="forge-sign" aria-hidden="true">→</span>
@@ -196,7 +196,7 @@ function merge() {
       <div v-if="picker" class="forge-picker">
         <strong>{{ picker }} · 选择成员</strong>
         <button class="key-ink" v-for="unit in (picker==='保留主将'?leaders:donors)" :key="unit.id" @click="chooseSlot(unit)"><KeyMark name="allies"/>
-          {{ unit.name }} · {{ professionName(unit) }} · {{ grade(unit) }} · 攻 {{ unit.atk }} · 血 {{ Math.ceil(unit.hp) }} · #{{ unit.id.split('-').pop() }}
+          {{ displayName(unit) }} · {{ professionName(unit) }} · {{ grade(unit) }} · 攻 {{ unit.atk }} · 血 {{ Math.ceil(unit.hp) }} · #{{ unit.id.split('-').pop() }}
         </button>
       </div>
       <ActionPreview v-if="previewUnit" :unit="previewUnit" :title="outputName" class="forge-performance"/>
@@ -205,7 +205,7 @@ function merge() {
       </div>
       <div v-if="result" class="forge-stats"><span v-for="stat in stats" :key="stat.label">{{ stat.label }} <del>{{ stat.before }}</del> → <b>{{ stat.after }}</b></span></div>
       </div>
-      <footer class="forge-commit"><small>{{ donor ? donor.name+' 将并入主将，腾出一个兵位。' : isFusion ? '选一名在营主兵，再选不同职业的副手。上锁的士兵可接收，不能被消耗。' : '再招募一名同职业、同星的士兵。' }}</small>
+      <footer class="forge-commit"><small>{{ donor ? displayName(donor)+' 将并入主将，腾出一个兵位。' : isFusion ? '选一名在营主兵，再选不同职业的副手。上锁的士兵可接收，不能被消耗。' : '再招募一名同职业、同星的士兵。' }}</small>
         <button class="gold-button key-command" :disabled="!result || !affordable" @click="merge"><KeyMark name="forge"/>{{ !result ? '材料未齐' : !affordable ? '还缺 '+(price-game.gold)+' 金币' : isFusion ? '确认职业融合' : '升至'+result.level+'星' }}<small class="forge-price">{{ isFusion ? price+' 金币' : '免费' }}</small></button>
       </footer>
     </section>

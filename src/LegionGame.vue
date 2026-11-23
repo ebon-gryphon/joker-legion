@@ -40,6 +40,12 @@ import WaveReport from './WaveReport.vue'
 import FeintTable from './FeintTable.vue'
 import { dailySeed, dailyRecordKey, betterDailyRun, validDailyRecord } from './daily.js'
 import { CARD_CATALOG, getCardDesign } from './cardCatalog.js'
+import TutorialCoach from './TutorialCoach.vue'
+import { initOnboarding, updateOnboarding, skipOnboarding, featureVisible, onboardingView } from './onboarding.js'
+import { initializeCombatStats, combatSummary } from './combatStats.js'
+import { loadCombatHistory, saveCombatHistory, exportCombatHistory } from './combatHistory.js'
+import { displayName, secondaryIdentity } from './soldierIdentity.js'
+import './experience.css'
 
 const { createGame, previewHand, selectCard, discard, deploy, tick, buyJoker, sellJoker, rerollShop, nextWave, chooseReward } = rules
 const doctrines = rules.DOCTRINES
@@ -58,6 +64,36 @@ function openCodex(card) {
 function jokerInfo(item) { return typeof item === 'object' ? { ...jokerDefinitions.find(j => j.id === item.id), ...item } : jokerDefinitions.find(j => j.id === item) || { id: item, name: item, description: '' } }
 const newSeed = () => Math.floor(Math.random() * 900000) + 100000
 const game = ref(createGame({ seed: newSeed(), doctrine: doctrines[0].id }))
+const onboarding = computed(()=>onboardingView(game.value))
+const feature = key => featureVisible(game.value,key)
+const combatHistory = ref([]), historySelection = ref(''), historyAvailable = ref(true)
+let historySavedReport
+try { combatHistory.value=loadCombatHistory(localStorage) } catch { historyAvailable.value=false }
+const currentCombat = computed(()=>combatSummary(game.value))
+const selectedCombat = computed(()=>historySelection.value ? combatHistory.value.find(record=>record.waveId===historySelection.value) : currentCombat.value)
+function recordCombatHistory() {
+  const summary=game.value.lastCombatReport
+  if (!summary?.ended || summary===historySavedReport) return
+  try { combatHistory.value=saveCombatHistory(localStorage,summary);historyAvailable.value=true;historySavedReport=summary }
+  catch { historyAvailable.value=false }
+}
+function downloadCombatHistory() {
+  recordCombatHistory()
+  const records=[...combatHistory.value]
+  const current=game.value.lastCombatReport
+  if (current?.ended && !records.some(record=>record.waveId===current.waveId)) records.push(current)
+  const blob=new Blob([exportCombatHistory(records)],{type:'application/json;charset=utf-8'})
+  const url=URL.createObjectURL(blob), link=document.createElement('a')
+  const date=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Shanghai'}).format(new Date())
+  link.href=url;link.download='joker-legion-battles-'+date+'.json'
+  document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)
+}
+function skipTutorial(scope) { if(skipOnboarding(game.value,scope)) save() }
+function openTutorialTarget(target) {
+  if (target==='trick') { if(trickBlock.value) openGuide('performer'); else if(!trickArmed.value) armTrick();return }
+  setDesk(target)
+  if (target==='orders' && onboarding.value?.stepId==='w1-shield') orderDetails.value=true
+}
 const briefing = ref(false), pokerPanel = ref(null)
 const desk = ref('field'), deskBody = ref(null), scenePanel = ref(null), fieldMember = ref(null)
 const inspectedSoldier = computed(()=>game.value.allies.find(unit=>unit.id===fieldMember.value))
@@ -107,6 +143,7 @@ function armTrick() {
 }
 function playTrick(id, step) {
   if (!trickArmed.value || !rules.useTrick(game.value,id,step)) return
+  updateOnboarding(game.value,'trick')
   cancelTrick()
   if (hero.value.id === 'voice') showRarity()
   audio.play(hero.value.id)
@@ -127,9 +164,10 @@ function openSupplies() {
 }
 const deskStamps = { orders:'cards', feint:'trick', forge:'forge', brief:'enemies', press:'press', watch:'time', supply:'order', market:'coin', college:'book', report:'order' }
 const battleTabs = [['watch','战况']]
-const deskTabs = computed(()=>game.value.phase==='ready' ? campTabs : game.value.phase==='shop' ? shopTabs : battleTabs)
+const deskTabs = computed(()=>(game.value.phase==='ready' ? campTabs : game.value.phase==='shop' ? shopTabs : battleTabs).filter(([id])=>feature(id)))
 const deskName = computed(() => [...campTabs, ...shopTabs, ...battleTabs, ['soldier','士兵详情'],['supply','选择补给'],['victory','守城战报'],['market','小丑商店']].find(([id]) => id === desk.value)?.[1] || '随军手册')
 function setDesk(id, trigger) {
+  if (!feature(id)) { note('该功能会在后续引导开放，也可随时结束引导开放全部。');return }
   if (game.value.phase === 'shop' && (id === 'field' || ['victory','supply','market'].includes(id))) id = postBattleDesk.value
   if (id === 'orders' && !rules.inCamp(game.value)) return
   cancelTrick()
@@ -272,7 +310,7 @@ function fieldMove(e) {
   d.moving=true;d.x=e.clientX;d.y=e.clientY
   const overField=document.elementFromPoint(d.x,d.y)===canvas.value
   d.point=overField ? renderer.campPoint(d.x,d.y) : null
-  const target=overField && !draggedFace.value?.locked ? renderer.pickUnit(d.x,d.y,'ally',d.id) : null
+  const target=overField && feature('training') && !draggedFace.value?.locked ? renderer.pickUnit(d.x,d.y,'ally',d.id) : null
   if (d.target===target) return
   clearTimeout(feedTimer);d.target=target;d.feed=false
   if (target && rules.drillPreview(game.value,d.id,target)?.kind==='ascend') { d.feed=true; return }
@@ -304,16 +342,17 @@ function fieldUp(e) {
   if (hasModal.value || game.value.phase!=='ready' || document.elementFromPoint(e.clientX,e.clientY)!==canvas.value) return
   if (!d.moving) { showSoldier(d.id); return }
   const target=renderer.pickUnit(e.clientX,e.clientY,'ally',d.id)
-  if (target && ((d.feed && d.target===target) || rules.drillPreview(game.value,d.id,target)?.kind==='ascend')) {
+  if (feature('training') && target && ((d.feed && d.target===target) || rules.drillPreview(game.value,d.id,target)?.kind==='ascend')) {
     trainSoldier(d.id,target)
     if (fieldMember.value===d.id) showSoldier(target)
     return
   }
   const point=renderer.campPoint(e.clientX,e.clientY)
-  if (rules.moveInCamp(game.value,d.id,point.x,point.y)) save()
+  if (rules.moveInCamp(game.value,d.id,point.x,point.y)) { updateOnboarding(game.value,'move',{id:d.id});save() }
 }
 function changeFormation(id) {
-  if (rules.setFormation(game.value, id)) { audio.play('select'); save() }
+  const previous=game.value.formation
+  if (rules.setFormation(game.value, id)) { updateOnboarding(game.value,'formation',{previous});audio.play('select');save() }
 }
 const preview = computed(() => previewHand(game.value, game.value.selected))
 const wagon = computed(() => activeWagon(game.value))
@@ -359,7 +398,7 @@ const canDiscard = computed(() => ordersOpen.value && selectedCount.value > 0 &&
   (game.value.discards > 0 || (game.value.phase === 'ready' && game.value.gold >= redrawFee.value)))
 function sendArmy() {
   cancelTrick()
-  if (rules.beginBattle(game.value)) { manualPaused.value = false; audio.play('deploy'); save() }
+  if (rules.beginBattle(game.value)) { updateOnboarding(game.value,'battle');manualPaused.value = false;audio.play('deploy');save() }
 }
 const pairs = computed(() => workshopPairs(game.value))
 const availableRecipes = computed(() => pairs.value.profession.length)
@@ -396,7 +435,7 @@ const recruitGroups = computed(() => {
   for (const recruit of preview.value.recruits) {
     const key = recruit.appearanceId + '-' + recruit.level
     if (groups.has(key)) groups.get(key).count++
-    else groups.set(key, { key, name:recruit.name, portrait:getSpriteFrame(recruit), level: recruit.level, count: 1 })
+    else groups.set(key, { key, name:displayName(recruit), detail:secondaryIdentity(recruit), portrait:getSpriteFrame(recruit), level: recruit.level, count: 1 })
   }
   return [...groups.values()]
 })
@@ -415,13 +454,22 @@ const regiments = computed(()=>Object.entries(REGIMENTS).map(([type,role])=>{
   return {type,name:role.name,leader:members[0] && getSpriteFrame(members[0]),count:members.length,health:max?Math.ceil(100*hp/max):0}
 }))
 const rewardFrames = { repair: 1, power: 4, supply: 5 }
+const rewardStatus = choice => rules.rewardAvailability(game.value,choice.id)
+function rewardDescription(choice) {
+  const status=rewardStatus(choice)
+  if (!status.available && choice.id==='repair' && !game.value.rewardChosen) return status.reason
+  if (choice.id==='repair' && !game.value.rewardChosen) return '恢复 '+Math.min(20,game.value.maxBaseHp-game.value.baseHp)+' 点城门耐久，最多恢复至满。'
+  return choice.description || choice.desc
+}
 function note(text, tone = 'info') {
   toast.value = { text, tone }; clearTimeout(toastTimer)
   toastTimer = setTimeout(() => { toast.value = null }, 3000)
 }
 function save() {
   if (intro.value) return
+  updateOnboarding(game.value,'state')
   try { saveExpedition(localStorage,game.value); storageAvailable.value = true } catch { storageAvailable.value = false }
+  recordCombatHistory()
 }
 function showRunSelection() {
   if (!intro.value) {
@@ -441,6 +489,9 @@ function requestStart(daily = false) {
 function startRun(seed = requestedSeed.value ?? newSeed(), doctrine = pickedDoctrine.value, difficulty = pickedDifficulty.value) {
   requestedSeed.value = null
   game.value = createGame({ seed, doctrine, difficulty })
+  initializeCombatStats(game.value,{runId:globalThis.crypto?.randomUUID?.() || 'run-'+Date.now()+'-'+newSeed()})
+  initOnboarding(game.value,{enabled:true})
+  historySelection.value=''
   enterPhase(); briefing.value = false; manualPaused.value = false; intro.value = false; confirmRestart.value = false
   audio.play('deploy'); save()
   nextTick(() => window.scrollTo({ top: 0, behavior: 'instant' }))
@@ -448,6 +499,7 @@ function startRun(seed = requestedSeed.value ?? newSeed(), doctrine = pickedDoct
 function resumeRun() {
   if (!savedGame.value) return
   game.value = savedGame.value; enterPhase(); pickedDifficulty.value = game.value.difficulty; intro.value = false; manualPaused.value = game.value.phase === 'battle'; audio.unlock()
+  recordCombatHistory()
   note(game.value.phase === 'battle' ? '战斗已恢复，点击继续即可推进。' : game.value.phase === 'shop' ? '已返回战后商店。' : '已恢复本波备战进度。')
 }
 function chooseCard(id) {
@@ -471,6 +523,7 @@ function doDeploy() {
   const name = preview.value.name
   const hand = preview.value
   if (deploy(game.value) !== false) {
+    updateOnboarding(game.value,'deploy')
     audio.play(['高牌', '对子'].includes(name) ? 'deploy' : 'combo')
     note(name + ' · ' + hand.profession + (game.value.lastDeploy.waiting ? ' 已到候补席 · ' : ' ' + hand.actualUnits + ' 人入阵 · ') + REGIMENTS[hand.target].name + '获' + hand.order +
       (game.value.lastDeploy.trainingXp ? ' · ' + hand.trainerName + ' +' + game.value.lastDeploy.trainingXp + '经验' : ''))
@@ -501,12 +554,13 @@ function sell(joker) {
 }
 function reroll() { if (rerollShop(game.value) !== false) { audio.play('discard'); note('货架已补货 · −2 金币'); save() } }
 function reward(choice) {
+  if (!rewardStatus(choice).available) { note(rewardStatus(choice).reason);return }
   if (chooseReward(game.value, choice.id) !== false) {
     audio.play('buy'); save(); setDesk('market'); note('已领取' + choice.name)
   }
 }
 function advance() {
-  if (nextWave(game.value) !== false) { manualPaused.value = false; audio.play('deploy'); save() }
+  if (nextWave(game.value) !== false) { updateOnboarding(game.value,'nextWave');historySelection.value='';manualPaused.value = false;audio.play('deploy');save() }
 }
 function togglePause() {
   if (trickArmed.value) { cancelTrick(); return }
@@ -557,6 +611,8 @@ function keydown(event) {
 }
 function visibility() { hidden.value = document.hidden; if (!hidden.value) dealDay.value = dailySeed(); if (hidden.value) { manualPaused.value = game.value.phase === 'battle'; save() } }
 watch(() => game.value.phase, (phase, previous) => {
+  updateOnboarding(game.value,'phase')
+  if (['shop','won','lost'].includes(phase)) {recordCombatHistory();historySelection.value=''}
   enterPhase()
   clearTimeout(receiptTimer);rarityReceipt.value=null
   clearTimeout(toastTimer); toast.value = null
@@ -564,11 +620,6 @@ watch(() => game.value.phase, (phase, previous) => {
   if (phase === 'shop' || phase === 'won') audio.play('win')
   if (phase === 'lost') audio.play('lose')
   if (previous === 'battle') save()
-})
-watch(() => desk.value === 'victory' && !intro.value && !hidden.value && !inspectedJoker.value, (show, _, cleanup) => {
-  if (!show) return
-  const timer = setTimeout(openSupplies, 2400)
-  cleanup(() => clearTimeout(timer))
 })
 watch(paused, value => { if (value) audio.quietBattle() })
 watch(() => chime.value?.id, id => { if (id && !hidden.value && !hasModal.value) audio.play('bell') })
@@ -593,6 +644,19 @@ function trapFocus(event) {
   if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
 }
+function deploymentObstacles() {
+  if (game.value.phase!=='ready' || !canvas.value) return []
+  const stage=canvas.value.closest('.field-stage'), origin=canvas.value.getBoundingClientRect()
+  if (!stage) return []
+  const selectors=['.field-head','.battle-topline','.scene-tools','.trick-bar','.scene-action','.tutorial-field-dock','.camp-notification-slot','.wagon-aside','.field-pick-hint','.convoy-call','.boss-warning','.bell-alert','.rarity-receipt']
+  if (['orders','soldier'].includes(desk.value)) selectors.push('.scene-panel')
+  return [...stage.querySelectorAll(selectors.join(','))].flatMap(node=>{
+    if (!node.getClientRects().length) return []
+    const r=node.getBoundingClientRect()
+    if (!r.width || !r.height) return []
+    return [{left:r.left-origin.left,top:r.top-origin.top,right:r.right-origin.left,bottom:r.bottom-origin.top}]
+  })
+}
 onMounted(() => {
   renderer = createBattlefield(canvas.value)
   const captureStep = () => renderer.captureStep?.(toRaw(game.value))
@@ -603,7 +667,7 @@ onMounted(() => {
       tick(game.value, delta * speed.value, event => events.push(event), captureStep)
       if (events.length && !hidden.value) audio.battleActions(events)
     }
-    if (!intro.value) renderer.render(toRaw(game.value), { panelBounds:['orders','soldier'].includes(desk.value) ? scenePanel.value?.getBoundingClientRect() : null, liftedUnit:fieldDrag.value?.moving ? fieldDrag.value.id : null, dragPoint:fieldDrag.value?.point, targetSide:trickArmed.value ? fieldSide.value : null, selectedUnit:fieldDrag.value?.target || fieldMember.value, time: now / 1000, paused: paused.value, reducedMotion: reducedMotion.value,
+    if (!intro.value) renderer.render(toRaw(game.value), { reservedRects:deploymentObstacles(),panelBounds:['orders','soldier'].includes(desk.value) ? scenePanel.value?.getBoundingClientRect() : null, liftedUnit:fieldDrag.value?.moving ? fieldDrag.value.id : null, dragPoint:fieldDrag.value?.point, targetSide:trickArmed.value ? fieldSide.value : null, selectedUnit:fieldDrag.value?.target || fieldMember.value, time: now / 1000, paused: paused.value, reducedMotion: reducedMotion.value,
       orderTarget: desk.value === 'orders' && selectedCount.value && ordersOpen.value ? preview.value.target : null })
     saveClock += delta
     if (saveClock >= 3) { saveClock = 0; save() }
@@ -657,11 +721,12 @@ onBeforeUnmount(() => {
               <span class="army-tag enemy-tag">来敌 <b>{{ game.phase==='ready'?scout.total:liveEnemies.length }}</b><i></i></span>
             </div>
             <aside v-if="wagonHint && (desk==='field' || desk==='watch')" class="wagon-aside" aria-label="马车情报"><KeyMark name="coin"/>{{ wagonHint }}</aside>
-            <Transition name="toast"><div v-if="toast" class="toast-note" :class="toast.tone" role="status"><span>✦</span>{{ toast.text }}</div></Transition>
-            <small v-if="desk==='field' && game.phase==='ready' && liveAllies.length" class="field-pick-hint">点兵查看 · 拖动布阵 · 停在友军身上传授</small>
+            <div v-if="game.phase==='ready'" class="camp-notification-slot"><Transition name="toast"><div v-if="toast" class="toast-note" :class="toast.tone" role="status"><span>✦</span>{{ toast.text }}</div></Transition></div>
+            <Transition v-else name="toast"><div v-if="toast" class="toast-note" :class="toast.tone" role="status"><span>✦</span>{{ toast.text }}</div></Transition>
+            <small v-if="desk==='field' && game.phase==='ready' && liveAllies.length && !toast" class="field-pick-hint">点兵查看 · 拖动布阵<template v-if="feature('training')"> · 停在友军身上传授</template></small>
             <small v-if="desk==='field' && game.phase==='battle' && game.champion?.unitId" class="field-pick-hint">♛ {{ game.champion.pattern ? ORDER_BOOK[game.champion.pattern].name : game.champion.slot }} · {{ game.champion.xp }}经验 {{ game.royalMarch?'· 已亲征':'' }}</small>
             <div v-if="game.bossTelegraph && game.phase === 'battle'" class="boss-warning" role="status"><span>⚠</span>{{ game.bossTelegraph.text || game.bossTelegraph.name }} · {{ Math.max(0,game.bossTelegraph.remaining).toFixed(1) }} 秒</div>
-        <section v-if="inPlay || (game.phase==='shop' && desk==='market' && hero.id==='sleeve')" class="trick-bar" aria-label="专属戏法" :data-hero="hero.id">
+        <section v-if="feature('trick') && (inPlay || (game.phase==='shop' && desk==='market' && hero.id==='sleeve'))" class="trick-bar" aria-label="专属戏法" :data-hero="hero.id">
           <button class="performer-id key-chit" :aria-label="'查看'+hero.name+'的故事与打法'" @click="openGuide('performer')"><img :src="pixelAssetUrl(hero.art,'jpg')" alt=""/><span class="trick-id"><small>{{ hero.name }} · 每波一次</small><b>{{ hero.skill }} ↗</b></span></button>
           <div v-if="trickArmed && hero.id==='ghost' && palmTarget" class="palm-steps">
             <b>{{ palmTarget.suit }}{{ palmTarget.rank }}</b>
@@ -682,7 +747,7 @@ onBeforeUnmount(() => {
           </div>
           <label v-else-if="trickArmed && fieldSide" class="unit-picker">
             <span>{{ hero.cue }}</span><select class="key-select" aria-label="从名册选目标" @change="playTrick($event.target.value)">
-              <option value="">从名册选择…</option><option v-for="(u,i) in trickTargets" :key="u.id" :value="u.id">{{ u.suit }}{{ u.rank }} {{ u.name }} · {{ Math.ceil(u.hp) }} 生命 · {{ i+1 }}</option>
+              <option value="">从名册选择…</option><option v-for="(u,i) in trickTargets" :key="u.id" :value="u.id">{{ u.suit }}{{ u.rank }} {{ displayName(u) }} · {{ Math.ceil(u.hp) }} 生命 · {{ i+1 }}</option>
             </select>
           </label>
           <span v-else class="trick-hint">{{ trickArmed ? '点下方要改点的手牌' : trickBlock || hero.cue }}</span>
@@ -692,6 +757,7 @@ onBeforeUnmount(() => {
             <small>城门将损失 {{ tollDamage(game.wave) }} 耐久 · {{ game.bellReady ? '战前已备令，将自动打断' : '本波未备止钟令' }}</small></div>
           </div>
           
+        <div v-if="onboarding && desk==='field'" class="tutorial-field-dock"><TutorialCoach :game="game" @skip-step="skipTutorial('step')" @skip-all="skipTutorial('all')" @open="openTutorialTarget"/></div>
         <nav v-show="desk==='field'" class="scene-tools" aria-label="战场操作">
           <button v-for="[id,label] in deskTabs" :key="id" class="key-tab" :data-tool="id"
             :title="id==='forge'?workshopHint:undefined" @click="setDesk(id,$event.currentTarget)">
@@ -707,28 +773,30 @@ onBeforeUnmount(() => {
         <section v-if="desk!=='field'" ref="scenePanel" class="scene-panel" role="region" tabindex="-1" :aria-label="deskName">
           <button v-if="game.phase!=='shop' || desk!==postBattleDesk" class="scene-close key-close" aria-label="收起面板" title="返回（Esc）" @click="closeDesk"><KeyMark name="close"/></button>
         <div ref="deskBody" class="desk-body" :key="game.wave" :data-section="desk">
+          <TutorialCoach v-if="onboarding && ['orders','brief','supply','market'].includes(desk)" :game="game" @skip-step="skipTutorial('step')" @skip-all="skipTutorial('all')" @open="openTutorialTarget"/>
           <section v-if="desk==='victory'" class="wave-victory" role="status">
             <span class="victory-wave">第 {{ game.wave }} 波 · {{ waveInfo.name }}</span>
             <h2>{{ game.waveTimeout?.count || game.waveKills < game.schedule.length ? '险守城门' : '守城成功' }}</h2>
             <p>{{ timeoutMessage || ('击退 ' + game.waveKills + ' 名敌军') }} · 城门耐久 {{ Math.ceil(game.baseHp) }}</p>
             <p>归营 {{ game.allies.length }} 名 · 赏金 +{{ 8 + game.wave * 2 + game.tacticsReport.bounty }}</p>
+            <WaveReport expanded :combat="currentCombat" :report="report" :uses="game.fusionUses" :tactics="game.tacticsReport" :formation="formation.name"/>
             <button class="key-command" @click="openSupplies">选择补给 ↗</button>
           </section>
-          <SoldierSheet v-else-if="desk==='soldier' && inspectedSoldier" :unit="inspectedSoldier" :champion="game.champion" @lock="lockSoldier" @champion="chooseChampion"/>
+          <SoldierSheet v-else-if="desk==='soldier' && inspectedSoldier" :advanced="feature('champion')" :unit="inspectedSoldier" :champion="game.champion" @lock="lockSoldier" @champion="chooseChampion"/>
           <FeintTable v-else-if="desk==='feint'" :game="game" @choose="chooseFlag"/>
           <section v-else-if="desk === 'orders'" class="hand-section">
           <div class="order-cards">
           <div class="hand-heading"><h2>出牌征兵</h2>
             <span class="hand-budget">余 {{ game.handsLeft }} 手 · 兵位 {{ liveAllies.length }}/{{ rules.FIELD_LIMIT }}<small v-if="game.paidHandsLeft"> · {{ game.paidHandsLeft }} 手免军令</small></span>
-            <button class="buy-hand key-tab" :disabled="game.gold < handPrice" :title="game.gold < handPrice ? '还差 ' + (handPrice - game.gold) + ' 金币' : '增加本波一次出牌，下一手免军令'" @click="purchaseHand"><KeyMark name="coin"/>加一手 · {{ handPrice }} 金</button>
-            <button class="hand-options key-tab" :aria-expanded="orderDetails" aria-controls="order-details" @click="toggleOrderDetails">{{ orderDetails?'收起详情':'整编与战令' }}</button>
+            <button v-if="feature('advanced') || game.handsLeft===0" class="buy-hand key-tab" :disabled="game.gold < handPrice" :title="game.gold < handPrice ? '还差 ' + (handPrice - game.gold) + ' 金币' : '增加本波一次出牌，下一手免军令'" @click="purchaseHand"><KeyMark name="coin"/>加一手 · {{ handPrice }} 金</button>
+            <button class="hand-options key-tab" :aria-expanded="orderDetails" aria-controls="order-details" @click="toggleOrderDetails">{{ orderDetails?'收起详情':feature('forge')?'整编与战令':'战令详情' }}</button>
           </div>
-          <button v-if="game.reserves.length || pairs.ascend.length" class="key-ticket recruit-ascend" @click="setDesk('forge')"><KeyMark name="forge"/>{{ pairs.ascend.length?'可融合升品质':'传说候补' }}<span v-if="game.reserves.length"> · 候补 {{ game.reserves.length }} 名</span> ↗</button>
+          <button v-if="feature('forge') && (game.reserves.length || pairs.ascend.length)" class="key-ticket recruit-ascend" @click="setDesk('forge')"><KeyMark name="forge"/>{{ pairs.ascend.length?'可融合升品质':'传说候补' }}<span v-if="game.reserves.length"> · 候补 {{ game.reserves.length }} 名</span> ↗</button>
           <HandCards :cards="sortedHand" :game="game" :preview="preview" :palm-id="palmId" :palming="trickArmed && hero.id==='ghost'"
             :orders-open="ordersOpen" @choose="chooseCard" @inspect="openCodex"/>
           <div class="draft-result" v-if="preview.score" aria-live="polite" :style="{'--grade-ink':QUALITIES[preview.grade].color}">
             <PixelSprite class="draft-portrait" v-bind="getSpriteFrame(preview.recruits[0] || preview.reserve[0])"/>
-            <div class="draft-contract"><strong>{{ preview.name }} → {{ preview.profession }} ×{{ preview.count }}</strong>
+            <div class="draft-contract"><strong>{{ displayName(preview.recruits[0] || preview.reserve[0] || preview.look.design) }} · {{ preview.profession }}</strong>
               <span v-if="preview.returning">♛ 主将归队 · {{ championProgress(game.champion) }}</span><span class="muster-strength" :title="preview.strengthDetail">{{ preview.look.name }} · {{ preview.look.design.type==='healer' ? '生命、攻疗' : '生命、攻击' }} +{{ preview.statBonus }}%</span><small v-if="preview.strengthDetail" class="muster-detail">{{ preview.strengthDetail }}</small><span v-if="preview.overflow">{{ preview.waiting ? '满编 · 传说进入候补席' : '满编 · 转训至少 +'+preview.trainingXp+'经验；若出传说则候补' }}</span></div>
             <div class="draft-odds"><b class="grade-seal"><small v-if="preview.extraChips">道具 +{{ preview.extraChips }} 筹码 · </small>{{ preview.score.total }}分 · {{ QUALITIES[preview.grade].name }}保底</b><small>{{ preview.grade===4?'必出传说':oddsText(preview.grade) }}</small></div>
           </div>
@@ -736,16 +804,16 @@ onBeforeUnmount(() => {
           <div class="command-bar"><div class="hand-preview"><span class="preview-sigil">{{ selectedCount ? '✧' : '♧' }}</span><div><strong>{{ selectedCount ? preview.order + ' → ' + REGIMENTS[preview.target].name : '军令 ' + game.energy + ' / ' + game.maxEnergy }}<span v-if="selectedCount" class="cost-tag">{{ preview.prepaid ? '免军令' : '✦ ' + preview.cost }}</span></strong><small>{{ selectedCount ? `受令 ${preview.targetCount} 人 · ${preview.description}` : '可继续组牌，或集结完毕后出战' }}</small></div></div><div class="command-actions"><button class="suggest-button key-tab" aria-label="提示手牌" @click="suggest" :disabled="!ordersOpen || trickArmed || (!game.paidHandsLeft && game.energy<2)" title="选中一手可出的牌（H）"><KeyMark name="cards"/><span>提示</span></button><button class="discard-button key-ink" @click="doDiscard" :disabled="!canDiscard || trickArmed"><KeyMark name="cards"/>换牌<small>{{ game.discards > 0 ? `免费 ${game.discards} 次` : game.phase === 'ready' ? `${redrawFee} 金币` : '次数已尽' }}</small><kbd>D</kbd></button><button class="deploy-button key-command" @click="doDeploy" :disabled="!canDeploy || trickArmed"><KeyMark name="order" class="order-seal"/><span class="order-inscription">{{ deployLabel }}</span></button></div></div>
           <div v-if="orderDetails" id="order-details" class="order-details"><div class="hand-tools">
               <button class="text-button key-link" @click="pokerPanel = 'book'"><KeyMark name="book"/>牌型图鉴</button>
-              <button v-if="game.phase === 'ready'" class="text-button key-link" @click="setDesk('press')"><KeyMark name="press"/>牌匠改印</button>
+              <button v-if="game.phase === 'ready' && feature('press')" class="text-button key-link" @click="setDesk('press')"><KeyMark name="press"/>牌匠改印</button>
               <button class="text-button sort-button key-link" @click="sortMode = sortMode === 'suit' ? 'rank' : 'suit'"><KeyMark name="cards"/>⇅ 按{{ sortMode === 'suit' ? '花色' : '点数' }}</button></div>
           <div class="wave-plan">
 
-            <template v-if="game.phase==='ready'">
-              <button v-if="quickPair" class="key-ink quick-promote" @click="quickPromote"><KeyMark name="forge"/>升星 · {{ quickPair.leader.name }} → {{ quickPair.leader.level+1 }}★</button>
+            <template v-if="game.phase==='ready' && feature('forge')">
+              <button v-if="quickPair" class="key-ink quick-promote" @click="quickPromote"><KeyMark name="forge"/>升星 · {{ displayName(quickPair.leader) }} → {{ quickPair.leader.level+1 }}★</button>
               <button class="key-tab open-forge" @click="setDesk('forge',$event.currentTarget)"><KeyMark name="forge"/>兵种工坊</button>
             </template>
           </div>
-          <SquadBench v-if="game.phase==='ready'" :game="game" @drill="trainSoldier" @champion="chooseChampion" @lock="lockSoldier"/>
+          <SquadBench v-if="game.phase==='ready' && feature('roster')" :game="game" @drill="trainSoldier" @champion="chooseChampion" @lock="lockSoldier"/>
           <div class="order-targets" aria-label="选择受令兵种"><strong>牌型加成给</strong>
             <button class="key-tab" v-for="(role, type) in REGIMENTS" :key="type" :aria-pressed="(preview.target || game.orderTarget) === type"
               :aria-label="'向' + role.name + '下令'" :disabled="!ordersOpen || !roleCounts[type]" @click="target(type)">{{ role.suit }} {{ role.name }} <small>×{{ roleCounts[type] }}</small></button>
@@ -754,36 +822,57 @@ onBeforeUnmount(() => {
             <template v-if="selectedCount">
               <strong>将入阵 <b>{{ preview.actualUnits }}</b> 人</strong>
               <span v-for="(group,i) in recruitGroups" :key="group.key" class="recruit-member" :title="group.name">
-                <PixelSprite v-bind="group.portrait"/><span><b>{{ group.name }}</b><small>{{ i===0?'领队 ':'' }}{{ '★'.repeat(group.level) }}<template v-if="group.count>1"> ×{{ group.count }}</template></small></span>
+                <PixelSprite v-bind="group.portrait"/><span><b>{{ group.name }}</b><small>{{ group.detail }} · {{ '★'.repeat(group.level) }}<template v-if="group.count>1"> ×{{ group.count }}</template></small></span>
               </span>
               <small v-if="!preview.actualUnits">{{ preview.waiting ? '传说进入候补席。' : '本手普通新兵转训，传说留在候补席。' }}</small>
             </template>
-            <template v-else-if="game.lastDeploy"><strong>{{ game.lastDeploy.name }}已打出</strong><span v-if="lastLead" :key="game.lastDeploy.id" class="recruit-member recruited-lead"><PixelSprite v-bind="receiptPortrait(game.lastDeploy)"/><b>{{ game.lastDeploy.variantName || lastLead.name }}领队</b></span><span>{{ game.lastDeploy.count }} 人入阵 · 场上共 {{ liveAllies.length }} 人</span></template>
+            <template v-else-if="game.lastDeploy"><strong>{{ game.lastDeploy.name }}已打出</strong><span v-if="lastLead" :key="game.lastDeploy.id" class="recruit-member recruited-lead"><PixelSprite v-bind="receiptPortrait(game.lastDeploy)"/><b>{{ lastLead.name }}</b></span><span>{{ game.lastDeploy.count }} 人入阵 · 场上共 {{ liveAllies.length }} 人</span></template>
             <template v-else><strong>待集结</strong><span>选牌预览兵种、人数与领队升格机会。</span></template>
           </div>
           <div v-if="selectedCount && (preview.combo?.length || preview.overflow || (preview.reason && game.deployCooldown <= 0))" class="synergy-ribbon"><span v-for="combo in preview.combo" :key="combo">✧ {{ combo }}</span><span v-if="preview.waiting">满编传说 · 候补保留</span><span v-else-if="preview.overflow" class="overflow-warning">{{ preview.overflow }} 名增援传授给{{ preview.trainerName }} · +{{ preview.trainingXp }}经验</span><span v-else-if="preview.reason && game.deployCooldown <= 0" class="overflow-warning">{{ preview.reason }}</span></div>
-            <p class="grade-guide">每手招一名，牌型决定兵种。品质决定军装，兵种决定武器和坐骑。每张计分牌的点数总和提升新兵生命、攻击和治疗，J／Q／K／A 分别按 11／12／13／14 算。总分决定新兵保底。出牌时揭晓新兵品级，概率见出牌预览。传说领队首次行动为全军披盾。两名传说可免费融合为神话，两名神话可融合为棱彩。满编时招来的传说在工坊候补。<span v-for="g in GRADES" :key="g.min" :style="{color:g.color}">{{ g.min }}分 {{ g.name }}（+{{ g.boost }}%）</span>。加成作用于新兵的初始攻疗与生命。</p>
+            <p v-if="feature('advanced')" class="grade-guide">每手招一名，牌型决定兵种。品质决定军装，兵种决定武器和坐骑。每张计分牌的点数总和提升新兵生命、攻击和治疗，J／Q／K／A 分别按 11／12／13／14 算。总分决定新兵保底。出牌时揭晓新兵品级，概率见出牌预览。传说领队首次行动为全军披盾。两名传说可免费融合为神话，两名神话可融合为棱彩。满编时招来的传说在工坊候补。<span v-for="g in GRADES" :key="g.min" :style="{color:g.color}">{{ g.min }}分 {{ g.name }}（+{{ g.boost }}%）</span>。加成作用于新兵的初始攻疗与生命。</p>
           </div>
           <div class="hand-footnote"><span v-if="wagonHint" class="desk-wagon"><KeyMark name="coin"/>{{ wagonHint }}</span><span v-else>出牌次数在下一波补满。换牌与升星另算。</span><span>空格 暂停<span class="dot-separator">·</span>Enter 出牌<span class="dot-separator">·</span>H 提示</span></div>
         </section>
           <div v-else-if="desk==='forge'" class="forge-modal embedded-panel"><CampRoster :game="game" :pairs="pairs" :apply-merge="forge" @champion="chooseChampion" @lock="lockSoldier" @field-reserve="id=>{if(rules.fieldReserve(game,id)){audio.play('deploy');save()}}" @commission="appoint" @close="setDesk('orders')"/></div>
           <div v-else-if="desk==='brief'" class="brief-modal embedded-panel"><BattlePlan embedded :wave="scoutWaveInfo" :intel="scout" :schedule="scoutSchedule" :formation="game.formation" :in-shop="game.phase==='shop'" @choose="changeFormation"/></div>
           <section v-else-if="desk==='press'" class="inline-press"><CardPress :game="game" :apply="applyPrint"/></section>
-          <section v-else-if="desk==='supply'" class="supply-section"><div class="section-title"><span>{{ game.rewardChosen ? '本波补给已领取' : '先选择一项战后补给' }}</span><small>{{ game.rewards.length }} 选一 · 免费</small></div><div class="reward-grid"><button v-for="choice in game.rewards" :key="choice.id" class="reward-card key-ticket" :class="{ chosen: game.rewardChosen === choice.id || game.rewardChosen?.id === choice.id }" :disabled="!!game.rewardChosen" @click="reward(choice)"><PixelSprite atlas="relics" :columns="5" :rows="2" :frame="rewardFrames[choice.id]"/><div><strong>{{ choice.name || choice.title }}</strong><small>{{ choice.description || choice.desc }}</small></div><span class="reward-plus">{{ game.rewardChosen === choice.id ? '✓' : '+' }}</span></button></div></section>
+          <section v-else-if="desk==='supply'" class="supply-section">
+            <div class="section-title"><span>{{ game.rewardChosen ? '本波补给已领取' : '先选择一项战后补给' }}</span><small>{{ game.rewards.length }} 选一 · 免费</small></div>
+            <div class="reward-grid"><button v-for="choice in game.rewards" :key="choice.id" class="reward-card key-ticket" :data-reward="choice.id"
+              :class="{chosen:game.rewardChosen===choice.id,unavailable:!rewardStatus(choice).available && !game.rewardChosen}"
+              :disabled="!rewardStatus(choice).available" :aria-describedby="'reward-reason-'+choice.id" @click="reward(choice)">
+              <PixelSprite atlas="relics" :columns="5" :rows="2" :frame="rewardFrames[choice.id]"/>
+              <div><strong>{{ choice.name || choice.title }}</strong><small :id="'reward-reason-'+choice.id">{{ rewardDescription(choice) }}</small></div>
+              <span class="reward-plus">{{ game.rewardChosen===choice.id ? '✓' : !rewardStatus(choice).available ? '无需修复' : '+' }}</span>
+            </button></div>
+          </section>
           <FieldMarket v-else-if="desk==='market'" :game="game" :offers="shopJokers" :frame-of="relicFrame" @purchase="purchase" @reroll="reroll"/>
 
-          <section v-else-if="desk==='report'"><p v-if="game.champion">主将 · {{ championProgress(game.champion) }} · {{ game.champion.xp }} 经验</p><p v-if="feintHint" class="feint-order">{{ feintHint }}</p><WaveReport expanded :report="report" :uses="game.fusionUses" :tactics="game.tacticsReport" :formation="formation.name"/></section>
+          <section v-else-if="desk==='report'">
+            <div class="battle-history-tools">
+              <label>战报记录<select class="key-select" aria-label="选择本地战报" v-model="historySelection"><option value="">当前波次</option>
+                <option v-for="record in combatHistory.slice().reverse()" :key="record.waveId" :value="record.waveId">第 {{ record.wave }} 波 · {{ record.seed }} · {{ record.result==='lost'?'失守':'守住' }}{{ record.partial?' · 部分记录':'' }}</option>
+              </select></label>
+              <button class="key-ink" @click="downloadCombatHistory" :disabled="!combatHistory.length && !game.lastCombatReport">导出本地战报 JSON</button>
+            </div>
+            <p class="history-notice">已保存 {{ combatHistory.length }} 波，仅在本机浏览器保存。最多保留 1000 波且不超过 3 MiB，较早记录会自动清理；可导出留存。</p>
+            <p v-if="!historyAvailable" class="history-notice" role="status">战报保存失败，当前波数据仍可查看和导出，请检查浏览器存储空间。</p>
+            <WaveReport expanded :combat="selectedCombat" :report="historySelection ? [] : report" :uses="historySelection ? {} : game.fusionUses" :tactics="game.tacticsReport" :formation="formation.name"/>
+          </section>
           <section v-else-if="desk==='menu'" class="scene-menu">
             <h2>随军手册</h2>
             <div class="menu-actions">
               <button class="key-ink" @click="openCodex()"><KeyMark name="allies"/>军团图鉴</button>
               <button class="key-ink" @click="showHelp"><KeyMark name="book"/>玩法指南</button>
               <button class="key-ink" @click="openGuide('performer')"><KeyMark name="trick"/>{{ hero.name }}的故事与打法</button>
+              <button class="key-ink" @click="setDesk('report')"><KeyMark name="order"/>战报与本地历史</button>
+              <button v-if="onboarding" class="key-link" @click="skipTutorial('all')">结束引导，开放全部功能</button>
               <ScoreToggle/>
               <button class="key-ink" :aria-pressed="sound" @click="toggleSound"><KeyMark name="time"/>音效{{ sound?'开':'关' }}</button>
               <button class="key-ink" @click="showRunSelection"><KeyMark name="return"/>返回封面</button>
             </div>
-            <WarCollege :game="game" @train="train" @book="pokerPanel='book'"/>
+            <WarCollege v-if="feature('college')" :game="game" @train="train" @book="pokerPanel='book'"/>
             <div v-if="game.phase==='shop'" class="menu-actions">
               <button v-for="[id,label] in shopTabs" :key="id" class="key-tab" @click="setDesk(id)">{{ label }}</button>
             </div>
@@ -833,7 +922,7 @@ onBeforeUnmount(() => {
 
 
 
-      <section v-else ref="modalEl" class="modal result-modal" role="dialog" aria-modal="true" aria-labelledby="result-title"><div class="result-emblem">{{ game.phase === 'won' ? '♛' : '♠' }}</div><p class="eyebrow">{{ game.phase === 'won' ? 'THE FINAL CURTAIN' : 'EVERY END IS A NEW HAND' }}</p><h2 id="result-title">{{ game.phase === 'won' ? '今夜，命运听你的。' : '这一幕，暂且落幕。' }}</h2><p>{{ timeoutMessage || (game.phase === 'won' ? (game.campaignLength===6 ? '旧版六波远征已完成，你的胜利记录已保留。' : '十二波敌军尽数退场，无冕之王与缀命皇后已被击败。') : '城门已经失守。带着这局的经验，重新组合你的下一手。') }}</p><WaveReport :report="report" :uses="game.fusionUses" :tactics="game.tacticsReport" :formation="formation.name"/><p v-if="runBest" class="daily-result">每日同局 · {{ game.seed.slice(6) }}<br/>本机最佳守住 {{ runBest.waves }} 波 · 城门 {{ runBest.gate }} 耐久 · 击退 {{ runBest.kills }} 名</p><div class="result-stats"><div><strong>{{ game.stats.wavesCleared }}<small>/ {{ game.campaignLength || waves.length }}</small></strong><span>突破波次</span></div><div><strong>{{ game.stats.deploys }}</strong><span>出牌指令</span></div><div><strong>{{ game.stats?.kills || 0 }}</strong><span>击退敌军</span></div><div><strong>{{ game.stats?.bestHand || '—' }}</strong><span>最佳牌型</span></div></div><div v-if="game.promotions || game.fusions" class="result-training"><PixelSprite v-if="veteran" v-bind="getSpriteFrame(veteran)"/><div><strong v-if="veteran">幸存精英 · {{ veteran.fusionJobs?.length > 1 ? fusionProfessionNames(veteran).join(' · ') : FUSION_BY_ID[veteran.fusion]?.name }}</strong><small v-if="veteran">{{ veteran.suit }}{{ veteran.rank }} {{ veteran.name }}</small><p>本局升星 {{ game.promotions }} 次 · 融合 {{ game.fusions }} 次</p></div></div><div class="result-jokers"><RelicArt v-for="joker in ownJokers" :key="joker.id" :item="joker" :frame="relicFrame(joker)" /></div><div class="modal-button-row"><button class="secondary-button key-ink" @click="startRun(game.seed, game.doctrine, game.difficulty)"><KeyMark name="cards"/>重试同一开局</button><button class="gold-button key-command" @click="intro = true; savedGame = null"><KeyMark name="trick"/>再开一局 <span>↗</span></button></div><small class="result-seed">{{ hero.name }} · {{ chosenDoctrine.name }} · {{ game.difficulty === 'veteran' ? '险境' : '标准' }} · 种子 {{ game.seed }}</small></section>
+      <section v-else ref="modalEl" class="modal result-modal" role="dialog" aria-modal="true" aria-labelledby="result-title"><div class="result-emblem">{{ game.phase === 'won' ? '♛' : '♠' }}</div><p class="eyebrow">{{ game.phase === 'won' ? 'THE FINAL CURTAIN' : 'EVERY END IS A NEW HAND' }}</p><h2 id="result-title">{{ game.phase === 'won' ? '今夜，命运听你的。' : '这一幕，暂且落幕。' }}</h2><p>{{ timeoutMessage || (game.phase === 'won' ? (game.campaignLength===6 ? '旧版六波远征已完成，你的胜利记录已保留。' : '十二波敌军尽数退场，无冕之王与缀命皇后已被击败。') : '城门已经失守。带着这局的经验，重新组合你的下一手。') }}</p><WaveReport :combat="currentCombat" :report="report" :uses="game.fusionUses" :tactics="game.tacticsReport" :formation="formation.name"/><p v-if="runBest" class="daily-result">每日同局 · {{ game.seed.slice(6) }}<br/>本机最佳守住 {{ runBest.waves }} 波 · 城门 {{ runBest.gate }} 耐久 · 击退 {{ runBest.kills }} 名</p><div class="result-stats"><div><strong>{{ game.stats.wavesCleared }}<small>/ {{ game.campaignLength || waves.length }}</small></strong><span>突破波次</span></div><div><strong>{{ game.stats.deploys }}</strong><span>出牌指令</span></div><div><strong>{{ game.stats?.kills || 0 }}</strong><span>击退敌军</span></div><div><strong>{{ game.stats?.bestHand || '—' }}</strong><span>最佳牌型</span></div></div><div v-if="game.promotions || game.fusions" class="result-training"><PixelSprite v-if="veteran" v-bind="getSpriteFrame(veteran)"/><div><strong v-if="veteran">幸存精英 · {{ veteran.fusionJobs?.length > 1 ? fusionProfessionNames(veteran).join(' · ') : FUSION_BY_ID[veteran.fusion]?.name }}</strong><small v-if="veteran">{{ veteran.suit }}{{ veteran.rank }} {{ displayName(veteran) }}</small><p>本局升星 {{ game.promotions }} 次 · 融合 {{ game.fusions }} 次</p></div></div><div class="result-jokers"><RelicArt v-for="joker in ownJokers" :key="joker.id" :item="joker" :frame="relicFrame(joker)" /></div><div class="modal-button-row"><button class="secondary-button key-ink" @click="startRun(game.seed, game.doctrine, game.difficulty)"><KeyMark name="cards"/>重试同一开局</button><button class="gold-button key-command" @click="intro = true; savedGame = null"><KeyMark name="trick"/>再开一局 <span>↗</span></button></div><small class="result-seed">{{ hero.name }} · {{ chosenDoctrine.name }} · {{ game.difficulty === 'veteran' ? '险境' : '标准' }} · 种子 {{ game.seed }}</small></section>
     </div>
   </div>
 </template>

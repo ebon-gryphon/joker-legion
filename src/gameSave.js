@@ -22,6 +22,8 @@ import { createGame } from './campaign.js'
 import { makeSchedule, spawnEnemies } from './waveSchedule.js'
 import { PERFORMANCES } from './performance.js'
 import { BOSS_SKILLS, isBoss } from './bossRules.js'
+import { validCombatStats, migrateCombatStats } from './combatStats.js'
+import { validOnboarding, migrateOnboarding } from './onboarding.js'
 
 const RESERVED = new Set(['__proto__', 'constructor', 'prototype'])
 
@@ -231,6 +233,7 @@ function validResources(data) {
 }
 
 function validProgress(data) {
+  if (!validOnboarding(data.onboarding)) return false
   const levelKeys = Object.keys(ORDER_BOOK).filter(key => data.orderRules !== 1 || !ORDER_BOOK[key].secret)
   if (data.orderRules !== undefined && (![1, 2, 3].includes(data.orderRules) ||
       (!Object.hasOwn(REGIMENTS, data.orderTarget) && !(data.orderRules === 3 && data.orderTarget === null)) || typeof data.trainedHere !== 'boolean' ||
@@ -372,5 +375,9 @@ function migrateExpedition(data) {
     }
   }
   pristine.effects = []
+  if (data.onboarding !== undefined) pristine.onboarding = migrateOnboarding(data.onboarding)
+  // Optional measurement data never makes an otherwise valid expedition unplayable.
+  const measured = validCombatStats(data) ? data : {}
+  migrateCombatStats(pristine, measured)
   return pristine
 }
