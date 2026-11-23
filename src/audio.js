@@ -2,10 +2,21 @@
 import { soundCharacter } from './combatAudio.js'
 import { PERFORMANCES } from './performance.js'
 import { createMusic } from './music.js'
+// Short presentation accents are independent of ordinary combat voices.
+export function presentationPhrase(kind,{grade=0,full=true}={}) {
+  if(kind==='reveal' && grade>=4)return [[784,.12,0,'triangle',.021],[1175,.18,.055,'sine',.018]]
+  if(kind==='cheer' && grade>4){
+    const pitches=grade>=6?[392,587,784,988]:[330,494,659]
+    return pitches.slice(0,full?pitches.length:2).map((note,i)=>[note,full?.28:.16,i*(full?.065:.045),'triangle',full?.021:.018])
+  }
+  if(kind==='order')return [[440,.07,0,'triangle',.016],[660,.09,.045,'sine',.013]]
+  if(kind==='first-action')return [[880,.055,0,'sine',.010]]
+  return []
+}
 export function createAudio() {
   let context, master, preview, enabled = true
   let music, score = null, subdued = false
-  const playing = new Set(), recent = new Map()
+  const playing = new Set(), recent = new Map(), presentationVoices = new Set()
   function quietBattle() {
     for (const voice of playing) voice.stop()
     playing.clear(); recent.clear()
@@ -34,6 +45,27 @@ export function createAudio() {
     oscillator.connect(gain); gain.connect(master)
     oscillator.start(context.currentTime + at); oscillator.stop(context.currentTime + at + duration + .03)
   }
+  function quietPresentation() {
+    for(const voice of presentationVoices){
+      try {voice.gain.gain.cancelScheduledValues(context.currentTime);voice.gain.gain.setValueAtTime(.0001,context.currentTime);voice.oscillator.stop(context.currentTime+.012)}catch{}
+    }
+    presentationVoices.clear()
+  }
+  function presentationCue(kind,options={}) {
+    const phrase=presentationPhrase(kind,options)
+    if(!enabled || !phrase.length)return false
+    unlock();if(!context || !master)return false
+    for(const [frequency,duration,at,wave,volume] of phrase){
+      const oscillator=context.createOscillator(),gain=context.createGain(),voice={oscillator,gain}
+      oscillator.type=wave;oscillator.frequency.setValueAtTime(frequency,context.currentTime+at)
+      gain.gain.setValueAtTime(0,context.currentTime+at);gain.gain.linearRampToValueAtTime(volume,context.currentTime+at+.008)
+      gain.gain.exponentialRampToValueAtTime(.0001,context.currentTime+at+duration)
+      oscillator.connect(gain);gain.connect(master);presentationVoices.add(voice)
+      oscillator.onended=()=>{presentationVoices.delete(voice);oscillator.disconnect?.();gain.disconnect?.()}
+      oscillator.start(context.currentTime+at);oscillator.stop(context.currentTime+at+duration+.03)
+    }
+    return true
+  }
   return {
     unlock,
     setScore(scene, quiet) {
@@ -43,9 +75,9 @@ export function createAudio() {
     setEnabled(value) {
       enabled = value
       if (master) master.gain.value = enabled ? .76 : 0
-      if (!enabled) { quietBattle(); stopPreview() }
+      if (!enabled) { quietBattle(); stopPreview(); quietPresentation() }
     },
-    quietBattle, stopPreview,
+    quietBattle, stopPreview, presentationCue, quietPresentation,
     previewAction(profile, kind) {
       if (!enabled || !profile) return
       unlock(); stopPreview()
@@ -88,6 +120,6 @@ export function createAudio() {
       else if (kind === 'win') [294, 370, 440, 587].forEach((n, i) => tone(n, .5, i * .13, 'triangle'))
       else if (kind === 'lose') [220, 196, 147].forEach((n, i) => tone(n, .5, i * .19, 'triangle'))
     },
-    destroy() { quietBattle(); stopPreview(); music?.destroy(); context?.close().catch(() => {}) },
+    destroy() { quietBattle(); stopPreview(); quietPresentation(); music?.destroy(); context?.close().catch(() => {}) },
   }
 }

@@ -191,9 +191,10 @@ export function runBuildStrategy(route,{fixtures=true}={}) {
   return log
 }
 
-export function replayBuild(log) {
+export function replayBuild(log,{onAction,onTick}={}) {
   const game=E.createGame({seed:log.seed,doctrine:log.doctrine,difficulty:log.difficulty})
   for(const entry of log.actions) {
+    const before=onAction?E.snapshotGame(game):null
     assert.equal(game.wave,entry.wave,'Replay wave at action '+entry.n)
     const p=entry.params;let result
     if(entry.type==='select') {
@@ -217,10 +218,11 @@ export function replayBuild(log) {
     else if(entry.type==='reroll'){assert.deepEqual(game.shop,p.offersBefore);result=E.rerollShop(game)}
     else if(entry.type==='research')result=E.trainOrder(game,p.key)
     else if(entry.type==='next-wave')result=E.nextWave(game)
-    else if(entry.type==='tick'){for(let i=0;i<p.count;i++)E.tick(game,p.dt);result=true}
+    else if(entry.type==='tick'){for(let i=0;i<p.count;i++){E.tick(game,p.dt);onTick?.(game)}result=true}
     else throw Error('Unknown action '+entry.type)
     assert.notEqual(result,false,'Replay rejected action '+entry.n+' '+entry.type)
     assert.deepEqual(budget(game),entry.after,'Replay budget at action '+entry.n)
+    onAction?.({before,after:game,action:entry})
   }
   assert.deepEqual(E.snapshotGame(game),log.finalSnapshot,'Replay final run differs')
   return game

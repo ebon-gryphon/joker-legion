@@ -1,0 +1,5 @@
+.presentation-switch{display:inline-flex;align-items:center;gap:4px}
+.scene-shell .battle-topline .payoff-button{border:1px solid #ad895a;background:#302431ed;color:#f1d4a2;font:11px/1.3 system-ui;padding:5px 8px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;pointer-events:auto}
+.fusion-reveal{margin:8px 0;border:1px solid #aa8b63;background:#302333;padding:8px}.fusion-reveal-controls{display:flex;gap:7px;justify-content:flex-end;margin-top:4px}.fusion-reveal-controls button{font-size:11px;min-height:28px}
+@media(max-width:960px){.scene-shell .battle-topline .payoff-button{position:absolute;top:calc(100% + 5px);left:50%;transform:translateX(-50%);max-width:min(320px,85vw)}}
+@media(max-height:540px){.scene-shell .battle-topline .payoff-button{display:none}}

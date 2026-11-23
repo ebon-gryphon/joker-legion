@@ -9,6 +9,7 @@ import { gradeOf } from './quality.js'
 import { isBoss } from './bossRules.js'
 import { HOSTILE } from './tactics.js'
 import { displayName } from './soldierIdentity.js'
+import { paintUnitPresentation } from './battlefieldPresentation.js'
 import { CROWN } from './battlefieldScenery.js'
 
 const FACTION = { spades: C.steel, hearts: C.red, clubs: C.amber, diamonds: C.violet }
@@ -21,7 +22,7 @@ function fallbackAlly(c, type, x, y, color) {
   else { line(c, x + 10, y - 34, x + 17, y - 22, '#d2ae7c'); line(c, x + 17, y - 22, x + 10, y - 12, '#d2ae7c') }
 }
 
-export function drawUnit(c, unit, sample, time, lag, yMap, enemyArt, cameraTop, inCamp, orderTarget, gameTime, reduced, mark, selectedUnit, targetSide, labels) {
+export function drawUnit(c, unit, sample, time, lag, yMap, enemyArt, cameraTop, inCamp, orderTarget, gameTime, reduced, mark, selectedUnit, targetSide, labels, presentation = null) {
   const enemy = unit.side === 'enemy', boss = isBoss(unit.type), frame = getSpriteFrame(unit), faction = FUSION_BY_ID[unit.fusion]?.color || FACTION[frame.atlas] || unit.color || C.steel
   const walk = sample.walking, walkingFrame = Math.floor(time * 7 + hash(unit.id) * 8) % 4
   const flying = unit.type === 'bat'
@@ -42,7 +43,9 @@ export function drawUnit(c, unit, sample, time, lag, yMap, enemyArt, cameraTop, 
   }
   const stance = !pose && performanceOf(unit)
   const phase = hash(unit.id)*6
-  const body = pose || (stance && (walk && !flying ? walkingPose(stance,time,phase,reduced) : restingPose(stance,time,phase,unit.hitTimer,reduced)))
+  const normalBody = pose || (stance && (walk && !flying ? walkingPose(stance,time,phase,reduced) : restingPose(stance,time,phase,unit.hitTimer,reduced)))
+  const body=(!pose && presentation?.pose) || normalBody
+  const artworkUnit=presentation?.pending?{...unit,grade:0}:unit
   const hitAge = gameTime - unit.impactAt
   const hit = Number.isFinite(hitAge) && hitAge >= 0 && hitAge < .18
   const recoil = hit && !reduced ? Math.sin(Math.PI*hitAge/.18)*(1-hitAge/.18)*(boss || unit.type==='brute' ? 3 : 6) : 0
@@ -54,7 +57,8 @@ export function drawUnit(c, unit, sample, time, lag, yMap, enemyArt, cameraTop, 
   const ground = yMap(sample.y)
   const y = Math.round(boss ? Math.max(ground, cameraTop + height + 26) : ground)
   rect(c, x - width * .3, y - 1, width * .6, 4, '#12131f'); rect(c, x - width * .4, y - 2, width * .8, 2, '#161420')
-  if (unit.grade >= 5) {
+  paintUnitPresentation(c,unit,presentation,x,y,width,height)
+  if (unit.grade >= 5 && !presentation?.pending) {
     diamond(c,x,y+1,24,7,gradeOf(unit).color)
     cross(c,x+15,y-height+5,3,gradeOf(unit).color)
   }
@@ -86,14 +90,20 @@ export function drawUnit(c, unit, sample, time, lag, yMap, enemyArt, cameraTop, 
   c.save()
   if (unit.echoUntil != null) c.globalAlpha = .63
   const wingLift = 0
-  const drawn = drawCardSprite(c,unit,x-width/2+wingLift,y+(body ? 0 : bob)-height-wingLift,
+  const drawn = drawCardSprite(c,artworkUnit,x-width/2+wingLift,y+(body ? 0 : bob)-height-wingLift,
     width-2*wingLift,height+wingLift,{combat:true,pose:body?{...body,clock:time,phase,flinch:hit && !reduced?1-hitAge/.18:0}:body,flip:direction<0,flash:hit && !reduced && hitAge<.05 ? .28 : 0})
   if (!drawn && enemy) {
     const sprite = enemyArt.get(unit.type) || enemyArt.get('raider')
     c.translate(x, y + bob); c.scale(-1, 1); c.drawImage(sprite, -width / 2, -height, width, height)
     if (hit && !reduced && hitAge<.05) { c.globalAlpha = .25; c.drawImage(enemyArt.get(`${unit.type}-flash`) || enemyArt.get('raider-flash'), -width / 2, -height, width, height) }
   } else if (!drawn) fallbackAlly(c, unit.type, x, y + bob, faction)
+  if(drawn && presentation && !presentation.pending && (presentation.reveal || presentation.flash)){
+    c.save();c.globalCompositeOperation='screen';c.globalAlpha=Math.max(presentation.reveal*.20,presentation.flash*.12)
+    drawCardSprite(c,artworkUnit,x-width/2,y-height,width,height,{combat:true,pose:body?{...body,clock:time,phase}:body,flip:direction<0})
+    c.restore()
+  }
   c.restore()
+  paintUnitPresentation(c,unit,presentation,x,y,width,height,{layer:'over'})
   if (unit.lifeline) {
     const knotX = x - width * .32, knotY = y - height * .54
     diamond(c,knotX-3,knotY,4,3,'#e8bf75')
@@ -113,13 +123,13 @@ export function drawUnit(c, unit, sample, time, lag, yMap, enemyArt, cameraTop, 
   }
   c.textAlign = 'center'
   if (!enemy) {
-    const label = displayName(unit)
+    const label = presentation?.pending?'正在集结':displayName(unit)
     if (unit.locked) {
       const lockX=snap(x+barWidth/2+4)
       rect(c,lockX+1,barY-5,5,4,'#f3c977');rect(c,lockX+2,barY-4,3,3,'#322734')
       rect(c,lockX,barY-2,7,6,'#f5d38b');rect(c,lockX+3,barY,1,3,'#413140')
     }
-    labels.push({unit:unit.id,text:label,x,y:barY-4,size:12,color:unit.grade ? gradeOf(unit).color : (royal || unit.standard ? '#ffdc96' : '#f6f0e6')})
+    labels.push({unit:unit.id,text:label,x,y:barY-4,size:12,color:presentation?.pending?'#cfc3cb':unit.grade ? gradeOf(unit).color : (royal || unit.standard ? '#ffdc96' : '#f6f0e6')})
   }
   if (unit.fusion) {
     for (let i = 0; i < 3; i++) rect(c, x - 8 + i * 6, barY + 5, 4, 2, i < unit.skillCharge ? faction : '#585064')

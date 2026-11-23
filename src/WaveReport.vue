@@ -5,7 +5,8 @@ import { FUSION_BY_ID } from './forge.js'
 import { REGIMENTS } from './orders.js'
 import { FORMATION_BY_ID } from './tactics.js'
 import { itemEventGroups, actualEffectText, gateSourceRows, runOutcomeText } from './reportTelemetry.js'
-const props=defineProps({ expanded:Boolean, combat:{type:Object,default:null}, report:{type:Array,default:()=>[]}, uses:{type:Object,default:()=>({})}, tactics:{type:Object,default:()=>({})}, formation:{type:String,default:''} })
+import { deriveReportHighlights } from './presentationFacts.js'
+const props=defineProps({ expanded:Boolean, combat:{type:Object,default:null}, report:{type:Array,default:()=>[]}, uses:{type:Object,default:()=>({})}, tactics:{type:Object,default:()=>({})}, formation:{type:String,default:''}, liveEvents:{type:Array,default:()=>[]} })
 const people=computed(()=>props.combat?.units.filter(row=>row.participated || row.damage || row.healed || row.taken || row.kills) || [])
 const rounded=n=>Math.round(n || 0)
 const regiment=type=>REGIMENTS[type]?.name || type
@@ -13,6 +14,7 @@ const itemGroups=computed(()=>itemEventGroups(props.combat))
 const itemEventCount=computed(()=>itemGroups.value.reduce((count,group)=>count+group.events.length,0))
 const gateSources=computed(()=>gateSourceRows(props.combat))
 const outcomeText=computed(()=>runOutcomeText(props.combat))
+const highlights=computed(()=>deriveReportHighlights(props.combat,{liveEvents:props.liveEvents}))
 const shownFormation=computed(()=>props.combat ? FORMATION_BY_ID[props.combat.formation]?.name || '阵型未记录' : props.formation)
 const shownTactics=computed(()=>props.combat ? props.combat.tacticsReport || {} : props.tactics)
 const shownUses=computed(()=>props.combat ? props.combat.fusionUses || {} : props.uses)
@@ -37,6 +39,10 @@ const gateView=computed(()=> {
       <p v-if="combat.partial" class="report-caveat">其中记录了 {{ combat.duration.toFixed(1) }} 秒的贡献，早先数据没有分配给个人。</p>
       <p v-if="Math.abs(combat.gate.untracked)>.01" class="report-caveat">城门另有 {{ rounded(Math.abs(combat.gate.untracked)) }} 点未分类变化。</p>
       <p v-if="outcomeText" class="report-run-outcome">{{ outcomeText }}</p>
+      <details v-if="highlights.length" class="report-payoffs"><summary class="key-disclosure">关键兑现 · 只读实际记录</summary>
+        <p v-for="item in highlights" :key="item.id"><strong>{{ item.label }}</strong><span>{{ item.detail }}</span></p>
+        <small>只作归纳，不另加分、不重复计伤害，也不把战团总收益归给单独一手。</small>
+      </details>
       <details class="report-gate-sources"><summary class="key-disclosure">城门损伤来源</summary><p v-if="gateSources===null" class="report-caveat">这份旧记录没有保存损伤来源分类。</p><p v-else-if="!gateSources.length">本波没有已记录的城门损伤。</p><p v-for="source in gateSources || []" :key="source.id">{{ source.label }} <b>{{ rounded(source.amount) }}</b></p><small>按实际损伤分类，修复量在上方另列。</small></details>
       <table class="personal-report">
         <caption>个人贡献 · 伤害与承伤按生命损失计，治疗不计溢出</caption>
@@ -69,4 +75,5 @@ const gateView=computed(()=> {
 .personal-report{width:100%;table-layout:fixed}.personal-report caption{text-align:left;font-size:10px;line-height:1.6;color:#aaa6b7;padding-bottom:7px}.personal-report th:first-child{width:36%}.personal-report th,.personal-report td{padding:8px 4px;font-size:11px;text-align:right;vertical-align:top}.personal-report th:first-child{text-align:left}.personal-report th strong{display:block;font-size:12px;overflow-wrap:anywhere}.personal-report small{display:block;font-size:9px;font-weight:normal;color:#b4aebf;line-height:1.5}.personal-report em{font-size:9px;color:#bba6e8;font-style:normal}.personal-report tfoot{border-top:1px solid #655a70}
 .system-report,.order-report{margin:12px 0;padding-top:9px;border-top:1px solid #51465d;font-size:11px}.system-report p,.order-report p{margin:6px 0;line-height:1.6}.system-report span,.order-report span{display:block;color:#c5b7a3}.system-report>small,.order-report>small{color:#aaa6b6;line-height:1.6}.legacy-report{font-size:11px}
 .report-gate-sources,.report-item-events{margin:9px 0;font-size:11px;line-height:1.6}.report-gate-sources>p{display:flex;gap:8px;justify-content:space-between;margin:4px 0}.report-gate-sources>small,.report-item-events>small{color:#aaa6b6}.report-run-outcome{font-size:11px;color:#e2c79c}.report-item-group{border-top:1px solid #51465d;padding:8px 0}.report-item-group>span{display:block;color:#bfb0c7}.report-item-group>p{color:#e2c79c;margin:3px 0}.report-item-timeline ol{padding-left:18px;margin:5px 0}.report-item-timeline li{margin:5px 0 9px;overflow-wrap:anywhere}.report-item-timeline p{margin:3px 0}.report-item-timeline small{color:#d9c6aa}
+.report-payoffs{margin:10px 0;padding:8px 10px;border-left:2px solid #b69662;background:#302638;font-size:11px;line-height:1.6}.report-payoffs p{margin:7px 0}.report-payoffs strong,.report-payoffs span{display:block}.report-payoffs strong{color:#e5c18a}.report-payoffs span{color:#e7dccb}.report-payoffs>small{color:#baadc7}
 </style>

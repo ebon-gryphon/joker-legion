@@ -26,8 +26,9 @@ try {
  const wait=async(expr,limit=120)=>{for(let i=0;i<limit;i++){if(await run(expr))return;await pause(80)}throw Error('timeout '+expr+' '+await run('document.body.innerText.slice(-2000)'))}
  async function click(css,{delay=45}={}) {
   await wait(`document.querySelector(${JSON.stringify(css)})?.getClientRects().length && !document.querySelector(${JSON.stringify(css)}).disabled`)
-  const b=await run(`(()=>{const e=document.querySelector(${JSON.stringify(css)});e.scrollIntoView({block:'nearest'});const r=e.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2;return {x,y,hit:e.contains(document.elementFromPoint(x,y))}})()`)
-  assert.ok(b.hit,css+' blocked')
+  const b=await run(`(()=>{const e=document.querySelector(${JSON.stringify(css)});e.scrollIntoView({block:'nearest'});const r=e.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2,h=document.elementFromPoint(x,y);return {x,y,hit:e.contains(h),obstacle:h?.className,width:innerWidth,height:innerHeight}})()`)
+  if(!b.hit)await shot('blocked-control')
+  assert.ok(b.hit,css+' blocked '+JSON.stringify(b))
   for(const type of ['mousePressed','mouseReleased'])await send('Input.dispatchMouseEvent',{type,x:b.x,y:b.y,button:'left',clickCount:1})
   await pause(delay)
  }

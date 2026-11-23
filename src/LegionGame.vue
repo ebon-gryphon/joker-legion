@@ -11,6 +11,11 @@ import JokerTable from './JokerTable.vue'
 import ScoreToggle from './ScoreToggle.vue'
 import ScoreBreakdown from './ScoreBreakdown.vue'
 import ScoreSequence from './ScoreSequence.vue'
+import RecruitReveal from './RecruitReveal.vue'
+import BattlePayoffs from './BattlePayoffs.vue'
+import {createPresentationController} from './presentationEvents.js'
+import {createPresentationScene} from './presentationScene.js'
+import './presentation.css'
 import PerformerGuide from './PerformerGuide.vue'
 import { performerOf } from './performers.js'
 import { getSpriteFrame, pixelAssetUrl } from './spriteAtlas.js'
@@ -108,6 +113,66 @@ const orderDetails = ref(false)
 const rarityReceipt=ref(null)
 // Visual receipts are deliberately outside the saved game. Reloading never replays a settlement.
 const scoreReceipt=ref(null)
+const deployReceipt=ref(null),fusionReceipt=ref(null),scoreSequenceRef=ref(null)
+const presentationEnabled=ref(true),presentationPaused=ref(false),presentationSpeed=ref(1),presentationConsumedIds=ref([]),presentationEvents=ref([])
+const lastCombatCue=computed(()=>presentationEvents.value.filter(event=>event.actual).at(-1))
+const performanceFeed=createPresentationController(),presentationScene=createPresentationScene()
+const sceneWave=()=>String(game.value.seed)+'/'+game.value.battleId+'/'+game.value.wave
+let fusionPresentationId=null
+let battlefieldCues=[]
+let presentationSuppressedUnits=[]
+let presentationSuppressedEffects=[]
+function suppressQualityEffects(before) {
+  const old=new Set((before.effects || []).map(effect=>effect.id))
+  const ids=game.value.effects.filter(effect=>!old.has(effect.id) && effect.type==='burst' && /传说|神话|棱彩|精良|稀有|卓越/.test(String(effect.text || ''))).map(effect=>effect.id)
+  presentationSuppressedEffects=[...new Set([...presentationSuppressedEffects,...ids])]
+}
+const presentationSounds=new Set()
+function resetPresentation({fresh=false}={}) {
+  scoreReceipt.value=null;deployReceipt.value=null;fusionReceipt.value=null;fusionPresentationId=null
+  presentationPaused.value=false;presentationConsumedIds.value=[];presentationEvents.value=[]
+  if(fresh)presentationScene.reset();else presentationScene.skip()
+  performanceFeed.reset(toRaw(game.value))
+  battlefieldCues=[]
+  presentationSuppressedUnits=[]
+  presentationSuppressedEffects=[]
+  presentationSounds.clear()
+  const boundary=game.value.logs.findIndex(row=>row.text===waves[game.value.wave-1]?.name+'即将来袭 · 可整编驻军或继续征兵')
+  const recent=boundary>=0?game.value.logs.slice(0,boundary):game.value.logs
+  const past=(game.value.combatLedger?.orders || []).some(order=>(order.recruitment?.grade || 0)>4) || recent.some(row=>/融合为(神话|棱彩)/.test(row.text))
+  presentationScene.prime(sceneWave(),past)
+}
+function acceptPresentation(before) {
+  const facts=performanceFeed.onDeploy(before,toRaw(game.value))
+  scoreReceipt.value=game.value.lastDeploy?.scoreTrace || null
+  suppressQualityEffects(before)
+  deployReceipt.value=facts?{...facts,changedCardIds:before.hand.filter(card=>card.baseFace && before.selected.includes(card.id)).map(card=>card.id)}:null
+  if(facts?.recruitment.status==='fielded')presentationSuppressedUnits=[...new Set([...presentationSuppressedUnits,facts.recruitment.unitId])]
+  if(facts)presentationScene.accept({...facts,id:scoreReceipt.value.id},{waveKey:sceneWave(),army:liveAllies.value.map(unit=>unit.id)})
+  presentationPaused.value=false;fusionReceipt.value=null;fusionPresentationId=null
+  presentationEvents.value=performanceFeed.getEvents()
+}
+function presentationStep({id,step,done}) {
+  if(done || id!==scoreReceipt.value?.id || !presentationEnabled.value || reducedMotion.value)return
+  const key=id+'/'+step.id
+  if(presentationSounds.has(key))return
+  presentationSounds.add(key)
+  presentationScene.stage(id,step.id)
+  if(step.id==='quality' && game.value.lastDeploy.captainGrade>=4)audio.presentationCue?.('reveal',{grade:game.value.lastDeploy.captainGrade})
+  if(step.id==='muster' && game.value.lastDeploy.captainGrade>4)audio.presentationCue?.('cheer',{grade:game.value.lastDeploy.captainGrade,full:presentationScene.get().cheer?.full})
+  if(step.id==='order')audio.presentationCue?.('order')
+}
+function presentationComplete({id,reason}) {
+  if(!presentationConsumedIds.value.includes(id))presentationConsumedIds.value=[...presentationConsumedIds.value,id].slice(-100)
+  presentationScene.complete(id,reason)
+  if(reason!=='finished')audio.quietPresentation?.()
+}
+function skipPresentation() {scoreSequenceRef.value?.finish('skipped');presentationScene.skip();battlefieldCues=[];fusionReceipt.value=null;fusionPresentationId=null;audio.quietPresentation?.()}
+function togglePresentation() {
+  presentationEnabled.value=!presentationEnabled.value
+  performanceFeed.setEnabled(presentationEnabled.value);presentationScene.setEnabled(presentationEnabled.value)
+  if(!presentationEnabled.value){skipPresentation();battlefieldCues=[];presentationEvents.value=[]}
+}
 let receiptTimer
 const campTabs = [['orders','出牌征兵'],['feint','亮假旗'],['forge','升星融合'],['brief','阵型军议'],['press','牌匠改印']]
 const shopTabs = [['brief','下波军情'],['report','本波战报']]
@@ -146,10 +211,11 @@ function armTrick() {
   if (hero.value.id === 'ghost') palmId.value = game.value.selected.at(-1) || null
 }
 function playTrick(id, step) {
+  const before=hero.value.id==='voice'?rules.snapshotGame(toRaw(game.value)):null
   if (!trickArmed.value || !rules.useTrick(game.value,id,step)) return
   updateOnboarding(game.value,'trick')
   cancelTrick()
-  if (hero.value.id === 'voice') { scoreReceipt.value=game.value.lastDeploy?.scoreTrace || null; showRarity() }
+  if (hero.value.id === 'voice') { acceptPresentation(before); showRarity() }
   audio.play(hero.value.id)
   if (hero.value.id!=='voice' || !scoreReceipt.value) note(game.value.logs[0].text)
   save()
@@ -411,7 +477,18 @@ const pairs = computed(() => workshopPairs(game.value))
 const availableRecipes = computed(() => pairs.value.profession.length)
 const workshopHint = computed(() => pairs.value.ascend.length ? '可升品质 · 免费融合' : availableRecipes.value ? (game.value.gold < FUSION_COST ? '材料齐 · 需 ' + FUSION_COST + ' 金币' : availableRecipes.value + ' 种职业可融合') : pairs.value.promote.length ? '有士兵可升星' : '查看升星与融合配方')
 function forge(leader, donor, kind) {
+  const before=rules.snapshotGame(toRaw(game.value))
   if (!rules.forgeUnit(game.value, leader, donor, kind)) return false
+  const facts=performanceFeed.onAscend(before,toRaw(game.value),leader)
+  if(facts) {
+    suppressQualityEffects(before)
+    presentationSuppressedUnits=[...new Set([...presentationSuppressedUnits,leader])]
+    fusionPresentationId='ascend/'+sceneWave()+'/'+game.value.fusions
+    fusionReceipt.value={recruitment:{...facts,status:facts.placement==='reserve'?'reserve':'fielded',reason:facts.placement==='reserve'?'融合升品完成，仍在候补席，未增加上阵人数。':'融合升品完成，主兵保留身份并在原兵位。'}}
+    presentationScene.accept({id:fusionPresentationId,recruitment:{...fusionReceipt.value.recruitment,unitId:leader}},{waveKey:sceneWave(),army:facts.armyUnitIds,immediate:true})
+    if(!presentationEnabled.value || reducedMotion.value)presentationScene.skip()
+    else {audio.presentationCue?.('reveal',{grade:facts.grade});audio.presentationCue?.('cheer',{grade:facts.grade,full:presentationScene.get().cheer?.full})}
+  }
   audio.play(kind === 'promote' ? 'combo' : 'fusion')
   save()
   return true
@@ -481,6 +558,7 @@ function save() {
 function showRunSelection() {
   if (!intro.value) {
     cancelTrick(); save(); dealDay.value = dailySeed()
+    resetPresentation()
     savedGame.value = ['won', 'lost'].includes(game.value.phase) ? null : game.value
     pickedDoctrine.value = game.value.doctrine
     pickedDifficulty.value = game.value.difficulty
@@ -496,7 +574,7 @@ function requestStart(daily = false) {
 function startRun(seed = requestedSeed.value ?? newSeed(), doctrine = pickedDoctrine.value, difficulty = pickedDifficulty.value) {
   requestedSeed.value = null
   game.value = createGame({ seed, doctrine, difficulty })
-  scoreReceipt.value=null
+  resetPresentation({fresh:true})
   initializeCombatStats(game.value,{runId:globalThis.crypto?.randomUUID?.() || 'run-'+Date.now()+'-'+newSeed()})
   initOnboarding(game.value,{enabled:true})
   historySelection.value=''
@@ -506,8 +584,8 @@ function startRun(seed = requestedSeed.value ?? newSeed(), doctrine = pickedDoct
 }
 function resumeRun() {
   if (!savedGame.value) return
-  scoreReceipt.value=null
   game.value = savedGame.value; enterPhase(); pickedDifficulty.value = game.value.difficulty; intro.value = false; manualPaused.value = game.value.phase === 'battle'; audio.unlock()
+  resetPresentation()
   recordCombatHistory()
   if (!game.value.selected.length) note(game.value.phase === 'battle' ? '战斗已恢复，点击继续即可推进。' : game.value.phase === 'shop' ? '已返回战后商店。' : '已恢复本波备战进度。')
 }
@@ -524,8 +602,8 @@ function showRarity() {
   clearTimeout(receiptTimer)
   rarityReceipt.value=null
   if (deal.captainGrade>deal.grade || deal.captainGrade===4) {
-    audio.play('combo')
     if (!scoreReceipt.value) {
+      audio.play('combo')
       rarityReceipt.value=deal
       receiptTimer=setTimeout(()=>{rarityReceipt.value=null},2200)
     }
@@ -534,8 +612,9 @@ function showRarity() {
 function doDeploy() {
   if (!canDeploy.value || trickArmed.value) return
   const name = preview.value.name
+  const before=rules.snapshotGame(toRaw(game.value))
   if (deploy(game.value) !== false) {
-    scoreReceipt.value=game.value.lastDeploy?.scoreTrace || null
+    acceptPresentation(before)
     updateOnboarding(game.value,'deploy')
     audio.play(['高牌', '对子'].includes(name) ? 'deploy' : 'combo')
     if (!scoreReceipt.value) note(name+' · '+game.value.lastDeploy.score+' 分 · '+game.value.lastDeploy.profession+' '+game.value.lastDeploy.count+' 人入阵')
@@ -647,6 +726,8 @@ function keydown(event) {
 }
 function visibility() { hidden.value = document.hidden; if (!hidden.value) dealDay.value = dailySeed(); if (hidden.value) { manualPaused.value = game.value.phase === 'battle'; save() } }
 watch(() => game.value.phase, (phase, previous) => {
+  if(phase==='ready' && previous!=='ready')resetPresentation()
+  else if(phase!=='ready'){presentationScene.skip();fusionReceipt.value=null;fusionPresentationId=null}
   scoreReceipt.value=null
   if (phase!=='ready') promotionPending.value=null
   updateOnboarding(game.value,'phase')
@@ -705,8 +786,20 @@ onMounted(() => {
       tick(game.value, delta * speed.value, event => events.push(event), captureStep)
       if (events.length && !hidden.value) audio.battleActions(events)
     }
+    const fresh=performanceFeed.sample(toRaw(game.value))
+    if(fresh.length){
+      presentationEvents.value=performanceFeed.getEvents()
+      for(const event of fresh)if(event.actual){
+        for(const unitId of event.unitIds || [])battlefieldCues.push({unitId,kind:event.kind,elapsedMs:0,actual:true})
+        if(presentationEnabled.value && !reducedMotion.value && !hidden.value)audio.presentationCue?.('first-action')
+      }
+    }
+    const visualPaused=presentationPaused.value || hidden.value || intro.value || hasModal.value || (game.value.phase==='battle' && paused.value)
+    presentationScene.advance(delta*1000,{speed:presentationSpeed.value,paused:visualPaused,reducedMotion:reducedMotion.value})
+    if(!visualPaused)battlefieldCues=battlefieldCues.map(cue=>({...cue,elapsedMs:cue.elapsedMs+delta*1000*presentationSpeed.value})).filter(cue=>cue.elapsedMs<650).slice(-6)
+    const presentation={...presentationScene.get(),suppressedUnitIds:presentationSuppressedUnits,suppressedEffectIds:presentationSuppressedEffects,cues:presentationEnabled.value && !reducedMotion.value?battlefieldCues:[]}
     if (!intro.value) renderer.render(toRaw(game.value), { reservedRects:deploymentObstacles(),panelBounds:['orders','soldier'].includes(desk.value) ? scenePanel.value?.getBoundingClientRect() : null, liftedUnit:fieldDrag.value?.moving ? fieldDrag.value.id : null, dragPoint:fieldDrag.value?.point, targetSide:trickArmed.value ? fieldSide.value : null, selectedUnit:fieldDrag.value?.target || fieldMember.value, time: now / 1000, paused: paused.value, reducedMotion: reducedMotion.value,
-      orderTarget: desk.value === 'orders' && selectedCount.value && ordersOpen.value ? preview.value.target : null })
+      presentation,orderTarget: desk.value === 'orders' && selectedCount.value && ordersOpen.value ? preview.value.target : null })
     saveClock += delta
     if (saveClock >= 3) { saveClock = 0; save() }
     frame = requestAnimationFrame(animate)
@@ -757,6 +850,7 @@ onBeforeUnmount(() => {
                 <small>{{ game.phase === 'ready' ? '限时' : '剩余' }}</small> <b>{{ secondsLeft }}</b> <small>秒</small>
               </div>
               <span class="army-tag enemy-tag">来敌 <b>{{ game.phase==='ready'?scout.total:liveEnemies.length }}</b><i></i></span>
+              <button v-if="game.phase==='battle' && lastCombatCue && !game.bossTelegraph && !chime" class="payoff-button key-tab" :title="lastCombatCue.label+'。'+lastCombatCue.reason" @click="setDesk('watch')">{{ lastCombatCue.label }} ↗</button>
             </div>
             <aside v-if="wagonHint && (desk==='field' || desk==='watch')" class="wagon-aside" aria-label="马车情报"><KeyMark name="coin"/>{{ wagonHint }}</aside>
             <div v-if="game.phase==='ready'" class="camp-notification-slot"><Transition name="toast"><div v-if="toast" class="toast-note" :class="toast.tone" role="status"><span>✦</span>{{ toast.text }}</div></Transition></div>
@@ -817,7 +911,7 @@ onBeforeUnmount(() => {
             <h2>{{ game.waveTimeout?.count || game.waveKills < game.schedule.length ? '险守城门' : '守城成功' }}</h2>
             <p>{{ timeoutMessage || ('击退 ' + game.waveKills + ' 名敌军') }} · 城门耐久 {{ Math.ceil(game.baseHp) }}</p>
             <p>归营 {{ game.allies.length }} 名 · 赏金 +{{ 8 + game.wave * 2 + game.tacticsReport.bounty }}</p>
-            <WaveReport expanded :combat="currentCombat" :report="report" :uses="game.fusionUses" :tactics="game.tacticsReport" :formation="formation.name"/>
+            <WaveReport expanded :combat="currentCombat" :live-events="presentationEvents" :report="report" :uses="game.fusionUses" :tactics="game.tacticsReport" :formation="formation.name"/>
             <button class="key-command" @click="openSupplies">选择补给 ↗</button>
           </section>
           <SoldierSheet v-else-if="desk==='soldier' && inspectedSoldier" :advanced="feature('champion')" :unit="inspectedSoldier" :champion="game.champion" @lock="lockSoldier" @champion="chooseChampion"/>
@@ -838,7 +932,7 @@ onBeforeUnmount(() => {
               <span v-if="preview.returning">♛ 主将归队 · {{ championProgress(game.champion) }}</span><span class="muster-strength" :title="preview.strengthDetail">{{ preview.look.name }} · {{ preview.strengthDetail }}</span></div>
           </div>
           <ScoreBreakdown v-if="selectedCount && preview.scoreTrace" :trace="preview.scoreTrace"/>
-          <ScoreSequence v-if="scoreReceipt" v-show="!selectedCount" :trace="scoreReceipt" :speed="speed" :reduced-motion="reducedMotion" @speed="speed=$event"/>
+          <ScoreSequence v-if="scoreReceipt" ref="scoreSequenceRef" v-show="!selectedCount" :trace="scoreReceipt" :receipt="deployReceipt" cinematic :enabled="presentationEnabled" :presentation-paused="presentationPaused" :consumed-ids="presentationConsumedIds" :speed="presentationSpeed" :reduced-motion="reducedMotion" @speed="presentationSpeed=$event" @step="presentationStep" @complete="presentationComplete" @pause="presentationPaused=!presentationPaused"/>
           </div>
           <div class="command-bar"><div class="hand-preview"><span class="preview-sigil">{{ selectedCount ? '✧' : '♧' }}</span><div><strong>{{ selectedCount ? preview.order + ' → ' + REGIMENTS[preview.target].name : '军令 ' + game.energy + ' / ' + game.maxEnergy }}<span v-if="selectedCount" class="cost-tag">{{ preview.prepaid ? '免军令' : '✦ ' + preview.cost }}</span></strong><small>{{ selectedCount ? `受令 ${preview.targetCount} 人 · ${preview.description}` : '可继续组牌，或集结完毕后出战' }}</small></div></div><div class="command-actions"><button class="suggest-button key-tab" aria-label="提示手牌" @click="suggest" :disabled="!ordersOpen || trickArmed || (!game.paidHandsLeft && game.energy<2)" title="选中一手可出的牌（H）"><KeyMark name="cards"/><span>提示</span></button><button class="discard-button key-ink" @click="doDiscard" :disabled="!canDiscard || trickArmed"><KeyMark name="cards"/>换牌<small>{{ game.discards > 0 ? `免费 ${game.discards} 次` : game.phase === 'ready' ? `${redrawFee} 金币` : '次数已尽' }}</small><kbd>D</kbd></button><button class="deploy-button key-command" @click="doDeploy" :disabled="!canDeploy || trickArmed"><KeyMark name="order" class="order-seal"/><span class="order-inscription">{{ deployLabel }}</span></button></div></div>
           <div v-if="orderDetails" id="order-details" class="order-details"><div class="hand-tools">
@@ -873,7 +967,7 @@ onBeforeUnmount(() => {
           </div>
           <div class="hand-footnote"><span v-if="wagonHint" class="desk-wagon"><KeyMark name="coin"/>{{ wagonHint }}</span><span v-else>出牌次数在下一波补满。换牌与升星另算。</span><span>空格 暂停<span class="dot-separator">·</span>Enter 出牌<span class="dot-separator">·</span>H 提示</span></div>
         </section>
-          <div v-else-if="desk==='forge'" class="forge-modal embedded-panel"><CampRoster :game="game" :pairs="pairs" :apply-merge="forge" @champion="chooseChampion" @lock="lockSoldier" @field-reserve="id=>{if(rules.fieldReserve(game,id)){audio.play('deploy');save()}}" @commission="appoint" @close="setDesk('orders')"/></div>
+          <div v-else-if="desk==='forge'" class="forge-modal embedded-panel"><div v-if="fusionReceipt" class="fusion-reveal"><RecruitReveal :receipt="fusionReceipt" kind="fusion"/><div class="fusion-reveal-controls"><button class="key-tab" @click="presentationSpeed=presentationSpeed===1?2:1">{{ presentationSpeed }}×</button><button class="key-link" @click="skipPresentation">收起亮相 / 跳过欢呼</button></div></div><CampRoster :game="game" :pairs="pairs" :apply-merge="forge" @champion="chooseChampion" @lock="lockSoldier" @field-reserve="id=>{if(rules.fieldReserve(game,id)){audio.play('deploy');save()}}" @commission="appoint" @close="setDesk('orders')"/></div>
           <div v-else-if="desk==='brief'" class="brief-modal embedded-panel"><BattlePlan embedded :wave="scoutWaveInfo" :intel="scout" :schedule="scoutSchedule" :formation="game.formation" :in-shop="game.phase==='shop'" @choose="changeFormation"/></div>
           <section v-else-if="desk==='press'" class="inline-press"><CardPress :game="game" :apply="applyPrint"/></section>
           <section v-else-if="desk==='supply'" class="supply-section">
@@ -897,7 +991,7 @@ onBeforeUnmount(() => {
             </div>
             <p class="history-notice">已保存 {{ combatHistory.length }} 波，仅在本机浏览器保存。最多保留 1000 波且不超过 3 MiB，较早记录会自动清理；可导出留存。</p>
             <p v-if="!historyAvailable" class="history-notice" role="status">战报保存失败，当前波数据仍可查看和导出，请检查浏览器存储空间。</p>
-            <WaveReport expanded :combat="selectedCombat" :report="historySelection ? [] : report" :uses="historySelection ? {} : game.fusionUses" :tactics="game.tacticsReport" :formation="formation.name"/>
+            <WaveReport expanded :combat="selectedCombat" :live-events="historySelection?[]:presentationEvents" :report="historySelection ? [] : report" :uses="historySelection ? {} : game.fusionUses" :tactics="game.tacticsReport" :formation="formation.name"/>
           </section>
           <section v-else-if="desk==='menu'" class="scene-menu">
             <h2>随军手册</h2>
@@ -909,6 +1003,7 @@ onBeforeUnmount(() => {
               <button v-if="onboarding" class="key-link" @click="skipTutorial('all')">结束引导，开放全部功能</button>
               <ScoreToggle/>
               <button class="key-ink" :aria-pressed="sound" @click="toggleSound"><KeyMark name="time"/>音效{{ sound?'开':'关' }}</button>
+              <button class="key-ink presentation-switch" :aria-pressed="presentationEnabled" @click="togglePresentation">计分与欢呼演出{{ presentationEnabled?'开':'关' }}</button>
               <button class="key-ink" @click="showRunSelection"><KeyMark name="return"/>返回封面</button>
             </div>
             <WarCollege v-if="feature('college')" :game="game" @train="train" @book="pokerPanel='book'"/>
@@ -918,6 +1013,7 @@ onBeforeUnmount(() => {
             <small>{{ game.difficulty === 'veteran' ? '险境' : '标准' }} · {{ runRecordKey ? '每日同局 '+game.seed.slice(6) : '种子 '+game.seed }} · {{ storageAvailable?'进度自动保存':'当前无法保存进度' }}</small>
           </section>
           <section v-else-if="desk==='watch'" class="watch-grid">
+            <BattlePayoffs :events="presentationEvents"/>
             <div class="field-strength"><h3>在场军团 <small>{{ formation.name }}</small></h3><div class="strength-list">
               <div v-for="role in regiments" :key="role.type" :class="{absent:!role.count}">
                 <PixelSprite v-if="role.leader" v-bind="role.leader"/><SuitMark v-else :suit="REGIMENTS[role.type].suit"/>
@@ -963,7 +1059,7 @@ onBeforeUnmount(() => {
 
 
 
-      <section v-else ref="modalEl" class="modal result-modal" role="dialog" aria-modal="true" aria-labelledby="result-title"><div class="result-emblem">{{ game.phase === 'won' ? '♛' : '♠' }}</div><p class="eyebrow">{{ game.phase === 'won' ? 'THE FINAL CURTAIN' : 'EVERY END IS A NEW HAND' }}</p><h2 id="result-title">{{ game.phase === 'won' ? '今夜，命运听你的。' : '这一幕，暂且落幕。' }}</h2><p>{{ timeoutMessage || (game.phase === 'won' ? (game.campaignLength===6 ? '旧版六波远征已完成，你的胜利记录已保留。' : '十二波敌军尽数退场，无冕之王与缀命皇后已被击败。') : '城门已经失守。带着这局的经验，重新组合你的下一手。') }}</p><WaveReport :combat="currentCombat" :report="report" :uses="game.fusionUses" :tactics="game.tacticsReport" :formation="formation.name"/><p v-if="runBest" class="daily-result">每日同局 · {{ game.seed.slice(6) }}<br/>本机最佳守住 {{ runBest.waves }} 波 · 城门 {{ runBest.gate }} 耐久 · 击退 {{ runBest.kills }} 名</p><div class="result-stats"><div><strong>{{ game.stats.wavesCleared }}<small>/ {{ game.campaignLength || waves.length }}</small></strong><span>突破波次</span></div><div><strong>{{ game.stats.deploys }}</strong><span>出牌指令</span></div><div><strong>{{ game.stats?.kills || 0 }}</strong><span>击退敌军</span></div><div><strong>{{ game.stats?.bestHand || '—' }}</strong><span>最佳牌型</span></div></div><div v-if="game.promotions || game.fusions" class="result-training"><PixelSprite v-if="veteran" v-bind="getSpriteFrame(veteran)"/><div><strong v-if="veteran">幸存精英 · {{ veteran.fusionJobs?.length > 1 ? fusionProfessionNames(veteran).join(' · ') : FUSION_BY_ID[veteran.fusion]?.name }}</strong><small v-if="veteran">{{ veteran.suit }}{{ veteran.rank }} {{ displayName(veteran) }}</small><p>本局升星 {{ game.promotions }} 次 · 融合 {{ game.fusions }} 次</p></div></div><div class="result-jokers"><RelicArt v-for="joker in ownJokers" :key="joker.id" :item="joker" :frame="relicFrame(joker)" /></div><div class="modal-button-row"><button class="secondary-button key-ink" @click="startRun(game.seed, game.doctrine, game.difficulty)"><KeyMark name="cards"/>重试同一开局</button><button class="gold-button key-command" @click="intro = true; savedGame = null"><KeyMark name="trick"/>再开一局 <span>↗</span></button></div><small class="result-seed">{{ hero.name }} · {{ chosenDoctrine.name }} · {{ game.difficulty === 'veteran' ? '险境' : '标准' }} · 种子 {{ game.seed }}</small></section>
+      <section v-else ref="modalEl" class="modal result-modal" role="dialog" aria-modal="true" aria-labelledby="result-title"><div class="result-emblem">{{ game.phase === 'won' ? '♛' : '♠' }}</div><p class="eyebrow">{{ game.phase === 'won' ? 'THE FINAL CURTAIN' : 'EVERY END IS A NEW HAND' }}</p><h2 id="result-title">{{ game.phase === 'won' ? '今夜，命运听你的。' : '这一幕，暂且落幕。' }}</h2><p>{{ timeoutMessage || (game.phase === 'won' ? (game.campaignLength===6 ? '旧版六波远征已完成，你的胜利记录已保留。' : '十二波敌军尽数退场，无冕之王与缀命皇后已被击败。') : '城门已经失守。带着这局的经验，重新组合你的下一手。') }}</p><WaveReport :combat="currentCombat" :live-events="presentationEvents" :report="report" :uses="game.fusionUses" :tactics="game.tacticsReport" :formation="formation.name"/><p v-if="runBest" class="daily-result">每日同局 · {{ game.seed.slice(6) }}<br/>本机最佳守住 {{ runBest.waves }} 波 · 城门 {{ runBest.gate }} 耐久 · 击退 {{ runBest.kills }} 名</p><div class="result-stats"><div><strong>{{ game.stats.wavesCleared }}<small>/ {{ game.campaignLength || waves.length }}</small></strong><span>突破波次</span></div><div><strong>{{ game.stats.deploys }}</strong><span>出牌指令</span></div><div><strong>{{ game.stats?.kills || 0 }}</strong><span>击退敌军</span></div><div><strong>{{ game.stats?.bestHand || '—' }}</strong><span>最佳牌型</span></div></div><div v-if="game.promotions || game.fusions" class="result-training"><PixelSprite v-if="veteran" v-bind="getSpriteFrame(veteran)"/><div><strong v-if="veteran">幸存精英 · {{ veteran.fusionJobs?.length > 1 ? fusionProfessionNames(veteran).join(' · ') : FUSION_BY_ID[veteran.fusion]?.name }}</strong><small v-if="veteran">{{ veteran.suit }}{{ veteran.rank }} {{ displayName(veteran) }}</small><p>本局升星 {{ game.promotions }} 次 · 融合 {{ game.fusions }} 次</p></div></div><div class="result-jokers"><RelicArt v-for="joker in ownJokers" :key="joker.id" :item="joker" :frame="relicFrame(joker)" /></div><div class="modal-button-row"><button class="secondary-button key-ink" @click="startRun(game.seed, game.doctrine, game.difficulty)"><KeyMark name="cards"/>重试同一开局</button><button class="gold-button key-command" @click="intro = true; savedGame = null"><KeyMark name="trick"/>再开一局 <span>↗</span></button></div><small class="result-seed">{{ hero.name }} · {{ chosenDoctrine.name }} · {{ game.difficulty === 'veteran' ? '险境' : '标准' }} · 种子 {{ game.seed }}</small></section>
     </div>
   </div>
 </template>

@@ -9,6 +9,7 @@ import { CAMP_AREA, fitFormation, inCampArea } from './formation.js'
 import { STEP } from './campaignRules.js'
 import { activeWagon, wagonPosition } from './convoy.js'
 import { drawEffect, drawWagon, telegraph, drawLure } from './battlefieldEffects.js'
+import { filterPresentationEffects, sampleUnitPresentation } from './battlefieldPresentation.js'
 import { drawUnit } from './battlefieldUnits.js'
 
 // Interpolates simulation snapshots and paints the 1000 × 360 battlefield.
@@ -131,6 +132,7 @@ export function createBattlefield(canvas) {
       banner(c, 130, 70, true, t); banner(c, 836, 70, false, t + 1)
       gate(c, true, t, game.baseHp, game.maxBaseHp); gate(c, false, t)
     }
+    const presentation=options.presentation?{...options.presentation,reducedMotion:reduced || options.presentation.reducedMotion}:null
     const units = [...allies, ...(game.enemies || [])].filter(unit => unit.hp > 0 && !unit.dead)
     const hasStep = game.phase==='battle' && sampledGame===game && sampledWave===game.wave && Math.abs(game.time-sampledAt-STEP)<1e-6
     const lag = hasStep ? Math.max(0, STEP-game.accumulator) : 0
@@ -141,6 +143,7 @@ export function createBattlefield(canvas) {
       const tails = previousEffects.filter(fx => fx.life <= 0 && fx.life + lag > 0)
       if (tails.length) stageEffects = stageEffects.concat(tails)
     }
+    stageEffects=filterPresentationEffects(stageEffects,[...units,...(game.reserves || [])],presentation)
     const pendingDamage = new Map()
     for (const fx of stageEffects) {
       if (fx.target && fx.amount && fx.life + lag > fx.maxLife) {
@@ -187,7 +190,7 @@ export function createBattlefield(canvas) {
         scouted: unit.side === 'ally' && game.feint?.result === 'active' && unit.type === game.feint.target,
         pendingDamage: pendingDamage.get(unit.id) || 0,
       }
-      const bounds=drawUnit(c,unit,sample,t,lag,yMap,enemyArt,cameraTop,game.phase==='ready',options.orderTarget,visualTime,reduced,game.bossTelegraph,options.selectedUnit,options.targetSide,labels)
+      const bounds=drawUnit(c,unit,sample,t,lag,yMap,enemyArt,cameraTop,game.phase==='ready',options.orderTarget,visualTime,reduced,game.bossTelegraph,options.selectedUnit,options.targetSide,labels,sampleUnitPresentation(unit,presentation))
       if (unit.lure) drawLure(c,unit.lure,visualTime,yMap,reduced)
       if(bounds) campAreas.push(bounds)
     }
