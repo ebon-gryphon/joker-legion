@@ -4,8 +4,9 @@ import { drawArticulatedUniform } from './articulatedSprites.js'
 import { outfitFrame, UNIFORM_ROLES } from './outfits.js'
 import { getSpriteFrame, isUnitAtlas } from './spriteAtlas.js'
 import {
-  HIGH_TIER_ATLAS, HIGH_TIER_PARTS, HIGH_TIER_PROTOTYPES,
+  HIGH_TIER_ATLAS, HIGH_TIER_FUSION_ATLAS, HIGH_TIER_PARTS, HIGH_TIER_PROTOTYPES,
   highTierVisualForFrame, highTierArtReady, highTierFusionModules,
+  drawHighTierFusionModule,
 } from './highTierArt.js'
 
 function context(trace=[]) {
@@ -59,6 +60,80 @@ test('loading the new atlas makes no drawing change to any lower tier or non-pro
     assert.deepEqual(render(records,frame),original,`${role}/${grade}`)
   }
 }))
+
+function primaryGeometry(trace) {
+  let matrix=[1,0,0,1,0,0];const stack=[],draws=[]
+  const multiply=([a,b,c,d,e,f])=>{
+    const [A,B,C,D,E,F]=matrix
+    matrix=[A*a+C*b,B*a+D*b,A*c+C*d,B*c+D*d,A*e+C*f+E,B*e+D*f+F]
+  }
+  for(const [name,...args] of trace) {
+    if(name==='save')stack.push([...matrix])
+    else if(name==='restore')matrix=stack.pop()
+    else if(name==='translate')multiply([1,0,0,1,...args])
+    else if(name==='scale')multiply([args[0],0,0,args[1],0,0])
+    else if(name==='rotate')multiply([Math.cos(args[0]),Math.sin(args[0]),-Math.sin(args[0]),Math.cos(args[0]),0,0])
+    else if(name==='drawImage' && !['armory',HIGH_TIER_FUSION_ATLAS].includes(args[0]))draws.push({args,matrix:[...matrix]})
+  }
+  return draws
+}
+
+test('focused fire and paired-blade accents use four dedicated frames without changing any primary drawing or joint',()=>withCanvas(()=>{
+  const records=new Map([['regalia',artwork('regalia')],['armory',artwork('armory')],[HIGH_TIER_ATLAS,artwork(HIGH_TIER_ATLAS,32)]])
+  const focused=artwork(HIGH_TIER_FUSION_ATLAS,4),poses=[
+    {state:'idle',gesture:'cast',breath:.4},{state:'walk',gesture:'draw',gait:.8},
+    {state:'hit',gesture:'bash',flinch:.6},{state:'action',gesture:'standard',backWeight:.8},
+    {state:'action',gesture:'draw',contact:.9},{state:'salute',gesture:'rise',salute:1,saluteLift:2,contact:1},
+  ]
+  for(const look of HIGH_TIER_PROTOTYPES)for(const grade of [5,6])for(const job of ['fire','assassin'])for(const pose of poses) {
+    const frame=Object.freeze({...outfitFrame(look.role,grade),fusionJobs:Object.freeze([look.job,job])})
+    const module=highTierFusionModules(frame)[0]
+    assert.equal(module.focus.atlas,HIGH_TIER_FUSION_ATLAS)
+    assert.equal(module.focus.frame,(job==='fire'?0:2)+grade-5)
+    records.delete(HIGH_TIER_FUSION_ATLAS);const old=render(records,frame,pose)
+    records.set(HIGH_TIER_FUSION_ATLAS,focused);const current=render(records,frame,pose)
+    assert.deepEqual(primaryGeometry(current),primaryGeometry(old),`${look.job}/${grade}/${job}/${pose.state}`)
+    const parts=current.filter(row=>row[0]==='drawImage' && row[1]===HIGH_TIER_FUSION_ATLAS)
+    assert.equal(parts.length,1,'the paired-blade atlas already contains both blades')
+    assert.equal(parts[0][2]/20,module.focus.frame)
+  }
+}))
+
+test('a missing or failed focused accent keeps the old module and all unrelated accents draw identically',()=>withCanvas(()=>{
+  const records=new Map([['regalia',artwork('regalia')],['armory',artwork('armory')],[HIGH_TIER_ATLAS,artwork(HIGH_TIER_ATLAS,32)]])
+  for(const job of ['fire','assassin']) {
+    const frame={...outfitFrame('flushFive',6),fusionJobs:['sovereign',job]},baseline=render(records,frame)
+    for(const bad of [{ready:false},{...artwork('failed',4),error:true},artwork('missing',0)]) {
+      records.set(HIGH_TIER_FUSION_ATLAS,bad)
+      assert.deepEqual(render(records,frame),baseline)
+    }
+    records.delete(HIGH_TIER_FUSION_ATLAS)
+  }
+  for(const job of ['priest','shield','archer','ward','pike','cavalry','outrider','duelist','blade']) {
+    const frame={...outfitFrame('flushFive',5),fusionJobs:['sovereign',job]},baseline=render(records,frame)
+    records.set(HIGH_TIER_FUSION_ATLAS,artwork(HIGH_TIER_FUSION_ATLAS,4))
+    assert.deepEqual(render(records,frame),baseline,job)
+    records.delete(HIGH_TIER_FUSION_ATLAS)
+  }
+}))
+
+test('broad accents remain below the face and above the planted foot even in the second module slot',()=>{
+  const focused=artwork(HIGH_TIER_FUSION_ATLAS,4)
+  focused.bounds.forEach((bounds,index)=>{bounds.width=index<2?65:100})
+  const records=new Map([[HIGH_TIER_FUSION_ATLAS,focused]])
+  const modules=highTierFusionModules({...outfitFrame('flushFive',6),fusionJobs:['sovereign','fire','assassin']})
+  assert.equal(modules.length,2)
+  for(const module of modules) {
+    const c=context(),bodyHeight=112
+    const anchor=module.anchor?[module.anchor[0]*80,module.anchor[1]*bodyHeight]:[80,10]
+    assert.equal(drawHighTierFusionModule(c,records,module,anchor,bodyHeight,module.angle),true)
+    const move=c.trace.find(row=>row[0]==='translate'),image=c.trace.find(row=>row[0]==='drawImage')
+    const top=move[2]+image[7],bottom=top+image[9],normalScale=52/132
+    assert.ok(top>=bodyHeight*.22,'fire stays to the side and waist blades stay below the face')
+    assert.ok(bottom<bodyHeight,'no accent reaches the ground or the name below it')
+    assert.ok(image[8]*normalScale>=12 && image[9]*normalScale>=18,'normal-size accent has a broad readable footprint')
+  }
+})
 
 test('a missing, failed or incomplete prototype atlas uses the complete existing rig',()=>withCanvas(()=>{
   const records=new Map([['regalia',artwork('regalia')],['armory',artwork('armory')]])

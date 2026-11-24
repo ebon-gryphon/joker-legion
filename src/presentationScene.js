@@ -3,14 +3,17 @@ export function createPresentationScene({enabled=true}={}) {
   let current=null,view={active:false},on=enabled
   const used=new Set(),fullWaves=new Set()
   const clear=()=>{view={active:false}}
+  const cancel=()=>{current=null;clear()}
   function reveal() {
-    if(!on || !current)return
+    if(!on || !current || current.revealed)return
+    current.revealed=true
     const {facts,waveKey,army}=current,r=facts.recruitment
     view.pendingUnitIds=[]
     if(r.grade>=4)view.reveal={active:true,elapsedMs:0,unitId:r.unitId || r.recruitId,grade:r.grade,placement:r.status==='reserve'?'reserve':'field'}
     if(r.grade>4 && ['fielded','reserve'].includes(r.status)) {
       const full=!fullWaves.has(waveKey);fullWaves.add(waveKey)
-      view.cheer={active:true,elapsedMs:0,grade:r.grade,full,unitIds:army.filter(id=>id!==(r.unitId || r.recruitId))}
+      const sourceUnitId=r.unitId || r.recruitId || null
+      view.cheer={active:true,elapsedMs:0,grade:r.grade,full,sourceUnitId,unitIds:[...new Set(army)].filter(id=>id!==sourceUnitId)}
     }
     view.active=!!view.reveal || !!view.cheer || !!view.order
   }
@@ -34,7 +37,7 @@ export function createPresentationScene({enabled=true}={}) {
       }
     },
     advance(ms,{speed=1,paused=false,reducedMotion=false}={}) {
-      if(!on || reducedMotion){clear();return}
+      if(!on || reducedMotion){cancel();return}
       if(paused)return
       for(const key of ['reveal','order','cheer']) {
         const item=view[key];if(!item?.active)continue
@@ -43,9 +46,9 @@ export function createPresentationScene({enabled=true}={}) {
       }
       view.active=!!view.pendingUnitIds?.length || !!view.reveal || !!view.order || !!view.cheer
     },
-    complete(id,reason) {if(current?.facts.id!==id)return;view.pendingUnitIds=[];if(reason!=='finished')clear()},
-    skip(){clear()},
-    setEnabled(value){on=!!value;if(!on)clear()},
+    complete(id,reason) {if(current?.facts.id!==id)return;view.pendingUnitIds=[];if(reason!=='finished')cancel()},
+    skip(){cancel()},
+    setEnabled(value){on=!!value;if(!on)cancel()},
     prime(waveKey,alreadySeen=false){if(alreadySeen)fullWaves.add(waveKey)},
     reset(){current=null;used.clear();fullWaves.clear();clear()},
     get(){return JSON.parse(JSON.stringify({...view,skip:!on}))},

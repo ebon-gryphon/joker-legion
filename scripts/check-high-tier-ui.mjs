@@ -9,8 +9,10 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {restoreGame,forgeUnit,snapshotGame} from '../src/engine.js'
+import {createHash} from 'node:crypto'
 
 const root=fileURLToPath(new URL('../',import.meta.url)),output=join(root,'output')
+const baselineDirectory=join(output,'high-tier-polish-baseline')
 const groups=new Set((process.env.LEGION_HIGH_TIER_SCENARIOS || 'art,ui,route').split(','))
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms)),results=[],errors=[]
 const fixture=async name=>JSON.parse(await readFile(join(output,'presentation-fixtures',name+'-before.json'),'utf8'))
@@ -30,12 +32,14 @@ async function browserArtProbe(allowMissing,earnedSnapshot,fusedUnits){
   import('/src/articulatedSprites.js'),import('/src/battlefieldUnits.js'),import('/src/battlefield.js')])
  const subscription=sprites.loadFactionAtlases(),records=subscription.records
  for(let i=0;i<200;i++){
-  if(records.get('uniforms')?.ready && (records.get(art.HIGH_TIER_ATLAS)?.ready || allowMissing))break
+  if(records.get('uniforms')?.ready && (allowMissing || records.get(art.HIGH_TIER_ATLAS)?.ready && (!art.HIGH_TIER_FUSION_ATLAS || records.get(art.HIGH_TIER_FUSION_ATLAS)?.ready)))break
   await new Promise(resolve=>setTimeout(resolve,50))
  }
  if(!records.get('uniforms')?.ready)throw Error('Base uniform atlas did not load')
  const newArt=records.get(art.HIGH_TIER_ATLAS),atlasReady=!!newArt?.ready
+ const fusionAtlasReady=!!records.get(art.HIGH_TIER_FUSION_ATLAS)?.ready
  if(!atlasReady&&!allowMissing)throw Error('New four-profession atlas not ready; keep the fallback evidence separate from acceptance')
+ if(art.HIGH_TIER_FUSION_ATLAS&&!fusionAtlasReady&&!allowMissing)throw Error('Focused fire/assassin atlas did not load; fallback is not polish acceptance')
  const freeze=value=>{if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value)}return value}
  const copy=value=>JSON.parse(JSON.stringify(value))
  const hash=pixels=>{let h=2166136261;for(const n of pixels)h=Math.imul(h^n,16777619);return (h>>>0).toString(16)}
@@ -111,7 +115,7 @@ async function browserArtProbe(allowMissing,earnedSnapshot,fusedUnits){
   }
   save('legal-fusions'+(grayscale?'-grayscale':''),board)
  }
- const moduleMatrix=[]
+ const moduleMatrix=[],focusComparison=[]
  const secondaryJobs=[['priest','牧师'],['shield','盾卫'],['archer','游侠'],['fire','焰术师'],['assassin','刺客']]
  for(const grade of [5,6])for(const grayscale of [false,true]){
   const board=make(1370,1050),c=board.getContext('2d');c.fillStyle='#211c2b';c.fillRect(0,0,board.width,board.height);c.fillStyle='#ecdec0';c.font='16px system-ui'
@@ -131,7 +135,17 @@ async function browserArtProbe(allowMissing,earnedSnapshot,fusedUnits){
     sprites.drawCardSprite(c,unit,x+72,y+15,142,160,{pose:poses.restingPose(profile,0,0)})
     c.restore();c.fillStyle='#aab8bf';c.fillText(modules.length?'实际模块 '+modules.map(module=>module.job).join('/'):'无副模块',x,y+193)
     if(JSON.stringify(unit)!==before)throw Error('Module matrix mutated fusionJobs')
-    if(!grayscale)moduleMatrix.push({primary:look.job,secondary,grade,jobs,modules:modules.map(module=>module.job)})
+    if(!grayscale){
+     moduleMatrix.push({primary:look.job,secondary,grade,jobs,modules:modules.map(module=>module.job)})
+     const legacy=new Map(records);legacy.delete(art.HIGH_TIER_FUSION_ATLAS)
+     const polished=make(142,160),old=make(142,160)
+     rig.drawArticulatedUniform(polished.getContext('2d'),records,frame,0,0,142,160)
+     rig.drawArticulatedUniform(old.getContext('2d'),legacy,frame,0,0,142,160)
+     const same=pixelHash(polished)===pixelHash(old),focused=['fire','assassin'].includes(secondary)&&look.job!==secondary
+     if(fusionAtlasReady&&focused&&same)throw Error('Focused module did not change '+jobs.join('+'))
+     if(!focused&&!same)throw Error('Polish changed a regression module '+jobs.join('+'))
+     focusComparison.push({primary:look.job,secondary,grade,focused,sameAsLegacy:same})
+    }
    }
   }
   save('module-matrix-'+grade+(grayscale?'-grayscale':''),board)
@@ -171,7 +185,68 @@ async function browserArtProbe(allowMissing,earnedSnapshot,fusedUnits){
  }finally{Math.random=originalRandom;if(newArt)newArt.ready=atlasReady;renderer.destroy();battlefieldCanvas.remove()}
  if(JSON.stringify(frozen)!==unchanged || frozen.rng!==frozenRng)throw Error('Drawing changed a frozen legal snapshot')
  subscription.dispose()
- return {atlasReady,images:pngs,phases:stats,fallback,fusionFacts,moduleMatrix,snapshotUnchanged:true,rngUnchanged:true,hitboxUnchanged:true,pickUnitUnchanged:true}
+ return {atlasReady,fusionAtlasReady,images:pngs,phases:stats,fallback,fusionFacts,moduleMatrix,focusComparison,snapshotUnchanged:true,rngUnchanged:true,hitboxUnchanged:true,pickUnitUnchanged:true}
+}
+
+async function compareBaselinePixels(pairs){
+ const decode=async data=>{const image=new Image();image.src='data:image/png;base64,'+data;await image.decode();const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;canvas.getContext('2d').drawImage(image,0,0);return canvas}
+ const rows=[],comparisons=[]
+ for(const pair of pairs){
+  const before=await decode(pair.before),after=await decode(pair.after)
+  if(before.width!==after.width||before.height!==after.height)throw Error('Baseline dimensions changed '+pair.name)
+  const a=before.getContext('2d').getImageData(0,0,before.width,before.height).data,b=after.getContext('2d').getImageData(0,0,after.width,after.height).data
+  const regions=pair.matrix?[{label:'priest/shield/archer regression columns',left:110,top:90,right:852,bottom:1040,expected:'same'},
+   {label:'fire/assassin focus columns',left:852,top:90,right:1370,bottom:1040,expected:'different'}]:[{label:'primary prototype and original actions',left:0,top:0,right:before.width,bottom:before.height,expected:'same'}]
+  for(const region of regions){let changed=0
+   for(let y=region.top;y<region.bottom;y++)for(let x=region.left;x<region.right;x++){const i=(y*before.width+x)*4;if(a[i]!==b[i]||a[i+1]!==b[i+1]||a[i+2]!==b[i+2]||a[i+3]!==b[i+3])changed++}
+   if(region.expected==='same'&&changed)throw Error('Polish altered baseline '+pair.name+' / '+region.label+' ('+changed+' pixels)')
+   if(region.expected==='different'&&!changed)throw Error('Polish failed to alter focused columns '+pair.name)
+   rows.push({name:pair.name,region:region.label,expected:region.expected,changedPixels:changed})
+  }
+  if(pair.matrix){
+   const board=document.createElement('canvas');board.width=1200;board.height=1050;const c=board.getContext('2d')
+   c.fillStyle='#211c2b';c.fillRect(0,0,1200,1050);c.fillStyle='#e9ddc3';c.font='16px system-ui'
+   c.fillText('d06094c · 精修前',80,28);c.fillText('精修后 · 火器 / 成对腰刃',680,28)
+   c.imageSmoothingEnabled=false;c.drawImage(before,852,60,518,980,80,60,518,980);c.drawImage(after,852,60,518,980,680,60,518,980)
+   c.font='12px system-ui';for(const [row,label] of ['御前君主','随军牧师','盾卫','长弓手'].entries()){c.fillText(label,8,153+row*235);c.fillText(label,608,153+row*235)}
+   comparisons.push({name:pair.name.replace('module-matrix-','polish-comparison-'),data:board.toDataURL('image/png').split(',')[1]})
+  }
+ }
+ return {rows,comparisons}
+}
+
+// An observer of the real main-handler settlement and existing requestAnimationFrame clock.
+// It never advances a scene, changes a game field, or manufactures a cheer event.
+async function beginRealCheerCapture(leaderId,donorId){
+ const {sampleUnitPresentation}=await import('/src/battlefieldPresentation.js')
+ const s=document.querySelector('.scene-shell').__vueParentComponent.setupState
+ const unref=value=>value?.__v_isRef?value.value:value
+ const scene=unref(s.presentationScene),canvas=document.querySelector('.battle-canvas')
+ const capture={sourceUnitId:leaderId,initial:null,frames:[],done:false,acceptedAt:performance.now()}
+ window.__LEGION_QA_CHEER=capture
+ const result=s.forge(leaderId,donorId,'ascend')
+ if(result!==true){capture.done=true;return result}
+ capture.initial=scene.get()
+ const duration=capture.initial.cheer?.full===false?420:1000
+ const times=[100,300,450,600,1000,1100]
+ function sample(now){
+  const wallMs=now-capture.acceptedAt
+  let view=scene.get()
+  while(times.length && (times[0]>=duration?!view.cheer&&wallMs>=times[0]:(view.cheer?.elapsedMs>=times[0] || !view.cheer&&wallMs>=times[0]))){
+   const requestedMs=times.shift(),game=unref(s.game)
+   const units=game.allies.map(unit=>{
+    const sampled=sampleUnitPresentation(unit,view)
+    return {id:unit.id,type:unit.type,hp:unit.hp,echo:unit.echoUntil!=null,source:unit.id===leaderId,
+     cheer:sampled?.cheer || 0,pose:sampled?.pose || null}
+   })
+   capture.frames.push({requestedMs,wallMs,cheer:view.cheer || null,active:view.active,units,
+    ...(requestedMs<=1000?{image:canvas.toDataURL('image/png').split(',')[1]}:{})})
+   view=scene.get()
+  }
+  if(times.length)requestAnimationFrame(sample);else capture.done=true
+ }
+ requestAnimationFrame(sample)
+ return result
 }
 
 try{
@@ -210,10 +285,55 @@ try{
   const fusedUnits=[legal.allies.find(unit=>unit.id===mythic.action.params.leaderId),prismatic.snapshot.allies.find(unit=>unit.id===prismatic.action.params.leaderId),prism.allies.find(unit=>unit.id===prismatic.action.params.leaderId),runEvidence.finalSnapshot.allies.find(unit=>unit.grade===6)]
   const record=await run('('+browserArtProbe.toString()+')('+JSON.stringify(process.env.LEGION_HIGH_TIER_ALLOW_MISSING==='1')+','+JSON.stringify(snapshotGame(legal))+','+JSON.stringify(fusedUnits)+')')
   for(const image of record.images)await writeFile(join(output,'high-tier-'+image.name+'.png'),Buffer.from(image.data,'base64'))
-  const {images,...facts}=record;return {...facts,artifacts:images.map(image=>'output/high-tier-'+image.name+'.png'),acceptance:record.atlasReady?'new art loaded':'baseline fallback only; not new-art acceptance'}
+  const pairs=[],hashes=[]
+  for(const image of record.images){
+   const name='high-tier-'+image.name+'.png',path=join(baselineDirectory,name)
+   if(existsSync(path)){
+    const before=await readFile(path),after=Buffer.from(image.data,'base64')
+    pairs.push({name,before:before.toString('base64'),after:image.data,matrix:image.name.startsWith('module-matrix-')})
+    hashes.push({name,before:createHash('sha256').update(before).digest('hex'),after:createHash('sha256').update(after).digest('hex')})
+   }
+  }
+  let baselineComparison={available:false,reason:'No local polish baseline; generate it before acceptance.'};const comparisonArtifacts=[]
+  if(pairs.length){
+   const compared=await run('('+compareBaselinePixels.toString()+')('+JSON.stringify(pairs)+')')
+   for(const image of compared.comparisons){await writeFile(join(output,image.name),Buffer.from(image.data,'base64'));comparisonArtifacts.push('output/'+image.name)}
+   baselineComparison={available:true,commit:JSON.parse(await readFile(join(baselineDirectory,'manifest.json'),'utf8')).commit,pixels:compared.rows,hashes,artifacts:comparisonArtifacts}
+  }
+  const {images,...facts}=record;return {...facts,baselineComparison,artifacts:[...images.map(image=>'output/high-tier-'+image.name+'.png'),...comparisonArtifacts],acceptance:record.atlasReady?'new art loaded':'baseline fallback only; not new-art acceptance'}
  })
  await scenario('ui',async()=>{
   const records=[]
+  const collectCheer=async(name,width,height,leaderId,accepted)=>{
+   await wait('window.__LEGION_QA_CHEER?.done',120)
+   const captured=await run('window.__LEGION_QA_CHEER'),initial=captured.initial.cheer
+   assert.ok(initial?.active,'A genuine settled ascension must create its existing cheer branch')
+   assert.equal(initial.sourceUnitId,leaderId,'The main commander must be explicitly excluded')
+   assert.ok(!initial.unitIds.includes(leaderId),'Commander entered army cheer')
+   assert.equal(new Set(initial.unitIds).size,initial.unitIds.length,'Cheer army contains duplicates')
+   assert.deepEqual([...initial.unitIds].sort(),accepted.allies.filter(unit=>unit.hp>0&&!unit.dead&&unit.echoUntil==null&&unit.id!==leaderId).map(unit=>unit.id).sort(),'Cheer participants differ from the real surviving army')
+   const duration=initial.full===false?420:1000
+   for(const frame of captured.frames){
+    const active=frame.requestedMs<duration
+    assert.equal(!!frame.cheer,active,'Unexpected real cheer lifetime at '+frame.requestedMs+' / '+duration)
+    if(frame.cheer){assert.ok(!frame.cheer.unitIds.includes(leaderId));assert.equal(frame.cheer.sourceUnitId,leaderId)}
+    for(const unit of frame.units){
+     if(unit.source||unit.echo||unit.hp<=0){assert.equal(unit.pose,null);assert.equal(unit.cheer,0)}
+     if(unit.pose){
+      assert.equal(unit.pose.state,'salute');assert.equal(unit.pose.x,0);assert.equal(unit.pose.y,0);assert.equal(unit.pose.gait,0)
+      assert.ok(unit.pose.salute>0&&unit.pose.salute<=1);assert.ok(unit.pose.saluteLift>=0&&unit.pose.saluteLift<=2)
+     }
+    }
+    if(frame.image){await writeFile(join(output,'high-tier-'+name+'-'+width+'x'+height+'-cheer-'+frame.requestedMs+'ms.png'),Buffer.from(frame.image,'base64'));delete frame.image}
+   }
+   const nearPeak=captured.frames.find(frame=>frame.requestedMs===(initial.full===false?300:600))
+   assert.ok(nearPeak.units.some(unit=>!unit.source&&unit.pose?.salute>.1),'Other soldiers did not produce a readable active salute')
+   assert.deepEqual(await saved(),accepted,'Observing normal cheer timing changed the saved game/RNG')
+   await pause(100)
+   assert.ok(!(await setup('s.presentationScene.get()')).cheer,'Late UI work replayed completed cheer')
+   assert.deepEqual(await saved(),accepted,'Waiting after one-shot completion changed the saved game/RNG')
+   return {full:initial.full,duration,sourceUnitId:leaderId,unitIds:initial.unitIds,oneShot:true,frames:captured.frames}
+  }
   const projectionAudit=async()=>{
    await run('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))')
    const projection=await setup(`(()=>{const r=s.renderer?.__v_isRef?s.renderer.value:s.renderer;if(!r?.deploymentGeometry)return {available:false};const g=r.deploymentGeometry(),origin=document.querySelector('.battle-canvas').getBoundingClientRect(),panel=document.querySelector('.scene-panel').getBoundingClientRect();const card={left:panel.left,top:panel.top,right:panel.right,bottom:panel.bottom};const intersect=a=>Math.max(0,Math.min(a.right,card.right)-Math.max(a.left,card.left))*Math.max(0,Math.min(a.bottom,card.bottom)-Math.max(a.top,card.top));return {available:true,panel:card,viewport:g.viewport,scale:g.scale,units:g.units.map(u=>{const bounds={left:origin.left+g.left+u.left*g.scale,top:origin.top+g.top+u.top*g.scale,right:origin.left+g.left+u.right*g.scale,bottom:origin.top+g.top+u.bottom*g.scale};return {id:u.id,...bounds,overlapArea:intersect(bounds)}}),names:g.names.map(n=>{const bounds={left:origin.left+n.x-n.half,top:origin.top+n.y-n.size,right:origin.left+n.x+n.half,bottom:origin.top+n.y+2};return {id:n.id,text:n.text,...bounds,overlapArea:intersect(bounds)}})}})()`)
@@ -224,7 +344,9 @@ try{
   }
   for(const [width,height] of [[1366,900],[390,844],[360,740],[844,390],[768,1024]])for(const [name,f] of [['mythic',mythic],['prismatic',prismatic]]){
    await boot(f.snapshot,width,height);await openForge();const before=await saved()
-   assert.equal(await setup('s.forge('+JSON.stringify(f.action.params.leaderId)+','+JSON.stringify(f.action.params.donorId)+',"ascend")'),true)
+   const captureCheer=width===1366||width===390
+   assert.equal(captureCheer?await run('('+beginRealCheerCapture.toString()+')('+JSON.stringify(f.action.params.leaderId)+','+JSON.stringify(f.action.params.donorId)+')'):
+    await setup('s.forge('+JSON.stringify(f.action.params.leaderId)+','+JSON.stringify(f.action.params.donorId)+',"ascend")'),true)
    const accepted=await saved(),acceptedAt=Date.now();await wait('!!document.querySelector(".high-tier-reveal[data-high-tier-grade=\\"'+f.expected.grade+'\\"]")')
    const projection=await projectionAudit()
    assert.equal(await run("!!document.querySelector('.forge-header')"),false,'Hero reveal must replace the multi-root CampRoster')
@@ -239,14 +361,46 @@ try{
     const gap=await run("(()=>{const panel=document.querySelector('.scene-panel:has(.high-tier-reveal)'),reveal=document.querySelector('.fusion-reveal');return panel.getBoundingClientRect().bottom-reveal.getBoundingClientRect().bottom})()")
     assert.ok(gap>=0&&gap<100,'Desktop reveal retained an empty fixed-height workshop: '+gap)
    }
+   const cheer=captureCheer?await collectCheer(name,width,height,f.action.params.leaderId,accepted):null
    await click('.high-tier-details>summary');const detailsProjection=await projectionAudit();await shot(name+'-'+width+'x'+height+'-details')
    assert.deepEqual(await saved(),accepted,'Opening art details changed engine state/RNG')
+   await click('.high-tier-details>summary');const collapsedProjection=await projectionAudit()
+   assert.deepEqual(collapsedProjection.panel,projection.panel,'Closing details failed to restore the original card bounds')
    await click('.fusion-reveal-controls .key-tab');assert.deepEqual(await saved(),accepted,'2x visual speed changed engine state/RNG')
    await click('.fusion-reveal-controls .key-link');assert.deepEqual(await saved(),accepted,'Skipping hero display changed engine state/RNG')
    await wait("!!document.querySelector('.forge-header')?.getClientRects().length")
+   if(cheer){
+    await click('.scene-close');await openForge()
+    assert.ok(!(await setup('s.presentationScene.get()')).cheer,'Reopening the settled workshop replayed cheer')
+    assert.equal(await run("!!document.querySelector('.high-tier-reveal')"),false,'Settled card reappeared after dismissal')
+    assert.deepEqual(await saved(),accepted,'One-shot workshop reopening changed saved game/RNG');cheer.oneShotReopen=true
+   }
    assert.equal(accepted.allies.length+accepted.reserves.length,before.allies.length+before.reserves.length-1)
-   records.push({name,width,height,grade:f.expected.grade,wave:accepted.wave,projection,detailsProjection})
+   records.push({name,width,height,grade:f.expected.grade,wave:accepted.wave,projection,detailsProjection,collapsedProjection,cheer})
   }
+  const skipChecks=[]
+  for(const width of [1366,390]){
+   await boot(mythic.snapshot,width,width===390?844:900);await openForge()
+   assert.equal(await setup('s.forge('+JSON.stringify(mythic.action.params.leaderId)+','+JSON.stringify(mythic.action.params.donorId)+',"ascend")'),true)
+   const accepted=await saved();await pause(150)
+   assert.ok((await setup('s.presentationScene.get()')).cheer?.active,'Skip check must interrupt a real active cheer')
+   await click('.fusion-reveal-controls .key-link');await pause(200)
+   assert.ok(!(await setup('s.presentationScene.get()')).cheer,'Skipped cheer reappeared');assert.deepEqual(await saved(),accepted)
+   skipChecks.push({width,skippedWhileActive:true,snapshotUnchanged:true})
+  }
+  await boot(mythic.snapshot,390,844,true);await openForge()
+  assert.equal(await setup('s.forge('+JSON.stringify(mythic.action.params.leaderId)+','+JSON.stringify(mythic.action.params.donorId)+',"ascend")'),true)
+  const reducedAccepted=await saved();assert.ok(!(await setup('s.presentationScene.get()')).cheer,'Reduced motion played cheer')
+  await pause(200);assert.deepEqual(await saved(),reducedAccepted)
+  await boot(mythic.snapshot,390,844);await openForge()
+  assert.equal(await run('('+beginRealCheerCapture.toString()+')('+JSON.stringify(mythic.action.params.donorId)+','+JSON.stringify(mythic.action.params.leaderId)+')'),true)
+  const reserveAccepted=await saved(),reserveStarted=Date.now()
+  assert.ok(reserveAccepted.reserves.some(unit=>unit.id===mythic.action.params.donorId&&unit.grade===5))
+  assert.equal(reserveAccepted.allies.length,mythic.snapshot.allies.length-1)
+  const normalReserveProjection=await projectionAudit()
+  assert.deepEqual(normalReserveProjection.units.map(unit=>unit.id).sort(),reserveAccepted.allies.filter(unit=>unit.hp>0&&!unit.dead).map(unit=>unit.id).sort(),'Reserve reveal drew a phantom field soldier')
+  await pause(Math.max(0,450-(Date.now()-reserveStarted)));await shot('reserve-mythic-phone-actual-cheer')
+  const normalReserveCheer=await collectCheer('reserve-mythic',390,844,mythic.action.params.donorId,reserveAccepted)
   // Reverse the same earned equal-quality materials through the real forge action: the leader stays in reserve.
   await boot(mythic.snapshot,390,844,true);await openForge();const before=await saved()
   assert.equal(await setup('s.forge('+JSON.stringify(mythic.action.params.donorId)+','+JSON.stringify(mythic.action.params.leaderId)+',"ascend")'),true)
@@ -255,8 +409,9 @@ try{
   assert.ok(await run("!!document.querySelector('.high-tier-reveal.motion-off')"),'Reduced motion must reach the new reveal')
   assert.ok(after.reserves.some(unit=>unit.id===mythic.action.params.donorId&&unit.grade===5));assert.equal(after.allies.length,before.allies.length-1)
   assert.ok((await run("document.querySelector('.high-tier-reveal').innerText")).includes('候补'))
+  assert.ok(!(await setup('s.presentationScene.get()')).cheer,'Reduced-motion reserve played an army cheer')
   await shot('reserve-mythic-phone-reduced');assert.deepEqual(await saved(),after)
-  return {records,reserveProjection,reserveUsesEarnedReverseAscend:true,reducedMotionPreservesSnapshot:true,actualSoldierOcclusionZero:true}
+  return {records,skipChecks,normalReserveProjection,normalReserveCheer,reserveProjection,reserveUsesEarnedReverseAscend:true,reducedMotionPreservesSnapshot:true,actualSoldierOcclusionZero:true}
  })
  await scenario('route',async()=>{
   await new Promise((resolve,reject)=>{const child=spawn(process.execPath,[join(root,'scripts/check-presentation-ui.mjs')],{cwd:root,env:{...process.env,LEGION_TEST_URL:url,LEGION_UI_SCENARIOS:'journey'},stdio:'inherit'});child.on('error',reject);child.on('exit',code=>code===0?resolve():reject(Error('Full real-ticker journey exit '+code)))})

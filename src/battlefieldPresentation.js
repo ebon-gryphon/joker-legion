@@ -14,6 +14,7 @@ function salute(unit,pulse) {
   const healer=unit.type==='healer',ranged=['ranger','mage'].includes(unit.type)
   return {state:'salute',kind:'salute',gesture:healer?'rise':ranged?'offer':'standard',
     contact:pulse*(healer?1.10:ranged?.95:1.06),backWeight:0,
+    salute:pulse,saluteLift:pulse*2,
     x:0,y:0,bend:0,crouch:0,step:0,gait:0,breath:0,reduced:false}
 }
 /** Samples a real unit without changing its model, action, coordinates, or hit geometry. */
@@ -30,7 +31,7 @@ export function sampleUnitPresentation(unit,presentation) {
   if(o && includes(order.unitIds,unit.id))result.order=Math.sin(o.progress*Math.PI)
   const cheer=presentation.cheer,full=cheer?.full!==false,duration=full?PRESENTATION_DURATIONS.cheer:PRESENTATION_DURATIONS.shortCheer
   const c=settlementActive?livePhase(cheer,presentation,duration):null
-  if(c && cheer.grade>4 && includes(cheer.unitIds,unit.id)){
+  if(c && cheer.grade>4 && unit.id!==cheer.sourceUnitId && unit.echoUntil==null && !unit.dead && includes(cheer.unitIds,unit.id)){
     const index=Math.max(0,cheer.unitIds.indexOf(unit.id)),delay=100+Math.min(4,index)*50
     if(c.ms>=delay){
       const phase=clamp((c.ms-delay)/(duration-delay)),pulse=Math.sin(phase*Math.PI)
@@ -97,6 +98,13 @@ export function paintUnitPresentation(c,unit,state,x,foot,width,height,{layer='u
       for(let i=0;i<state.confetti;i++){
         const [dx,dy]=paths[i],spread=9+state.cheer*14
         pip(c,unit.suit,Math.round(x+dx*spread),Math.round(foot-6+dy*spread),i%2?2:1.5,i%2?state.color:'#f4dec1')
+      }
+      // Two short shoulder accents, entirely below the head/name clearance.
+      c.fillStyle=state.color
+      const shoulder=Math.round(foot-height*.58-state.cheer*3)
+      for(const sign of [-1,1]){
+        const side=Math.round(x+sign*(width*.36+state.cheer*2))
+        c.fillRect(side,shoulder+2,2,4);c.fillRect(side+sign*3,shoulder-1,2,2)
       }
     }
     if(state.flash){

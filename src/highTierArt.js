@@ -3,6 +3,7 @@ import { UNIFORM_ROLES, uniformRoleForJob } from './outfits.js'
 import { UNIFORM_KITS, UNIFORM_WEAPONS } from './uniformArt.js'
 
 export const HIGH_TIER_ATLAS = 'high-tier-parts'
+export const HIGH_TIER_FUSION_ATLAS = 'high-tier-fusion-parts'
 export const HIGH_TIER_PARTS = Object.freeze(['head', 'back', 'hand', 'armor'])
 
 // Eight rows, four isolated transparent parts in each row. All sizes are relative
@@ -55,6 +56,15 @@ export const HIGH_TIER_FUSION_KITS = Object.freeze({
   blade:{weapon:'saber',family:'blade',layer:'body',anchor:[.27,.72],height:.35,maxWidth:.25,angle:.34},
 })
 
+// Dedicated short, broad accents stay readable at the original 52px unit size.
+// Rows are fire / paired waist blades; columns are mythic / prismatic.
+export const HIGH_TIER_FOCUS_KITS = Object.freeze({
+  fire:Object.freeze({atlas:HIGH_TIER_FUSION_ATLAS,firstFrame:0,height:.49,maxWidth:.43,
+    grip:[.5,.76],angle:-.08,copies:1,safeRear:true}),
+  assassin:Object.freeze({atlas:HIGH_TIER_FUSION_ATLAS,firstFrame:2,height:.46,maxWidth:.52,
+    grip:[.5,.50],angle:.16,copies:1,safeBelt:true}),
+})
+
 /** Read the saved profession list without sorting it in place or replacing its leader. */
 export function highTierFusionModules(frame) {
   const main=highTierVisualForFrame(frame);if(!main)return []
@@ -69,11 +79,13 @@ export function highTierFusionModules(frame) {
     const module=HIGH_TIER_FUSION_KITS[canonical] || {family:kit.hand,layer:'body',anchor:[.28,.70],height:.29,maxWidth:.27,angle:.25}
     const weapon=module.weapon || kit.hand,source=UNIFORM_WEAPONS[weapon]
     const part=module.part || 'hand'
+    const focus=HIGH_TIER_FOCUS_KITS[canonical]
     candidates.push({...module,job,canonical,role,weapon,
       gesture:kit.hand==='bow' || kit.hand==='crossbow'?'draw':['staff','flame'].includes(kit.hand)?'cast':kit.hand==='shield'?'bash':'thrust',
       atlas:prototype?HIGH_TIER_ATLAS:'armory',
       frame:prototype?(prototype.row+main.grade-5)*4+HIGH_TIER_PARTS.indexOf(part):source[0],
-      grip:module.grip || (prototype?prototype[part].grip:source.slice(1,3))})
+      grip:module.grip || (prototype?prototype[part].grip:source.slice(1,3)),
+      ...(focus?{focus:{...focus,frame:focus.firstFrame+main.grade-5}}:{})})
   }
   return candidates.sort((a,b)=>{
     const left=HIGH_TIER_FUSION_PRIORITY.indexOf(a.canonical),right=HIGH_TIER_FUSION_PRIORITY.indexOf(b.canonical)
@@ -108,10 +120,18 @@ export function drawHighTierPart(c,record,look,part,anchor,bodyHeight,angle=0) {
 
 /** Secondary parts stay below the shoulders and behind the primary working arm. */
 export function drawHighTierFusionModule(c,records,module,anchor,bodyHeight,angle=0) {
+  const focus=module.focus,focused=focus && records.get(focus.atlas),source=focused?.bounds?.[focus.frame]
+  const definition=focused?.ready && !focused.error && source?.width>0 && source?.height>0?{...module,...focus}:module
+  // A fire accent stays outboard of the face even when the inherited rear arm
+  // bends in a primary attack or salute. This is a drawing socket, never unit x/y.
+  const socket=definition.safeRear
+    ? [Math.min(anchor[0]-bodyHeight*.04,bodyHeight*.16),Math.max(anchor[1]+bodyHeight*.02,bodyHeight*.60)]
+    : definition.safeBelt?[Math.min(anchor[0]-bodyHeight*.07,bodyHeight*.18),Math.min(anchor[1],bodyHeight*.71)]:anchor
+  const rotation=definition===module?angle:angle-module.angle+definition.angle
   let painted=false
-  for(let i=0;i<(module.copies || 1);i++) {
-    const position=[anchor[0]+i*bodyHeight*.065,anchor[1]+i*bodyHeight*.025]
-    painted=rasterAt(c,records.get(module.atlas),module.frame,position,bodyHeight,module,angle+(i?-.75:0)) || painted
+  for(let i=0;i<(definition.copies || 1);i++) {
+    const position=[socket[0]+i*bodyHeight*.065,socket[1]+i*bodyHeight*.025]
+    painted=rasterAt(c,records.get(definition.atlas),definition.frame,position,bodyHeight,definition,rotation+(i?-.75:0)) || painted
   }
   return painted
 }

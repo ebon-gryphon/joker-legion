@@ -4,6 +4,8 @@
 
 新增四职业神话／棱彩部件图集 `high-tier-parts.png` 的32部件布局、参考原图及完整生成提示词见 [HIGH_TIER_ART.md](HIGH_TIER_ART.md)。原有图集保持不变。
 
+焰术师与刺客副职的小尺寸轮廓改用独立4格图集 `high-tier-fusion-parts.png`，来源与完整提示词见 [HIGH_TIER_FUSION_ART.md](HIGH_TIER_FUSION_ART.md)。其他模块继续使用原资源。
+
 ## 旧版点数衣装图集（存档）
 
 `wardrobe.png` 是一张 1280 × 340 的透明像素图，分为 8 列、2 行，每格 160 × 170。前十三格依次为 A、2 至 10、J、Q、K 的空手衣身，末三格是圣杖、反曲弓和蓝金盾。原图按四行四列生成，打包时裁掉透明留白，保留了每套衣装的长宽比例。

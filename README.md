@@ -86,6 +86,8 @@ LEGION_TEST_URL=http://127.0.0.1:5187/ node scripts/check-presentation-ui.mjs
 LEGION_HIGH_TIER_SCENARIOS=art,ui,route LEGION_TEST_URL=http://127.0.0.1:5187/ node scripts/check-high-tier-ui.mjs
 ```
 
+在d06094c基础上的 [副职与欢呼打磨验收](docs/fusion-cheer-polish-2026-11-24.md) 只加粗焰术师火焰核心、刺客成对腰刃，并加强其他真实士兵的一次短促欢呼。四主原型及其他模块保持不变；全量测试现为286项，欢呼时长和玩法结果不变。新图集来源见 [HIGH_TIER_FUSION_ART.md](public/legion-pixel/HIGH_TIER_FUSION_ART.md)。
+
 ## 双击即可玩的离线版
 
 单文件打包需要 Bun。已经构建时执行打包脚本，或用 `--build` 先构建再打包。

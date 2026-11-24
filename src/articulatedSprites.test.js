@@ -45,3 +45,26 @@ test('composite portrait frames retain profession sources and queen actions sele
   const idle=restingPose(performanceOf({side:'enemy',type:'brute'}),0,0,0)
   assert.equal(idle.state,'idle')
 })
+
+test('a salute raises both actual wrists with mirrored shoulder directions and leaves ordinary poses unchanged',()=>{
+  const turn=([x,y],a)=>[x*Math.cos(a)-y*Math.sin(a),x*Math.sin(a)+y*Math.cos(a)]
+  const wrist=(nodes,first,second)=>{
+    const [root,mid,end]=nodes,upper=turn([mid[0]-root[0],mid[1]-root[1]],first),lower=turn([end[0]-mid[0],end[1]-mid[1]],first+second)
+    return [root[0]+upper[0]+lower[0],root[1]+upper[1]+lower[1]]
+  }
+  const w=75,h=112,front=[[.59*w,.32*h],[.73*w,.39*h],[.91*w,.35*h]],rear=[[.32*w,.35*h],[.22*w,.47*h],[.15*w,.60*h]]
+  for(const gesture of ['standard','offer','rise']) {
+    const pose=Object.freeze({state:'salute',gesture,salute:1,saluteLift:2,contact:1,gait:0,breath:0})
+    const j=jointPose(pose,gesture)
+    assert.ok(wrist(front,j.frontShoulder,j.frontElbow)[1]<front[0][1]-12)
+    assert.ok(wrist(rear,j.rearShoulder,j.rearElbow)[1]<rear[0][1]-12)
+    assert.equal(j.drop,-2);assert.deepEqual(j.hips,[0,-0]);assert.deepEqual(j.knees,[0,0])
+    assert.equal(jointPose({...pose,saluteLift:200},gesture).drop,-2)
+    const reduced={...pose,reduced:true}
+    assert.deepEqual(jointPose(reduced,gesture),jointPose({...reduced,state:'idle'},gesture))
+  }
+  for(const state of ['idle','walk','hit','action']) {
+    const pose={state,breath:.3,gait:.5,contact:.7,backWeight:.2,bend:2,flinch:.4}
+    assert.deepEqual(jointPose({...pose,salute:1,saluteLift:2},'draw'),jointPose(pose,'draw'))
+  }
+})

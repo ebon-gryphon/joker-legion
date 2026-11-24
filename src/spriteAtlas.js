@@ -5,11 +5,11 @@ import { assembleUniforms } from './uniformArt.js'
 import { CARD_RANKS as RANKS } from './cardCatalog.js'
 import { drawArticulatedUniform, drawArticulatedEnemy } from './articulatedSprites.js'
 import { enemyFrame } from './enemyCatalog.js'
-import { HIGH_TIER_ATLAS } from './highTierArt.js'
+import { HIGH_TIER_ATLAS, HIGH_TIER_FUSION_ATLAS } from './highTierArt.js'
 
 const SUITS = { '♠': 'spades', '♥': 'hearts', '♣': 'clubs', '♦': 'diamonds' }
 const TYPE_ATLAS = { knight: 'spades', tank: 'spades', healer: 'hearts', ranger: 'clubs', mage: 'diamonds', arcanist: 'diamonds' }
-const SHEETS = { [HIGH_TIER_ATLAS]:[4,32], 'queen-motion':[4,8], regalia: [4,8], armory: [4,8], spades: [7, 13], hearts: [7, 13], clubs: [7, 13], diamonds: [7, 13], fusions: [3, 6], enemies: [4, 8] }
+const SHEETS = { [HIGH_TIER_ATLAS]:[4,32], [HIGH_TIER_FUSION_ATLAS]:[2,4], 'queen-motion':[4,8], regalia: [4,8], armory: [4,8], spades: [7, 13], hearts: [7, 13], clubs: [7, 13], diamonds: [7, 13], fusions: [3, 6], enemies: [4, 8] }
 export const isUnitAtlas = name => name === 'uniforms' || Object.hasOwn(SHEETS, name)
 const records = new Map(), listeners = new Set()
 let motionSheet

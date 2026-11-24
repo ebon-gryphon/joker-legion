@@ -98,7 +98,7 @@ export function jointPose(pose={},gesture='thrust') {
   const bow=['draw','snap','crouch'].includes(gesture), casting=['cast','trace','rise','orbit','offer','pour','shake','standard'].includes(gesture)
   const heavy=['slam','cleave','sweep','bash'].includes(gesture)
   const strength=reduced?.08:1
-  return {
+  const joints = {
     frontShoulder:(walk?gait*.25:breath*.025)+(heavy?-1.05*back+.70*contact:casting?-.52*back-.70*contact:-.27*back+.14*contact)*strength,
     frontElbow:(walk?-.14-Math.max(0,-gait)*.16:-.04)+(bow?-1.20*back+.2*contact:casting?-.7*back-.12*contact:-.95*back+.30*contact)*strength,
     rearShoulder:(walk?-gait*.29:breath*.02)+(bow?-.55*back-.25*contact:casting?-.25*back-.65*contact:.30*back-.14*contact)*strength,
@@ -111,6 +111,18 @@ export function jointPose(pose={},gesture='thrust') {
     weapon:(heavy?-1.4*back+.9*contact:bow?-.12*back:casting?-.3*back-.23*contact:-.5*back+.17*contact)*strength,
     bowDraw:bow?back:0,
   }
+  if(pose.state==='salute' && !reduced) {
+    const pulse=Math.min(1,Math.max(0,Number.isFinite(pose.salute)?pose.salute:0))
+    // One raised-arm envelope supplied by the external presentation clock.
+    // This cannot change walking, combat contact, the planted foot or hit bounds.
+    joints.frontShoulder=-1.35*pulse
+    joints.rearShoulder=1.45*pulse
+    joints.frontElbow=-.45*pulse
+    joints.rearElbow=.60*pulse
+    joints.weapon-=.28*pulse
+    joints.drop-=Math.min(2,Math.max(0,Number.isFinite(pose.saluteLift)?pose.saluteLift:0))
+  }
+  return joints
 }
 function drawPart(c,image,pivot,w,h) {c.drawImage(image,-pivot[0],-pivot[1],w,h)}
 function chain(c,rig,nodes,images,angles,w,h) {

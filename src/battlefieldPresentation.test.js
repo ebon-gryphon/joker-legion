@@ -34,6 +34,49 @@ test('accepted mythic cheers stagger 100–300ms, end in one second, and use a s
  assert.equal(PRESENTATION_DURATIONS.cheer,1000)
 })
 
+test('the single stronger salute is draw-only, excludes its real commander, mirrors, casualties and unlisted members',()=>{
+ const source=freeze(soldier('commander','knight',6)),other=freeze(soldier('other','ranger',0))
+ const p=freeze({active:true,cheer:{active:true,grade:6,full:true,sourceUnitId:source.id,unitIds:[source.id,other.id],elapsedMs:600}})
+ assert.equal(sampleUnitPresentation(source,p),null)
+ const state=sampleUnitPresentation(other,p)
+ assert.equal(state.pose.state,'salute');assert.equal(state.pose.salute,state.cheer)
+ assert.equal(state.pose.saluteLift,state.cheer*2);assert.ok(state.pose.salute>.99)
+ assert.equal(state.pose.x,0);assert.equal(state.pose.y,0);assert.equal(state.pose.gait,0)
+ for(const extra of [{echoUntil:8},{dead:true},{hp:0},{side:'enemy'},{id:'not-fielded'}])
+  assert.equal(sampleUnitPresentation({...other,...extra},p),null)
+ for(const flags of [{skip:true},{reducedMotion:true},{active:false}])assert.equal(sampleUnitPresentation(other,{...p,...flags}),null)
+ const strength=ms=>sampleUnitPresentation(other,{...p,cheer:{...p.cheer,elapsedMs:ms}})?.cheer || 0
+ assert.ok(strength(151)<strength(300) && strength(300)<strength(575))
+ assert.ok(strength(575)>strength(800) && strength(800)>strength(999))
+ assert.equal(strength(1000),0)
+})
+
+test('saluting leaves every real unit pick box, ground anchor and name label identical',()=>{
+ for(const variant of [soldier('blade'),soldier('priest','healer'),soldier('archer','ranger'),soldier('fire','mage'),
+  {...soldier('cavalry'),jobId:'cavalry',pattern:'straight'}, {...soldier('fused'),fusion:'paladin'}]){
+  const unit=freeze(variant),sample=freeze({x:unit.x,y:unit.y,walking:false,pendingDamage:0}),before=JSON.stringify({unit,sample})
+  const base=canvas(),shown=canvas(),baseLabels=[],shownLabels=[]
+  const args=[unit,sample,0,0,n=>n,new Map(),0,true,null,0,false,null,null,null]
+  const state=sampleUnitPresentation(unit,{active:true,cheer:{grade:5,sourceUnitId:'commander',unitIds:[unit.id],elapsedMs:550}})
+  assert.ok(state.pose.salute>0)
+  assert.deepEqual(drawUnit(shown.c,...args,shownLabels,state),drawUnit(base.c,...args,baseLabels))
+  assert.deepEqual(shownLabels,baseLabels)
+  assert.equal(JSON.stringify({unit,sample}),before)
+ }
+})
+
+test('salute emotion accents remain below head and name clearance and add no text or randomness',()=>{
+ const unit=freeze(soldier()),state=sampleUnitPresentation(unit,{active:true,cheer:{grade:5,unitIds:[unit.id],elapsedMs:550}})
+ const surface=canvas(),x=295,foot=208,height=49
+ paintUnitPresentation(surface.c,unit,freeze(state),x,foot,54,height,{layer:'over'})
+ assert.ok(surface.commands.filter(([name])=>name==='fillRect').length>=4)
+ assert.ok(surface.commands.every(([name])=>!['fillText','strokeText'].includes(name)))
+ for(const [name,,y,,h] of surface.commands)if(name==='fillRect'){
+  assert.ok(y>=foot-height*.75,'accent must stay below the head/name area')
+  assert.ok(y+h<=foot+3,'accent stays beside or below the body')
+ }
+})
+
 test('skip, reduced motion and disabled presentation clear pending silhouettes and all transient marks',()=>{
  const unit=freeze(soldier()),p={active:true,pendingUnitIds:[unit.id],reveal:{unitId:unit.id,grade:4,placement:'field',elapsedMs:210}}
  assert.equal(sampleUnitPresentation(unit,p).pending,true)
