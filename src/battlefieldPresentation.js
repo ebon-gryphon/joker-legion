@@ -13,7 +13,7 @@ function livePhase(phase,p,duration) {
 function salute(unit,pulse) {
   const healer=unit.type==='healer',ranged=['ranger','mage'].includes(unit.type)
   return {state:'salute',kind:'salute',gesture:healer?'rise':ranged?'offer':'standard',
-    contact:pulse*(healer?.92:ranged?.58:.86),backWeight:0,
+    contact:pulse*(healer?1.10:ranged?.95:1.06),backWeight:0,
     x:0,y:0,bend:0,crouch:0,step:0,gait:0,breath:0,reduced:false}
 }
 /** Samples a real unit without changing its model, action, coordinates, or hit geometry. */

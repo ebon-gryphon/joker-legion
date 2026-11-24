@@ -2,6 +2,7 @@
  * every frame moves shoulders, elbows, hips, knees, cloth and equipment independently. */
 import { UNIFORM_ROLES, uniformRoleForJob } from './outfits.js'
 import { UNIFORM_KITS, UNIFORM_WEAPONS } from './uniformArt.js'
+import { HIGH_TIER_ATLAS, highTierVisualForFrame, highTierFusionModules, highTierArtReady, drawHighTierPart, drawHighTierFusionModule } from './highTierArt.js'
 
 const rigs = new WeakMap()
 const P = (...points) => points
@@ -64,6 +65,20 @@ function assembleRig(record,index,enemy=false) {
     upperR:imagePart(record,index,[rearMasks[0]]),lowerR:imagePart(record,index,[rearMasks[1]]),
     thighs:legMasks.map(m=>imagePart(record,index,[m[0]])),shins:legMasks.map(m=>imagePart(record,index,[m[1]])),
     full:record, index, bat}
+  if(!enemy && index>=5) {
+    // The prototype costume owns the crown, shoulders and outer cloak. Keep the
+    // same face and anatomical limb sockets without showing two outfits at once.
+    rig.costume={
+      body:imagePart(record,index,[P([.34,.28],[.68,.28],[.71,.69],[.34,.71])],cuts),
+      head:imagePart(record,index,[P([.42,.14],[.66,.14],[.70,.32],[.40,.34],[.35,.25])]),
+      upperF:imagePart(record,index,[limb(front[0],front[1],.058)]),
+      upperR:imagePart(record,index,[limb(rear[0],rear[1],.052)]),
+      lowerF:imagePart(record,index,[limb(front[1],front[2],.050)]),
+      lowerR:imagePart(record,index,[limb(rear[1],rear[2],.045)]),
+      thighs:hips.map((hip,i)=>imagePart(record,index,[limb(hip,knees[i],.075)])),
+      shins:knees.map((knee,i)=>imagePart(record,index,[limb(knee,feet[i],.080)])),
+    }
+  }
   if(bat){
     rig.leftWing=imagePart(record,index,[P([0,0],[.49,0],[.47,1],[0,1])])
     rig.rightWing=imagePart(record,index,[P([.60,0],[1,0],[1,1],[.61,1])])
@@ -126,10 +141,13 @@ function drawHorse(c,record,pose) {
 export function drawArticulatedUniform(c,records,frame,x,y,width,height,options={}) {
   const clothes=records.get('regalia'),arms=records.get('armory');if(!clothes?.ready || !arms?.ready)return false
   const grade=frame.column,role=UNIFORM_ROLES[frame.row],kit=UNIFORM_KITS[role];if(!kit)return false
-  const rig=assembleRig(clothes,grade),pose=options.pose || {},gesture=pose.gesture || (kit.hand==='bow'?'draw':['staff','flame'].includes(kit.hand)?'cast':'thrust')
+  const parts=records.get(HIGH_TIER_ATLAS),candidate=highTierVisualForFrame(frame)
+  const look=highTierArtReady(parts,candidate)?candidate:null,modules=look?highTierFusionModules(frame):[]
+  const rig=assembleRig(clothes,grade),pose=options.pose || {},gesture=pose.gesture || look?.gesture || (kit.hand==='bow'?'draw':['staff','flame'].includes(kit.hand)?'cast':'thrust')
+  const costume=look?rig.costume:null
   const j=jointPose(pose,gesture),mounted=kit.horse,bodyHeight=mounted?90:112
   const w=bodyHeight*rig.width/rig.height,h=bodyHeight,scale=Math.min(width/126,height/(mounted?145:132))
-  const secondary=(frame.fusionJobs || []).slice(1).find(job=>UNIFORM_KITS[uniformRoleForJob(job)])
+  const secondary=look?modules.find(module=>module.layer==='rear-hand')?.job:(frame.fusionJobs || []).slice(1).find(job=>UNIFORM_KITS[uniformRoleForJob(job)])
   const extra=secondary && UNIFORM_KITS[uniformRoleForJob(secondary)]
   const extraGesture=extra && (extra.hand==='bow' || extra.hand==='crossbow'?'draw':['staff','flame'].includes(extra.hand)?'cast':extra.hand==='shield'?'bash':'thrust')
   const sub=extra?jointPose(pose,extraGesture):null
@@ -141,19 +159,35 @@ export function drawArticulatedUniform(c,records,frame,x,y,width,height,options=
   c.translate(w*.5,hipY);c.rotate(j.lean);c.translate(-w*.5,-hipY)
   // Trailing cloth, rear limbs, torso, head, then the forward working arm.
   const capePivot=[w*.29,h*.33]
-  c.save();c.translate(...capePivot);c.rotate(j.cloth);drawPart(c,rig.cape,capePivot,w,h);c.restore()
-  if(!mounted)for(const i of [1,0])chain(c,rig,[rig.hips[i],rig.knees[i],rig.feet[i]],[rig.thighs[i],rig.shins[i]],[j.hips[i],j.knees[i]],w,h)
+  c.save();c.translate(...capePivot);c.rotate(j.cloth)
+  if(look)drawHighTierPart(c,parts,look,'back',[w*.40-capePivot[0],h*.30-capePivot[1]],h)
+  else drawPart(c,rig.cape,capePivot,w,h)
+  c.restore()
+  if(look)for(const module of modules.filter(module=>module.layer==='back'))
+    drawHighTierFusionModule(c,records,module,[w*module.anchor[0],h*module.anchor[1]],h,module.angle+j.cloth)
+  if(!mounted)for(const i of [1,0])chain(c,rig,[rig.hips[i],rig.knees[i],rig.feet[i]],[costume?.thighs[i] || rig.thighs[i],costume?.shins[i] || rig.shins[i]],[j.hips[i],j.knees[i]],w,h)
   else for(const i of [0,1])chain(c,rig,[rig.hips[i],rig.knees[i],rig.feet[i]],[rig.thighs[i],rig.shins[i]],[i?.12:-.18,.35],w,h)
-  const rear=chain(c,rig,rig.rear,[rig.upperR,rig.lowerR],[j.rearShoulder+(sub?.frontShoulder || 0)*.7,j.rearElbow+(sub?.frontElbow || 0)*.6],w,h)
-  c.drawImage(rig.body,0,0,w,h)
-  const neck=[w*.53,h*.29];c.save();c.translate(...neck);c.rotate(j.head);drawPart(c,rig.head,neck,w,h);c.restore()
-  if(extra || kit.off)equipment(c,arms,extra?.hand || kit.off,rear,h,sub?sub.weapon*.65:-j.weapon*.60,extra?.hand==='shield'?.72:.65)
-  const wrist=chain(c,rig,rig.front,[rig.upperF,rig.lowerF],[j.frontShoulder,j.frontElbow],w,h)
-  equipment(c,arms,kit.hand,wrist,h,j.weapon,kit.size)
+  const rear=chain(c,rig,rig.rear,[costume?.upperR || rig.upperR,costume?.lowerR || rig.lowerR],[j.rearShoulder+(sub?.frontShoulder || 0)*.7,j.rearElbow+(sub?.frontElbow || 0)*.6],w,h)
+  c.drawImage(costume?.body || rig.body,0,0,w,h)
+  if(look) {
+    drawHighTierPart(c,parts,look,'armor',[w*.53,h*.33],h)
+    for(const module of modules.filter(module=>module.layer==='body'))
+      drawHighTierFusionModule(c,records,module,[w*module.anchor[0],h*module.anchor[1]],h,module.angle)
+  }
+  const neck=[w*.53,h*.29];c.save();c.translate(...neck);c.rotate(j.head);drawPart(c,costume?.head || rig.head,neck,w,h)
+  if(look)drawHighTierPart(c,parts,look,'head',[w*look.head.anchor[0]-neck[0],h*look.head.anchor[1]-neck[1]],h)
+  c.restore()
+  if(look) {
+    for(const module of modules.filter(module=>module.layer==='rear-hand'))
+      drawHighTierFusionModule(c,records,module,rear,h,module.angle+(sub?.weapon || 0)*.65)
+  } else if(extra || kit.off)equipment(c,arms,extra?.hand || kit.off,rear,h,sub?sub.weapon*.65:-j.weapon*.60,extra?.hand==='shield'?.72:.65)
+  const wrist=chain(c,rig,rig.front,[costume?.upperF || rig.upperF,costume?.lowerF || rig.lowerF],[j.frontShoulder,j.frontElbow],w,h)
+  if(look)drawHighTierPart(c,parts,look,'hand',wrist,h,j.weapon)
+  else equipment(c,arms,kit.hand,wrist,h,j.weapon,kit.size)
   if(kit.hand==='bow' && j.bowDraw>.1){
     c.strokeStyle='#f8e9be';c.lineWidth=.8;c.beginPath();c.moveTo(wrist[0],wrist[1]-h*.34);c.lineTo(wrist[0]-j.bowDraw*15,wrist[1]);c.lineTo(wrist[0],wrist[1]+h*.30);c.stroke()
   }
-  if(frame.fusionJobs?.length>2){
+  if(!look && frame.fusionJobs?.length>2){
     // Extra inheritances are visible as small heraldic equipment, never replacing the primary silhouette.
     frame.fusionJobs.slice(2,5).forEach((job,i)=>equipment(c,arms,UNIFORM_KITS[uniformRoleForJob(job)]?.hand,[w*.30-i*3,h*.44+i*7],h, -.32-i*.22,.27))
   }

@@ -12,6 +12,7 @@ import ScoreToggle from './ScoreToggle.vue'
 import ScoreBreakdown from './ScoreBreakdown.vue'
 import ScoreSequence from './ScoreSequence.vue'
 import RecruitReveal from './RecruitReveal.vue'
+import HighTierReveal from './HighTierReveal.vue'
 import BattlePayoffs from './BattlePayoffs.vue'
 import {createPresentationController} from './presentationEvents.js'
 import {createPresentationScene} from './presentationScene.js'
@@ -146,7 +147,8 @@ function acceptPresentation(before) {
   const facts=performanceFeed.onDeploy(before,toRaw(game.value))
   scoreReceipt.value=game.value.lastDeploy?.scoreTrace || null
   suppressQualityEffects(before)
-  deployReceipt.value=facts?{...facts,changedCardIds:before.hand.filter(card=>card.baseFace && before.selected.includes(card.id)).map(card=>card.id)}:null
+  const unit=facts && [...game.value.allies,...game.value.reserves].find(member=>member.id===facts.recruitment.unitId)
+  deployReceipt.value=facts?{...facts,actualUnit:unit?JSON.parse(JSON.stringify(toRaw(unit))):null,changedCardIds:before.hand.filter(card=>card.baseFace && before.selected.includes(card.id)).map(card=>card.id)}:null
   if(facts?.recruitment.status==='fielded')presentationSuppressedUnits=[...new Set([...presentationSuppressedUnits,facts.recruitment.unitId])]
   if(facts)presentationScene.accept({...facts,id:scoreReceipt.value.id},{waveKey:sceneWave(),army:liveAllies.value.map(unit=>unit.id)})
   presentationPaused.value=false;fusionReceipt.value=null;fusionPresentationId=null
@@ -240,6 +242,7 @@ function setDesk(id, trigger) {
   if (!feature(id)) { note('该功能会在后续引导开放，也可随时结束引导开放全部。');return }
   if (game.value.phase === 'shop' && (id === 'field' || ['victory','supply','market'].includes(id))) id = postBattleDesk.value
   if (id === 'orders' && !rules.inCamp(game.value)) return
+  if(desk.value==='forge' && id!=='forge' && fusionReceipt.value)skipPresentation()
   cancelTrick()
   cancelFieldDrag()
   if (id!=='soldier') fieldMember.value=null
@@ -481,10 +484,12 @@ function forge(leader, donor, kind) {
   if (!rules.forgeUnit(game.value, leader, donor, kind)) return false
   const facts=performanceFeed.onAscend(before,toRaw(game.value),leader)
   if(facts) {
+    clearTimeout(toastTimer);toast.value=null
     suppressQualityEffects(before)
     presentationSuppressedUnits=[...new Set([...presentationSuppressedUnits,leader])]
     fusionPresentationId='ascend/'+sceneWave()+'/'+game.value.fusions
-    fusionReceipt.value={recruitment:{...facts,status:facts.placement==='reserve'?'reserve':'fielded',reason:facts.placement==='reserve'?'融合升品完成，仍在候补席，未增加上阵人数。':'融合升品完成，主兵保留身份并在原兵位。'}}
+    const unit=[...game.value.allies,...game.value.reserves].find(member=>member.id===leader)
+    fusionReceipt.value={actualUnit:unit?JSON.parse(JSON.stringify(toRaw(unit))):null,recruitment:{...facts,status:facts.placement==='reserve'?'reserve':'fielded',reason:facts.placement==='reserve'?'融合升品完成，仍在候补席，未增加上阵人数。':'融合升品完成，主兵保留身份并在原兵位。'}}
     presentationScene.accept({id:fusionPresentationId,recruitment:{...fusionReceipt.value.recruitment,unitId:leader}},{waveKey:sceneWave(),army:facts.armyUnitIds,immediate:true})
     if(!presentationEnabled.value || reducedMotion.value)presentationScene.skip()
     else {audio.presentationCue?.('reveal',{grade:facts.grade});audio.presentationCue?.('cheer',{grade:facts.grade,full:presentationScene.get().cheer?.full})}
@@ -768,7 +773,7 @@ function deploymentObstacles() {
   const stage=canvas.value.closest('.field-stage'), origin=canvas.value.getBoundingClientRect()
   if (!stage) return []
   const selectors=['.field-head','.battle-topline','.scene-tools','.trick-bar','.scene-action','.tutorial-field-dock','.camp-notification-slot','.wagon-aside','.field-pick-hint','.convoy-call','.boss-warning','.bell-alert','.rarity-receipt']
-  if (['orders','soldier'].includes(desk.value)) selectors.push('.scene-panel')
+  if (['orders','soldier'].includes(desk.value) || (desk.value==='forge' && fusionReceipt.value)) selectors.push('.scene-panel')
   return [...stage.querySelectorAll(selectors.join(','))].flatMap(node=>{
     if (!node.getClientRects().length) return []
     const r=node.getBoundingClientRect()
@@ -967,7 +972,7 @@ onBeforeUnmount(() => {
           </div>
           <div class="hand-footnote"><span v-if="wagonHint" class="desk-wagon"><KeyMark name="coin"/>{{ wagonHint }}</span><span v-else>出牌次数在下一波补满。换牌与升星另算。</span><span>空格 暂停<span class="dot-separator">·</span>Enter 出牌<span class="dot-separator">·</span>H 提示</span></div>
         </section>
-          <div v-else-if="desk==='forge'" class="forge-modal embedded-panel"><div v-if="fusionReceipt" class="fusion-reveal"><RecruitReveal :receipt="fusionReceipt" kind="fusion"/><div class="fusion-reveal-controls"><button class="key-tab" @click="presentationSpeed=presentationSpeed===1?2:1">{{ presentationSpeed }}×</button><button class="key-link" @click="skipPresentation">收起亮相 / 跳过欢呼</button></div></div><CampRoster :game="game" :pairs="pairs" :apply-merge="forge" @champion="chooseChampion" @lock="lockSoldier" @field-reserve="id=>{if(rules.fieldReserve(game,id)){audio.play('deploy');save()}}" @commission="appoint" @close="setDesk('orders')"/></div>
+          <div v-else-if="desk==='forge'" class="forge-modal embedded-panel"><div v-if="fusionReceipt" class="fusion-reveal"><HighTierReveal :receipt="fusionReceipt" :actual-unit="fusionReceipt.actualUnit" kind="fusion" :controls="false" :enabled="presentationEnabled" :speed="presentationSpeed" :reduced-motion="reducedMotion"/><div class="fusion-reveal-controls"><button class="key-tab" @click="presentationSpeed=presentationSpeed===1?2:1">{{ presentationSpeed }}×</button><button class="key-link" @click="skipPresentation">收起亮相 / 跳过欢呼</button></div></div><CampRoster v-if="!fusionReceipt" :game="game" :pairs="pairs" :apply-merge="forge" @champion="chooseChampion" @lock="lockSoldier" @field-reserve="id=>{if(rules.fieldReserve(game,id)){audio.play('deploy');save()}}" @commission="appoint" @close="setDesk('orders')"/></div>
           <div v-else-if="desk==='brief'" class="brief-modal embedded-panel"><BattlePlan embedded :wave="scoutWaveInfo" :intel="scout" :schedule="scoutSchedule" :formation="game.formation" :in-shop="game.phase==='shop'" @choose="changeFormation"/></div>
           <section v-else-if="desk==='press'" class="inline-press"><CardPress :game="game" :apply="applyPrint"/></section>
           <section v-else-if="desk==='supply'" class="supply-section">

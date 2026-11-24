@@ -80,7 +80,7 @@ defineExpose({finish,state,playback})
     <p class="sequence-current" :key="state.index+'/'+state.focus">{{ currentLabel }}<b v-if="state.step.kind==='card' || state.step.kind==='item'"> ＋{{ state.step.delta }} 筹码</b></p>
     <div v-if="!state.done" class="sequence-track" aria-hidden="true"><i :style="{width:state.progress*100+'%'}"></i></div>
     <p class="sequence-realized"><b v-if="state.qualityVisible">{{ currentTrace.quality.rolledName || currentTrace.quality.name }}</b><span v-else>品质待揭晓</span><span v-if="state.musterVisible"> · {{ currentTrace.recruit.summary }}</span></p>
-    <div v-if="receipt" class="sequence-outcome-slot"><RecruitReveal v-if="!state.orderVisible || state.done" :receipt="receipt" :revealed="state.musterVisible" :quality-visible="state.qualityVisible" :reduced-motion="reducedMotion || !enabled" compact/><OrderRecipients v-if="state.orderVisible" :receipt="receipt" compact/></div>
+    <div v-if="receipt" class="sequence-outcome-slot"><RecruitReveal v-if="!state.orderVisible || state.done" :receipt="receipt" :revealed="state.musterVisible" :quality-visible="state.qualityVisible" :reduced-motion="reducedMotion || !enabled" :enabled="enabled" :speed="speed" compact/><OrderRecipients v-if="state.orderVisible" :receipt="receipt" compact/></div>
     <details v-if="state.done" class="sequence-breakdown"><summary class="key-disclosure">查看本手计分与道具兑现</summary><ScoreBreakdown :trace="currentTrace" details-only/></details>
     <small v-if="previous" class="sequence-previous">上一手 {{ previous.total }} 分已结算</small>
     <span v-if="state.done" class="sequence-sr" role="status">本手 {{ currentTrace.finalScore }} 分，{{ currentTrace.recruit.summary }}</span>

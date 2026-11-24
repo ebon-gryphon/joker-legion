@@ -3,3 +3,16 @@
 .fusion-reveal{margin:8px 0;border:1px solid #aa8b63;background:#302333;padding:8px}.fusion-reveal-controls{display:flex;gap:7px;justify-content:flex-end;margin-top:4px}.fusion-reveal-controls button{font-size:11px;min-height:28px}
 @media(max-width:960px){.scene-shell .battle-topline .payoff-button{position:absolute;top:calc(100% + 5px);left:50%;transform:translateX(-50%);max-width:min(320px,85vw)}}
 @media(max-height:540px){.scene-shell .battle-topline .payoff-button{display:none}}
+
+/* The reveal and the real regiment occupy different parts of the existing field. */
+.scene-shell[data-desk=forge] .scene-panel:has(.high-tier-reveal){left:auto;right:var(--rim);top:auto;bottom:calc(var(--hud-bottom) + 62px);transform:none;width:min(43vw,560px);height:auto;max-height:calc(100% - 156px)}
+.scene-shell[data-desk=forge] .scene-panel:has(.high-tier-reveal) .desk-body{padding:10px;overflow:auto;display:block}
+.scene-panel:has(.high-tier-reveal) .forge-modal.embedded-panel{display:block;overflow:visible}
+.scene-panel .fusion-reveal:has(.high-tier-reveal){padding:0;margin:0;border:0;background:none}
+.fusion-reveal-controls{padding:3px 6px 0}
+@media(max-width:960px) and (orientation:portrait){
+ .scene-shell[data-desk=forge] .scene-panel:has(.high-tier-reveal){top:calc(var(--hud-top) + 110px);bottom:auto;right:var(--rim);width:calc(100% - 2 * var(--rim));max-height:min(400px,47dvh)}
+}
+@media(max-height:540px) and (orientation:landscape){
+ .scene-shell[data-desk=forge] .scene-panel:has(.high-tier-reveal){top:calc(var(--hud-top) + 45px);bottom:calc(var(--hud-bottom) + 38px);width:min(47vw,470px);max-height:none}
+}

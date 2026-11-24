@@ -1,4 +1,7 @@
 import { QUALITIES } from './quality.js'
+import { JOBS } from './jobs.js'
+import { professionId,professionJobs } from './professionFusion.js'
+import { soldierIdentity } from './soldierIdentity.js'
 const labels={atk:'攻击',heal:'治疗',shield:'护盾',period:'行动间隔',maxHp:'生命上限'}
 export const presentationNumber=(value,stat)=>Number.isFinite(value)?Number(value.toFixed(stat==='period'?3:1)):'未记录'
 export function recruitmentView(receipt,{revealed=true,qualityVisible=true,kind='recruit'}={}) {
@@ -38,4 +41,36 @@ export function orderRecipientHeading(receipt) {
   const order=receipt?.order
   return {title:order?.name?order.name+(order.targetName?' → '+order.targetName:''):'本手实际受令成员',
     sourceScore:Number.isFinite(order?.sourceScore)?order.sourceScore:null}
+}
+
+/** A read-only composition of committed recruitment/fusion facts, never a reconstructed unit. */
+export function highTierRevealView(receipt,{actualUnit=null,revealed=true,qualityVisible=true,kind='recruit'}={}) {
+  const view=recruitmentView(receipt,{revealed,qualityVisible,kind})
+  if(!view || !view.revealed)return view
+  const facts=receipt?.recruitment || receipt
+  const candidate=actualUnit || facts.actualUnit || receipt?.actualUnit || null
+  const unit=candidate && (!view.unitId || candidate.id===view.unitId) && candidate.grade===view.grade?candidate:null
+  const identity=unit?soldierIdentity(unit):null
+  const primaryId=unit?professionId(unit):null
+  const jobs=unit?professionJobs(unit):[...new Set((facts.fusionJobs || []).filter(id=>Object.hasOwn(JOBS,id)))]
+  const primary=JOBS[primaryId]?.name || view.profession
+  const inherited=jobs.filter(id=>id!==primaryId).map(id=>({id,name:JOBS[id].name,skill:JOBS[id].skill}))
+  const allLabels={...labels,hp:'当前生命',range:'射程',speed:'移动速度',statBonus:'征召属性加成'}
+  const recorded=facts.actualStats || facts.after || {}
+  const rows=Object.entries(allLabels).filter(([stat])=>Number.isFinite(recorded[stat] ?? unit?.[stat])).map(([stat,label])=>{
+    const after=recorded[stat] ?? unit[stat],before=Number.isFinite(facts.before?.[stat])?facts.before[stat]:null
+    const delta=before===null?null:after-before
+    return {stat,label,before,after,delta,unit:stat==='period'?'秒':stat==='statBonus'?'%':'',
+      beforeText:before===null?null:presentationNumber(before,stat),afterText:presentationNumber(after,stat),
+      deltaText:delta===null || presentationNumber(delta,stat)===0?'':(delta>0?'＋':'−')+presentationNumber(Math.abs(delta),stat)+(stat==='period'?'秒':'')}
+  })
+  const priority=['atk','heal','maxHp','shield','period']
+  const changed=priority.map(stat=>rows.find(row=>row.stat===stat)).filter(row=>row?.deltaText)
+  const observed=priority.map(stat=>rows.find(row=>row.stat===stat)).filter(row=>row && row.after!==0)
+  return {...view,actualUnit:unit,name:identity?.name || view.name,primary,inherited,rows,
+    keyChanges:(facts.before?changed:observed).slice(0,3),
+    gradeBefore:Number.isInteger(facts.gradeBefore)?facts.gradeBefore:null,
+    previousQuality:QUALITIES[facts.gradeBefore]?.name || '',
+    destination:view.status==='reserve'?'候补席 · 尚未上阵':view.status==='fielded'?(view.fusion?'原位升品 · 继续在场':'正式入阵'):
+      view.status==='training'?'转为集训 · 没有新增士兵':'去向未记录'}
 }

@@ -80,7 +80,7 @@ async function main() {
   if (!styles.length) throw new Error('没有找到试玩样式文件。')
 
   // Keep the offline image list in sync with both portrait renderers.
-  const imageNames = ['title-command', 'queen-motion', 'regalia', 'armory', 'spades', 'hearts', 'clubs', 'diamonds', 'relics', 'battlefield', 'fusions', 'enemies', 'combat-motion', 'convoy', 'performer-avatars', 'control-stamps', 'control-ink', 'control-ticket', 'control-banner', 'control-tab']
+  const imageNames = ['title-command', 'queen-motion', 'regalia', 'armory', 'high-tier-parts', 'spades', 'hearts', 'clubs', 'diamonds', 'relics', 'battlefield', 'fusions', 'enemies', 'combat-motion', 'convoy', 'performer-avatars', 'control-stamps', 'control-ink', 'control-ticket', 'control-banner', 'control-tab']
   for (const name of imageNames) {
     if (!existsSync(join(root, 'public/legion-pixel', `${name}.png`))) throw new Error(`缺少像素素材 ${name}.png。`)
   }
