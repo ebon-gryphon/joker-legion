@@ -34,6 +34,7 @@ import { championProgress } from './training.js'
 import CampRoster from './CampRoster.vue'
 import BattlePlan from './BattlePlan.vue'
 import FieldMarket from './FieldMarket.vue'
+import {shopActionAvailability} from './fieldShop.js'
 import WarCollege from './WarCollege.vue'
 import HandBook from './HandBook.vue'
 import CardPress from './CardPress.vue'
@@ -45,6 +46,7 @@ import { FUSION_BY_ID, FUSION_COST, workshopPairs, mergeWarning } from './forge.
 import { fusionProfessionNames } from './professionFusion.js'
 import MergeWarning from './MergeWarning.vue'
 import WaveReport from './WaveReport.vue'
+import EconomySummary from './EconomySummary.vue'
 import FeintTable from './FeintTable.vue'
 import { dailySeed, dailyRecordKey, betterDailyRun, validDailyRecord } from './daily.js'
 import { CARD_CATALOG, getCardDesign } from './cardCatalog.js'
@@ -54,6 +56,7 @@ import { initializeCombatStats, combatSummary } from './combatStats.js'
 import { loadCombatHistory, saveCombatHistory, exportCombatHistory } from './combatHistory.js'
 import { displayName, secondaryIdentity } from './soldierIdentity.js'
 import './experience.css'
+import './economy-ui.css'
 
 const { createGame, previewHand, selectCard, discard, deploy, tick, buyJoker, sellJoker, rerollShop, nextWave, chooseReward } = rules
 const doctrines = rules.DOCTRINES
@@ -228,6 +231,7 @@ function openGuide(id) {
   else briefing.value = 'guide'
 }
 const postBattleDesk = computed(() => game.value.rewardChosen ? 'market' : game.value.victorySeen ? 'supply' : 'victory')
+const finalSettlement=computed(()=>game.value.phase==='shop' && game.value.finalWaveCleared?(game.value.rewardChosen?'finish':'claim'):'')
 function openSupplies() {
   if (game.value.phase !== 'shop' || game.value.rewardChosen) return
   game.value.victorySeen = true
@@ -542,14 +546,14 @@ const regiments = computed(()=>Object.entries(REGIMENTS).map(([type,role])=>{
   const hp=members.reduce((n,u)=>n+u.hp,0), max=members.reduce((n,u)=>n+u.maxHp,0)
   return {type,name:role.name,leader:members[0] && getSpriteFrame(members[0]),count:members.length,health:max?Math.ceil(100*hp/max):0}
 }))
-const rewardFrames = { repair: 1, power: 4, supply: 5 }
 const rewardStatus = choice => rules.rewardAvailability(game.value,choice.id)
+const rewardDirection={army:'部队强化',poker:'扑克改造',resource:'资源补给'}
 function rewardDescription(choice) {
   const status=rewardStatus(choice)
-  if (!status.available && choice.id==='repair' && !game.value.rewardChosen) return status.reason
-  if (choice.id==='repair' && !game.value.rewardChosen) return '恢复 '+Math.min(20,game.value.maxBaseHp-game.value.baseHp)+' 点城门耐久，最多恢复至满。'
+  if (!status.available && !game.value.rewardChosen) return status.reason
   return choice.description || choice.desc
 }
+const saleStatus=computed(()=>inspectedJoker.value?shopActionAvailability(game.value,'sell',inspectedJoker.value.id):null)
 function note(text, tone = 'info') {
   toast.value = { text, tone }; clearTimeout(toastTimer)
   toastTimer = setTimeout(() => { toast.value = null }, 3000)
@@ -666,12 +670,14 @@ function confirmQuickPromotion() {
   commitQuickPromotion(pending.leaderId,pending.donorId)
 }
 function purchase(joker) {
-  if (buyJoker(game.value, joker.id) !== false) { audio.play('buy'); note(joker.name + ' 已购入 · −' + joker.price + ' 金币'); save() }
+  const before=game.value.crystals
+  if (buyJoker(game.value, joker.id) !== false) { audio.play('buy'); note(joker.name + ' 已购入 · −' + (before-game.value.crystals) + ' 蓝水晶'); save() }
 }
 function sell(joker) {
-  if (sellJoker(game.value, joker.id) !== false) { audio.play('buy'); note('已出售' + joker.name + ' · +' + Math.floor(joker.price / 2) + ' 金币'); inspectedJoker.value = null; save() }
+  const before=game.value.crystals
+  if (sellJoker(game.value, joker.id) !== false) { audio.play('buy'); note('已出售' + joker.name + ' · +' + (game.value.crystals-before) + ' 蓝水晶'); inspectedJoker.value = null; save() }
 }
-function reroll() { if (rerollShop(game.value) !== false) { audio.play('discard'); note('货架已补货 · −2 金币'); save() } }
+function reroll() {const before=game.value.crystals;if (rerollShop(game.value) !== false) { audio.play('discard'); note('货架已补货 · −'+(before-game.value.crystals)+' 蓝水晶'); save() } }
 function reward(choice) {
   if (!rewardStatus(choice).available) { note(rewardStatus(choice).reason);return }
   if (chooseReward(game.value, choice.id) !== false) {
@@ -840,7 +846,8 @@ onBeforeUnmount(() => {
           <div class="resource-strip">
             <div class="base-resource"><span class="resource-icon">♜</span><div><div class="resource-label">城门耐久 <strong>{{ Math.ceil(game.baseHp) }}<small> / {{ game.maxBaseHp }}</small></strong></div><div class="resource-track base-track"><i :style="{ width: `${game.baseHp / game.maxBaseHp * 100}%` }"></i></div></div></div>
             <div v-if="game.phase !== 'shop'" class="energy-resource"><span class="resource-icon">✦</span><div><div class="resource-label">本波军令 <strong>{{ Math.floor(game.energy) }}<small> / {{ game.maxEnergy }}</small></strong></div><div class="resource-track energy-track"><i :style="{ width: `${game.energy / game.maxEnergy * 100}%` }"></i></div></div><span class="regen-label">每波补满</span></div>
-            <div class="gold-resource"><span>◈</span><strong>{{ game.gold }}</strong><small>金币</small></div>
+            <div class="gold-resource currency-resource" data-currency="gold" :aria-label="'金币余额 '+game.gold" title="金币用于改印、加购出牌、研习与职业融合"><span>◈</span><small>金币</small><strong>{{ game.gold }}</strong></div>
+            <div class="crystal-resource currency-resource" data-currency="crystals" :aria-label="'蓝水晶余额 '+(game.crystals ?? 0)" title="蓝水晶用于商店购买、出售与刷新"><span>◆</span><small>蓝水晶</small><strong>{{ game.crystals ?? 0 }}</strong></div>
           </div>
           <div v-if="game.phase==='battle'" class="field-controls">
             <button class="key-tab" :aria-pressed="speed===2" @click="speed=speed===1?2:1" :aria-label="'当前'+speed+'倍速，点击切换'">{{ speed }}×</button>
@@ -905,7 +912,7 @@ onBeforeUnmount(() => {
           <small v-if="game.phase==='battle' && feintHint && desk==='field'" class="feint-call">{{ feintHint }}</small>
           <button v-if="game.phase==='ready' && !liveAllies.length && desk!=='orders'" class="field-advance key-command" @click="setDesk('orders',$event.currentTarget)"><KeyMark name="cards"/>打开手牌 ↗</button>
           <button v-else-if="game.phase==='ready'" class="field-advance key-command" :disabled="!liveAllies.length" @click="sendArmy"><KeyMark name="allies"/>全军出战 ↗</button>
-          <button v-else-if="game.phase==='shop' && desk==='market'" class="field-advance key-command" @click="advance"><KeyMark name="allies"/>迎战第 {{ game.wave+1 }} 波 ↗</button>
+          <button v-else-if="game.phase==='shop' && desk==='market'" class="field-advance key-command" :disabled="!game.rewardChosen" @click="advance"><KeyMark name="allies"/>{{ game.wave>=waves.length?'完成远征':'迎战第 '+(game.wave+1)+' 波' }} ↗</button>
         </div>
         <section v-if="desk!=='field'" ref="scenePanel" class="scene-panel" role="region" tabindex="-1" :aria-label="deskName">
           <button v-if="game.phase!=='shop' || desk!==postBattleDesk" class="scene-close key-close" aria-label="收起面板" title="返回（Esc）" @click="closeDesk"><KeyMark name="close"/></button>
@@ -915,8 +922,8 @@ onBeforeUnmount(() => {
             <span class="victory-wave">第 {{ game.wave }} 波 · {{ waveInfo.name }}</span>
             <h2>{{ game.waveTimeout?.count || game.waveKills < game.schedule.length ? '险守城门' : '守城成功' }}</h2>
             <p>{{ timeoutMessage || ('击退 ' + game.waveKills + ' 名敌军') }} · 城门耐久 {{ Math.ceil(game.baseHp) }}</p>
-            <p>归营 {{ game.allies.length }} 名 · 赏金 +{{ 8 + game.wave * 2 + game.tacticsReport.bounty }}</p>
-            <WaveReport expanded :combat="currentCombat" :live-events="presentationEvents" :report="report" :uses="game.fusionUses" :tactics="game.tacticsReport" :formation="formation.name"/>
+            <p>归营 {{ game.allies.length }} 名<template v-if="game.finalWaveCleared"> · 终幕已守住，领取补给后完成远征</template></p>
+            <WaveReport expanded :combat="currentCombat" :live-events="presentationEvents" :report="report" :uses="game.fusionUses" :tactics="game.tacticsReport" :formation="formation.name" :final-settlement="finalSettlement"/>
             <button class="key-command" @click="openSupplies">选择补给 ↗</button>
           </section>
           <SoldierSheet v-else-if="desk==='soldier' && inspectedSoldier" :advanced="feature('champion')" :unit="inspectedSoldier" :champion="game.champion" @lock="lockSoldier" @champion="chooseChampion"/>
@@ -976,13 +983,14 @@ onBeforeUnmount(() => {
           <div v-else-if="desk==='brief'" class="brief-modal embedded-panel"><BattlePlan embedded :wave="scoutWaveInfo" :intel="scout" :schedule="scoutSchedule" :formation="game.formation" :in-shop="game.phase==='shop'" @choose="changeFormation"/></div>
           <section v-else-if="desk==='press'" class="inline-press"><CardPress :game="game" :apply="applyPrint"/></section>
           <section v-else-if="desk==='supply'" class="supply-section">
-            <div class="section-title"><span>{{ game.rewardChosen ? '本波补给已领取' : '先选择一项战后补给' }}</span><small>{{ game.rewards.length }} 选一 · 免费</small></div>
+            <div class="section-title"><span>{{ game.rewardChosen ? '本波补给已领取' : '先选择一项战后补给' }}</span><small>{{ game.rewards.length }} 选一 · 免费</small></div><p class="reward-flow-hint">{{ game.rewardChosen?'补给已兑现，可以购物或继续远征。':'先免费领取一项，再进入商店。' }}<template v-if="game.finalWaveCleared">终幕已守住，购物后可完成远征。</template></p>
+            <EconomySummary :settlement="game.lastSettlement" compact/>
             <div class="reward-grid"><button v-for="choice in game.rewards" :key="choice.id" class="reward-card key-ticket" :data-reward="choice.id"
               :class="{chosen:game.rewardChosen===choice.id,unavailable:!rewardStatus(choice).available && !game.rewardChosen}"
               :disabled="!rewardStatus(choice).available" :aria-describedby="'reward-reason-'+choice.id" @click="reward(choice)">
-              <PixelSprite atlas="relics" :columns="5" :rows="2" :frame="rewardFrames[choice.id]"/>
-              <div><strong>{{ choice.name || choice.title }}</strong><small :id="'reward-reason-'+choice.id">{{ rewardDescription(choice) }}</small></div>
-              <span class="reward-plus">{{ game.rewardChosen===choice.id ? '✓' : !rewardStatus(choice).available ? '无需修复' : '+' }}</span>
+              <span class="reward-symbol" aria-hidden="true">{{ choice.icon || '✦' }}</span>
+              <div><strong>{{ choice.name || choice.title }}</strong><span class="reward-tags"><em v-if="rewardDirection[choice.direction]" class="reward-direction">{{ rewardDirection[choice.direction] }}</em><em v-if="choice.duration" class="reward-duration" :data-duration="choice.durationKey">{{ choice.duration }}</em></span><small :id="'reward-reason-'+choice.id">{{ rewardDescription(choice) }}</small></div>
+              <span class="reward-plus">{{ game.rewardChosen===choice.id ? '✓' : !rewardStatus(choice).available ? '不可领取' : '免费领取' }}</span>
             </button></div>
           </section>
           <FieldMarket v-else-if="desk==='market'" :game="game" :offers="shopJokers" :frame-of="relicFrame" @purchase="purchase" @reroll="reroll"/>
@@ -996,7 +1004,7 @@ onBeforeUnmount(() => {
             </div>
             <p class="history-notice">已保存 {{ combatHistory.length }} 波，仅在本机浏览器保存。最多保留 1000 波且不超过 3 MiB，较早记录会自动清理；可导出留存。</p>
             <p v-if="!historyAvailable" class="history-notice" role="status">战报保存失败，当前波数据仍可查看和导出，请检查浏览器存储空间。</p>
-            <WaveReport expanded :combat="selectedCombat" :live-events="historySelection?[]:presentationEvents" :report="historySelection ? [] : report" :uses="historySelection ? {} : game.fusionUses" :tactics="game.tacticsReport" :formation="formation.name"/>
+            <WaveReport expanded :combat="selectedCombat" :live-events="historySelection?[]:presentationEvents" :report="historySelection ? [] : report" :uses="historySelection ? {} : game.fusionUses" :tactics="game.tacticsReport" :formation="formation.name" :final-settlement="historySelection?'':finalSettlement"/>
           </section>
           <section v-else-if="desk==='menu'" class="scene-menu">
             <h2>随军手册</h2>
@@ -1059,7 +1067,7 @@ onBeforeUnmount(() => {
 
       <section v-else-if="confirmRestart" ref="modalEl" class="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="restart-title"><p class="eyebrow">A NEW PERFORMANCE</p><h2 id="restart-title">开启新的远征？</h2><p>当前军团和本局进度会被新的远征替换。</p><div class="modal-button-row"><button class="secondary-button key-ink" @click="confirmRestart = false"><KeyMark name="return"/>返回选择</button><button class="gold-button key-command" @click="startRun()"><KeyMark name="allies"/>替换存档并启程 ↗</button></div></section>
 
-      <section v-else-if="inspectedJoker" ref="modalEl" class="modal joker-modal" role="dialog" aria-modal="true" aria-labelledby="joker-title"><button class="modal-close key-close" aria-label="关闭小丑详情" @click="inspectedJoker = null"><KeyMark name="close"/></button><RelicArt :item="inspectedJoker" :frame="relicFrame(inspectedJoker)" class="relic-art"/><div><p class="eyebrow">BEHIND THE CURTAIN</p><h2 id="joker-title">{{ inspectedJoker.name }}</h2><p>{{ inspectedJoker.description || inspectedJoker.desc }}</p><small>{{ inspectedJoker.consumable?'自动使用':inspectedJoker.stackable?'同名效果逐层相加':'独有搭档' }} · 持有 {{ inspectedJoker.quantity || 1 }} 件</small><button v-if="game.phase==='shop' && game.rewardChosen" class="key-price" @click="sell(inspectedJoker)">出售一件 · {{ Math.max(1,Math.floor(inspectedJoker.price/2)) }} 金</button><button class="gold-button key-command" @click="inspectedJoker = null"><KeyMark name="return"/>明白了 ↗</button></div></section>
+      <section v-else-if="inspectedJoker" ref="modalEl" class="modal joker-modal" role="dialog" aria-modal="true" aria-labelledby="joker-title"><button class="modal-close key-close" aria-label="关闭小丑详情" @click="inspectedJoker = null"><KeyMark name="close"/></button><RelicArt :item="inspectedJoker" :frame="relicFrame(inspectedJoker)" class="relic-art"/><div><p class="eyebrow">BEHIND THE CURTAIN</p><h2 id="joker-title">{{ inspectedJoker.name }}</h2><p>{{ inspectedJoker.description || inspectedJoker.desc }}</p><small>{{ inspectedJoker.consumable?'自动使用':inspectedJoker.stackable?'同名效果逐层相加':'独有搭档' }} · 持有 {{ inspectedJoker.quantity || 1 }} 件</small><button v-if="game.phase==='shop' && game.rewardChosen" class="key-price" :disabled="!saleStatus?.available" :aria-describedby="!saleStatus?.available?'sale-unavailable':undefined" @click="sell(inspectedJoker)">出售一件 · {{ saleStatus?.price }} 蓝水晶</button><small v-if="game.phase==='shop' && game.rewardChosen && !saleStatus?.available" id="sale-unavailable">{{ saleStatus?.reason }}</small><button class="gold-button key-command" @click="inspectedJoker = null"><KeyMark name="return"/>明白了 ↗</button></div></section>
 
 
 

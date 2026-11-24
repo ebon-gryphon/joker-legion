@@ -1,19 +1,20 @@
 <script setup>
 import { computed } from 'vue'
 import KeyMark from './KeyMark.vue'
+import EconomySummary from './EconomySummary.vue'
 import { FUSION_BY_ID } from './forge.js'
 import { REGIMENTS } from './orders.js'
 import { FORMATION_BY_ID } from './tactics.js'
 import { itemEventGroups, actualEffectText, gateSourceRows, runOutcomeText } from './reportTelemetry.js'
 import { deriveReportHighlights } from './presentationFacts.js'
-const props=defineProps({ expanded:Boolean, combat:{type:Object,default:null}, report:{type:Array,default:()=>[]}, uses:{type:Object,default:()=>({})}, tactics:{type:Object,default:()=>({})}, formation:{type:String,default:''}, liveEvents:{type:Array,default:()=>[]} })
+const props=defineProps({ expanded:Boolean, combat:{type:Object,default:null}, report:{type:Array,default:()=>[]}, uses:{type:Object,default:()=>({})}, tactics:{type:Object,default:()=>({})}, formation:{type:String,default:''}, liveEvents:{type:Array,default:()=>[]}, finalSettlement:{type:String,default:''} })
 const people=computed(()=>props.combat?.units.filter(row=>row.participated || row.damage || row.healed || row.taken || row.kills) || [])
 const rounded=n=>Math.round(n || 0)
 const regiment=type=>REGIMENTS[type]?.name || type
 const itemGroups=computed(()=>itemEventGroups(props.combat))
 const itemEventCount=computed(()=>itemGroups.value.reduce((count,group)=>count+group.events.length,0))
 const gateSources=computed(()=>gateSourceRows(props.combat))
-const outcomeText=computed(()=>runOutcomeText(props.combat))
+const outcomeText=computed(()=>props.finalSettlement==='claim'?'末波已守住，请先免费领取一项补给，再进入商店。':props.finalSettlement==='finish'?'末波已守住，补给已领取，可在商店完成远征。':runOutcomeText(props.combat))
 const highlights=computed(()=>deriveReportHighlights(props.combat,{liveEvents:props.liveEvents}))
 const shownFormation=computed(()=>props.combat ? FORMATION_BY_ID[props.combat.formation]?.name || '阵型未记录' : props.formation)
 const shownTactics=computed(()=>props.combat ? props.combat.tacticsReport || {} : props.tactics)
@@ -39,6 +40,7 @@ const gateView=computed(()=> {
       <p v-if="combat.partial" class="report-caveat">其中记录了 {{ combat.duration.toFixed(1) }} 秒的贡献，早先数据没有分配给个人。</p>
       <p v-if="Math.abs(combat.gate.untracked)>.01" class="report-caveat">城门另有 {{ rounded(Math.abs(combat.gate.untracked)) }} 点未分类变化。</p>
       <p v-if="outcomeText" class="report-run-outcome">{{ outcomeText }}</p>
+      <EconomySummary v-if="combat.ended" :settlement="combat.economy"/>
       <details v-if="highlights.length" class="report-payoffs"><summary class="key-disclosure">关键兑现 · 只读实际记录</summary>
         <p v-for="item in highlights" :key="item.id"><strong>{{ item.label }}</strong><span>{{ item.detail }}</span></p>
         <small>只作归纳，不另加分、不重复计伤害，也不把战团总收益归给单独一手。</small>

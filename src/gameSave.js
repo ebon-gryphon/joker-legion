@@ -24,6 +24,9 @@ import { PERFORMANCES } from './performance.js'
 import { BOSS_SKILLS, isBoss } from './bossRules.js'
 import { validCombatStats, migrateCombatStats, discardInvalidScoreMetadata } from './combatStats.js'
 import { validOnboarding, migrateOnboarding } from './onboarding.js'
+import {ECONOMY_VERSION,ECONOMY_CONFIG} from './economy.js'
+import {isRewardOffer,createRewardShelf,WAVE_REWARDS} from './waveRewards.js'
+import {emptyWaveBonuses} from './rewardModifiers.js'
 
 const RESERVED = new Set(['__proto__', 'constructor', 'prototype'])
 
@@ -44,7 +47,7 @@ export function restoreGame(snapshot) {
     const data = typeof snapshot === 'string' ? JSON.parse(snapshot) : JSON.parse(JSON.stringify(snapshot))
     discardInvalidScoreMetadata(data)
     if (!validExpedition(data) || !validDeck(data) || !validHandAndTricks(data) ||
-        !validArmies(data) || !validWave(data) || !validResources(data) || !validProgress(data)) return null
+        !validArmies(data) || !validWave(data) || !validResources(data) || !validProgress(data) || !validRewardEconomy(data)) return null
     return migrateExpedition(data)
   } catch { return null }
 }
@@ -57,7 +60,7 @@ function validExpedition(data) {
   for (const key of ['baseHp', 'maxBaseHp', 'energy', 'maxEnergy', 'gold', 'time', 'waveTime', 'rng', 'sequence', 'accumulator', 'deployCooldown', 'discardCooldown', 'discards', 'waveKills', 'waveSpawned', 'spawnIndex', 'energyRegen']) {
     if (!Number.isFinite(data[key]) || data[key] < 0) return false
   }
-  if (data.baseHp > data.maxBaseHp || data.maxBaseHp > 200 || data.energy > data.maxEnergy || data.maxEnergy > 30 || data.gold > 1e6 || data.sequence > 1e9 || data.energyRegen > 10 || data.accumulator >= STEP + 1e-6 || data.spawnIndex > data.schedule?.length) return false
+  if (data.baseHp > data.maxBaseHp || data.maxBaseHp > 200 || data.energy > data.maxEnergy || data.maxEnergy > 30 || data.gold > Number.MAX_SAFE_INTEGER || data.sequence > 1e9 || data.energyRegen > 10 || data.accumulator >= STEP + 1e-6 || data.spawnIndex > data.schedule?.length) return false
   return true
 }
 
@@ -69,7 +72,7 @@ function validDeck(data) {
   const edits = data.orderRules >= 2 ? data.cardEdits : {}
   if (!edits || typeof edits !== 'object' || Array.isArray(edits) ||
       !Object.entries(edits).every(([slot, face]) => deckFaces.includes(slot) && deckFaces.includes(face) && slot !== face)) return false
-  if (data.orderRules >= 2 && (!Number.isInteger(data.printsLeft) || data.printsLeft < 0 || data.printsLeft > PRINTS_PER_WAVE)) return false
+  if (data.orderRules >= 2 && (!Number.isInteger(data.printsLeft) || data.printsLeft < 0 || data.printsLeft > (data.printsBudget ?? PRINTS_PER_WAVE))) return false
   const stock = [...data.hand, ...data.deck]
   if (new Set(ids).size !== ids.length || new Set(stock.map(slotOf)).size !== stock.length ||
       !stock.every(card => deckFaces.includes(slotOf(card)) && (edits[slotOf(card)] || slotOf(card)) === faceOf(card))) return false
@@ -111,6 +114,7 @@ function validArmies(data) {
     if (!units.every(unit => unit && Object.hasOwn(definition, unit.type) && unit.side === side && ['x', 'y', 'hp', 'maxHp', 'atk', 'range', 'cooldown', 'level', 'speed', 'period'].every(key => Number.isFinite(unit[key])) && unit.hp > 0 && unit.hp <= unit.maxHp && unit.x >= 0 && unit.x <= 1100 && unit.y >= 150 && unit.y <= 350 && unit.level >= 1 && unit.level <= 3 && unit.maxHp <= 100000 && unit.atk >= 0 && unit.atk <= 20000 && unit.period > 0 && unit.speed >= 0)) return false
     if (new Set(units.map(unit => unit.id)).size !== units.length) return false
     if (side === 'ally') for (const unit of units) {
+      if(unit.rewardModifiers && (!['attackPercent','healthPercent'].every(key=>Number.isFinite(unit.rewardModifiers[key]) && unit.rewardModifiers[key]>=0 && unit.rewardModifiers[key]<=10) || Object.keys(unit.rewardModifiers).length!==2))return false
       if (unit.waveBonus && (!Object.entries(unit.waveBonus).every(([k,v]) => ['maxHp','atk','heal','period'].includes(k) && Number.isFinite(v)) ||
           lastingStat(unit,'maxHp') < 1 || lastingStat(unit,'maxHp') > 100000 || lastingStat(unit,'atk') > 20000 || lastingStat(unit,'period') <= 0 || lastingStat(unit,'atk') < 0 || lastingStat(unit,'heal') < 0)) return false
       if (unit.royalWard !== undefined && typeof unit.royalWard !== 'boolean') return false
@@ -172,8 +176,8 @@ function validWave(data) {
   if (!data.stats || !['deploys', 'summoned', 'kills', 'lost', 'healed', 'damage', 'goldEarned', 'jokerTriggers', 'maxChain', 'bestPower', 'wavesCleared', 'discards'].every(key => Number.isFinite(data.stats[key]) && data.stats[key] >= 0)) return false
   if (!Number.isSafeInteger(data.stats.wavesCleared) || data.stats.wavesCleared > data.wave) return false
   if (!Array.isArray(data.logs) || data.logs.length > 36 || !data.logs.every(item => typeof item.text === 'string' && item.text.length < 1000)) return false
-  if (!Array.isArray(data.rewards) || data.rewards.length > 4 || !data.rewards.every(item => ['repair', 'power', 'supply','enlist'].includes(item.id) && (item.id !== 'enlist' || [2,4].includes(data.wave)))) return false
-  if (![false, 'repair', 'power', 'supply','enlist'].includes(data.rewardChosen)) return false
+  if (!Array.isArray(data.rewards) || data.rewards.length > (data.economyVersion?3:4) || !data.rewards.every(item => data.economyVersion?isRewardOffer(item):['repair','power','supply','enlist'].includes(item.id))) return false
+  if (data.rewardChosen!==false && !WAVE_REWARDS.some(reward=>reward.id===data.rewardChosen)) return false
   if (data.bossTelegraph) {
     const mark = data.bossTelegraph
     if (!['x', 'y', 'radius', 'remaining', 'duration'].every(key => Number.isFinite(mark[key])) ||
@@ -216,7 +220,7 @@ function validResources(data) {
       !Number.isSafeInteger(extraHandPrice(data)) || !Number.isSafeInteger(data.paidHandsLeft) ||
       data.paidHandsLeft < 0 || data.paidHandsLeft > data.handsBought ||
       !Number.isSafeInteger(data.handsLeft) || data.paidHandsLeft > data.handsLeft ||
-      data.handsLeft - data.paidHandsLeft > HANDS_PER_WAVE) return false
+      data.handsLeft - data.paidHandsLeft > HANDS_PER_WAVE+(data.waveBonuses?.active?.hands || 0)) return false
   if (data.legacyFieldSize !== undefined && (!Number.isInteger(data.legacyFieldSize) || data.legacyFieldSize < 0 || data.legacyFieldSize > OLD_FIELD_LIMIT)) return false
   if (data.reserveUsed !== undefined && typeof data.reserveUsed !== 'boolean') return false
   if (data.difficulty !== undefined && !['standard', 'veteran'].includes(data.difficulty)) return false
@@ -262,7 +266,32 @@ function validProgress(data) {
       if (v !== undefined && (!Number.isInteger(v) || v < min || v > max)) return false
     }
   }
-  if (data.rewardChosen === 'enlist' && (data.phase !== 'shop' || ![2,4].includes(data.wave))) return false
+  if (data.rewardChosen === 'enlist' && !['shop','won'].includes(data.phase)) return false
+  return true
+}
+
+function validRewardEconomy(data) {
+  if(data.economyVersion===undefined)return true
+  if(data.economyVersion!==ECONOMY_VERSION || !Number.isSafeInteger(data.crystals) || data.crystals<0 ||
+    !Number.isSafeInteger(data.stats.crystalsEarned) || data.stats.crystalsEarned<0 ||
+    !Number.isInteger(data.crystalIncomeWave) || data.crystalIncomeWave<0 || data.crystalIncomeWave>data.wave ||
+    typeof data.finalWaveCleared!=='boolean' || data.finalWaveCleared && data.wave!==WAVES.length)return false
+  const keys=Object.keys(emptyWaveBonuses())
+  for(const phase of ['next','active']){
+    const b=data.waveBonuses?.[phase]
+    if(!b || Object.keys(b).length!==keys.length || !keys.every(key=>Object.hasOwn(b,key)))return false
+    if(!['hands','discards','prints'].every(key=>Number.isSafeInteger(b[key]) && b[key]>=0 && b[key]<=10) || !Number.isFinite(b.firstScorePercent) || b.firstScorePercent<0 || b.firstScorePercent>1 || !Array.isArray(b.enlistPatterns) || b.enlistPatterns.length>5 || !b.enlistPatterns.every(key=>Object.hasOwn(DETACHMENTS,key)))return false
+  }
+  if(!Number.isSafeInteger(data.printsBudget) || data.printsBudget<PRINTS_PER_WAVE || data.printsBudget>PRINTS_PER_WAVE+10 || !Number.isSafeInteger(data.maxDiscards) || data.maxDiscards<0 || data.maxDiscards>12)return false
+  const state=data.rewardState
+  if(!state || !Number.isSafeInteger(state.wave) || state.wave<0 || state.wave>data.wave || (state.claimedId!==null && !WAVE_REWARDS.some(row=>row.id===state.claimedId)))return false
+  if(data.phase==='shop' && (state.wave!==data.wave || (data.rewardChosen || null)!==state.claimedId || new Set(data.rewards.map(row=>row.id)).size!==data.rewards.length || (data.rewards.length!==3 && !(state.legacy && data.rewardChosen && data.rewards.length===0))))return false
+  if(data.phase==='shop' && data.rewardChosen && !state.legacy && !data.rewards.some(row=>row.id===data.rewardChosen))return false
+  if(data.lastSettlement!==null){
+    const s=data.lastSettlement
+    if(!s || !Number.isSafeInteger(s.wave) || s.wave<1 || s.wave>data.wave)return false
+    for(const [currency,fields] of [['gold',['base','bounty','wages','total','balance']],['crystals',['base','bonus','total','balance']]])if(!s[currency] || !fields.every(key=>Number.isSafeInteger(s[currency][key]) && s[currency][key]>=0) || s[currency].total!==fields.slice(0,-2).reduce((sum,key)=>sum+s[currency][key],0))return false
+  }
   return true
 }
 
@@ -300,6 +329,21 @@ function migrateExpedition(data) {
   pristine.allies = data.allies.map(restoreSoldier)
   pristine.reserves = pristine.reserves.map(restoreSoldier)
   pristine.casualties = pristine.casualties.map(restoreSoldier)
+  if(data.economyVersion===undefined){
+    pristine.economyVersion=ECONOMY_VERSION
+    pristine.crystals=ECONOMY_CONFIG.legacyGrant
+    pristine.stats.crystalsEarned=ECONOMY_CONFIG.legacyGrant
+    pristine.crystalIncomeWave=['shop','won'].includes(pristine.phase)?pristine.wave:Math.max(0,pristine.wave-1)
+    pristine.waveBonuses={next:emptyWaveBonuses(),active:emptyWaveBonuses()}
+    pristine.printsBudget=PRINTS_PER_WAVE
+    pristine.finalWaveCleared=pristine.wave===WAVES.length && ['shop','won'].includes(pristine.phase)
+    pristine.lastSettlement=null
+    if(pristine.phase==='shop'){
+      if(pristine.rewardChosen){pristine.rewards=[];pristine.rewardState={wave:pristine.wave,claimedId:pristine.rewardChosen,legacy:true}}
+      else {pristine.rewards=createRewardShelf(pristine);pristine.rewardState={wave:pristine.wave,claimedId:null}}
+      if(pristine.rewardChosen==='enlist')pristine.waveBonuses.next.enlistPatterns=['twoPair']
+    }else {pristine.rewards=[];pristine.rewardState={wave:0,claimedId:null}}
+  }
   if (data.reserveUsed === undefined) {
     pristine.maxEnergy = 16
     pristine.energy = pristine.phase === 'ready' ? 16 : Math.min(16, pristine.energy)

@@ -1,5 +1,6 @@
 import { workshopPairs } from './forge.js'
 import { fixtureCompany } from './armyFixtures.js'
+import {claimTestReward, setTestRewardShelf, claimAvailableReward} from './rewardFixtures.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
@@ -27,9 +28,9 @@ function playRun(seed, doctrine = 'iron') {
   const game = createGame({ seed, doctrine })
   for (let index = 0; index < 4000 && !['won', 'lost'].includes(game.phase); index++) {
     if (game.phase === 'shop') {
-      chooseReward(game, game.baseHp < 65 ? 'repair' : 'power')
+      assert.ok(claimAvailableReward(game, game.baseHp < 65 ? 'repair' : 'power'))
       trainOrder(game, game.lastDeploy?.key || 'pair')
-      for (const id of game.shop.slice()) if (game.gold > 18) buyJoker(game, id)
+      for (const id of game.shop.slice()) if (game.crystals >= JOKERS.find(item=>item.id===id).price) buyJoker(game, id)
       assert.equal(nextWave(game), true)
     } else {
       if (game.phase === 'ready') {
@@ -244,7 +245,7 @@ test('a lone self-healing priest holds until the deadline, then only the survivi
     assert.equal(tick(g, 2), false)
     assert.equal(g.baseHp, gate - 6)
     assert.deepEqual(restoreGame(snapshotGame(g)).waveTimeout, g.waveTimeout)
-    chooseReward(g, 'power')
+    assert.ok(claimAvailableReward(g, 'power'))
     nextWave(g)
     assert.equal(g.waveTimeout, null)
     assert.equal(g.waveTime, 0)
@@ -259,10 +260,11 @@ test('the last combat step can clear the field, while a surviving boss breaks th
     game.allies[0].cooldown = killBoss ? 0 : 1
     const gate = game.baseHp
     tick(game, 1 / 30)
-    assert.equal(game.phase, killBoss ? 'won' : 'lost')
+    assert.equal(game.phase, killBoss ? 'shop' : 'lost')
     assert.equal(game.stats.kills, killBoss ? 1 : 0)
     assert.equal(game.baseHp, killBoss ? gate : 0)
     assert.deepEqual(game.waveTimeout, killBoss ? null : { count: 1, damage: gate, boss: true, bossName:'缀命皇后' })
+    if(killBoss){assert.equal(nextWave(game),false);assert.ok(claimAvailableReward(game));assert.ok(nextWave(game));assert.equal(game.phase,'won')}
   }
 })
 
@@ -298,24 +300,25 @@ test('wave rewards, purchases, sell and reroll respect phases, funds and once-on
   assert.equal(game.stats.wavesCleared, 1)
   assert.equal(game.gold, 18)
   assert.equal(nextWave(game), false)
-  assert.equal(chooseReward(game, 'supply'), true)
+  assert.equal(claimTestReward(game, 'supply'), true)
   assert.equal(game.gold, 24)
   assert.equal(chooseReward(game, 'supply'), false)
   assert.equal(game.gold, 24)
   const id = game.shop[0], definition = JOKERS.find(item => item.id === id)
-  const previous = game.gold
+  game.crystals=definition.price+2
+  const previous = game.crystals,gold=game.gold
   assert.equal(buyJoker(game, id), true)
-  assert.equal(game.gold, previous - definition.price)
+  assert.equal(game.crystals, previous - definition.price);assert.equal(game.gold,gold)
   assert.equal(buyJoker(game, id), false)
   assert.ok(game.shop.includes(id)); assert.ok(game.soldShop.includes(id))
   assert.equal(sellJoker(game, id), true)
-  assert.equal(game.gold, previous - definition.price + Math.floor(definition.price / 2))
-  const beforeReroll = game.gold
+  assert.equal(game.crystals, previous - definition.price + Math.max(1,Math.floor(definition.price / 2)))
+  const beforeReroll = game.crystals
   assert.equal(rerollShop(game), true)
-  assert.equal(game.gold, beforeReroll - 2)
+  assert.equal(game.crystals, beforeReroll - 2);assert.equal(game.gold,gold)
   assert.equal(new Set(game.shop).size, game.shop.length)
-  assert.ok(!game.shop.some(id => game.jokers.some(item => item.id === id)))
-  game.gold = 1
+  assert.ok(!game.shop.some(id => !JOKERS.find(item=>item.id===id).stackable && game.jokers.some(item => item.id === id)))
+  game.crystals = 1
   const shelf = game.shop.slice()
   assert.equal(rerollShop(game), false)
   assert.deepEqual(game.shop, shelf)
@@ -330,7 +333,7 @@ test('wave rewards, purchases, sell and reroll respect phases, funds and once-on
 
 test('sixth purchase stays on the shelf and cannot be purchased again after a sale', () => {
   const game = createGame()
-  game.phase = 'shop'; game.rewardChosen = 'supply'; game.gold = 999
+  game.phase = 'shop'; assert.ok(claimTestReward(game,'supply')); game.crystals = 999
   game.jokers = JOKERS.slice(0, 5).map(item => joker(item.id))
   game.shop = JOKERS.slice(5, 8).map(item => item.id)
   assert.equal(buyJoker(game, game.shop[0]), true)

@@ -1,3 +1,4 @@
+import {claimTestReward, setTestRewardShelf, claimAvailableReward} from './rewardFixtures.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { beginBattle, buyExtraHand, chooseReward, createGame, deploy, designateChampion,
@@ -35,26 +36,25 @@ test('a standing captain gains marks on surviving waves and keeps identity, outf
   const first=g.allies[0]
   designateChampion(g,first.id);grantExperience(g,first,12)
   clear(g);assert.equal(g.champion.marks,1)
-  assert.ok(chooseReward(g,'power'));assert.ok(nextWave(g))
+  assert.ok(claimTestReward(g,'power'));assert.ok(nextWave(g))
   order(g,['♠3'])
   assert.equal(g.champion.unitId,first.id)
   clear(g);assert.deepEqual([g.champion.level,g.champion.marks],[2,2])
-  assert.ok(chooseReward(g,'enlist'));g=restoreGame(snapshotGame(g));assert.ok(nextWave(g))
+  assert.ok(claimTestReward(g,'enlist'));g=restoreGame(snapshotGame(g));assert.ok(nextWave(g))
   assert.equal(g.allies.length,3);assert.equal(g.allies.at(-1).jobId,'pike')
   const captain=g.allies.find(u=>u.id===first.id)
   assert.deepEqual([captain.locked,captain.grade,captain.trainingXp,captain.variantRank],[true,first.grade,14,'K'])
   assert.ok(beginBattle(g))
 })
 
-test('shop prisoners are exclusive rewards on waves two and four and never duplicate on resume', () => {
+test('enlist is an eligible random reward on every wave and never duplicates on resume', () => {
   for (const wave of [1,2,3,4,5]) {
     const g=createGame({seed:wave})
     g.wave=wave
     order(g,['♥2']);clear(g)
-    const offered=[2,4].includes(wave)
-    assert.equal(g.rewards.some(item => item.id==='enlist'),offered)
-    assert.equal(chooseReward(g,'enlist'),offered)
-    if (!offered) continue
+    assert.equal(g.rewards.length,3);assert.equal(new Set(g.rewards.map(row=>row.id)).size,3)
+    if(!g.rewards.some(item=>item.id==='enlist')){const before=snapshotGame(g);assert.equal(chooseReward(g,'enlist'),false);assert.deepEqual(snapshotGame(g),before)}
+    assert.ok(claimTestReward(g,'enlist'))
     assert.equal(chooseReward(g,'power'),false)
     const resumed=restoreGame(snapshotGame(g))
     assert.ok(nextWave(resumed));assert.equal(nextWave(resumed),false)
@@ -119,7 +119,7 @@ test('a wiped, fused captain returns after a breached wave and a mid-battle relo
   assert.equal(game.phase, 'shop')
   assert.ok(game.baseHp > 0 && game.baseHp < game.maxBaseHp)
   assert.equal(game.waveKills, 0)
-  assert.ok(chooseReward(game, 'repair'))
+  assert.ok(claimTestReward(game, 'repair'))
   assert.ok(nextWave(game))
   const [unit] = game.allies
   assert.equal(game.allies.length, 1)
@@ -144,7 +144,7 @@ test('choosing supplies unlocks trade once and a full roster trains from the enl
   assert.equal(trainOrder(game, 'pair'), false)
   assert.equal(nextWave(game), false)
   assert.equal(game.gold, gold)
-  assert.ok(chooseReward(game, 'enlist'))
+  assert.ok(claimTestReward(game, 'enlist'))
   assert.equal(chooseReward(game, 'power'), false)
   assert.ok(nextWave(game))
   assert.deepEqual(game.allies.map(u=>u.id), ids)
@@ -157,7 +157,7 @@ test('late fusion uses the actual stats a veteran gained in an earlier wave', ()
   const baseHp = donor.maxHp, baseAtk = donor.atk
   grantExperience(game, donor, 30)
   clear(game)
-  assert.ok(chooseReward(game,'supply')); assert.ok(nextWave(game))
+  assert.ok(claimTestReward(game,'supply')); assert.ok(nextWave(game))
   const lead = addUnit(game,'healer','ally',2)
   const hp = lead.maxHp, atk = lead.atk
   const gain = trainingBonus(31, game.wave)

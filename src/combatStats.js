@@ -156,7 +156,7 @@ export function compactScoreTrace(trace) {
     hand:{key:trace.hand.key,name:trace.hand.name,level:trace.hand.level},
     scoringCards:trace.scoringCards.map(({suit,rank,points})=>({suit,rank,points})),
     nonScoringCards:trace.nonScoringCards.map(({suit,rank})=>({suit,rank})),
-    chipsBeforeMult:trace.chipsBeforeMult,mult:trace.mult,finalScore:trace.finalScore,
+    chipsBeforeMult:trace.chipsBeforeMult,mult:trace.mult,finalScore:trace.finalScore,...(trace.finalBonus?{finalBonus:copy(trace.finalBonus)}:{}),
     chipBonuses:trace.chipBonuses.map(({id,delta,quantity})=>({id,delta,quantity})),
     quality:{floor:trace.quality.floor,rolled:trace.quality.rolled},recruit:trace.recruit,
     order:trace.order,items:trace.items.map(({id,quantity,actual})=>({id,quantity,actual}))})
@@ -268,7 +268,9 @@ export function validOrderScoreTrace(value,full=false) {
     Array.isArray(value.scoringCards) && value.scoringCards.length>=1 && value.scoringCards.length<=5 && value.scoringCards.every(c=>card(c) && safe(c.points)) &&
     Array.isArray(value.nonScoringCards) && value.nonScoringCards.length<=5 && value.nonScoringCards.every(card) &&
     value.scoringCards.length+value.nonScoringCards.length<=5 &&
-    ['chipsBeforeMult','mult','finalScore'].every(k=>safe(value[k])) && value.chipsBeforeMult*value.mult===value.finalScore &&
+    ['chipsBeforeMult','mult','finalScore'].every(k=>safe(value[k])) &&
+    (!value.finalBonus || safe(value.finalBonus.percent) && value.finalBonus.percent<=1 && safe(value.finalBonus.amount) && text(value.finalBonus.source) && value.finalBonus.amount===Math.floor(value.chipsBeforeMult*value.mult*(1+value.finalBonus.percent))-value.chipsBeforeMult*value.mult) &&
+    value.chipsBeforeMult*value.mult+(value.finalBonus?.amount || 0)===value.finalScore &&
     Array.isArray(value.chipBonuses) && value.chipBonuses.length<=20 && value.chipBonuses.every(r=>r && Object.hasOwn(JOKER_BY_ID,r.id) && safe(r.delta) && safe(r.quantity)) &&
     value.quality && [value.quality.floor,value.quality.rolled].every(n=>Number.isSafeInteger(n) && n>=0 && n<=6) && value.quality.rolled>=value.quality.floor &&
     value.recruit && text(value.recruit.profession) && text(value.recruit.summary) && safe(value.recruit.actualCount) && safe(value.recruit.xp) &&

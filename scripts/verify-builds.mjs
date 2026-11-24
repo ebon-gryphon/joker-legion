@@ -7,6 +7,7 @@ import * as E from '../src/engine.js'
 import { rankOf } from '../src/orders.js'
 import { workshopPairs } from '../src/forge.js'
 import { printingCost } from '../src/deck.js'
+import {shopActionAvailability} from '../src/fieldShop.js'
 
 export const BUILD_ROUTES=[
   {id:'a',seed:4,doctrine:'iron',name:'改印同花五条 · 粉笔与墨水'},
@@ -17,7 +18,7 @@ const root=fileURLToPath(new URL('../',import.meta.url))
 const clone=value=>value===undefined?undefined:JSON.parse(JSON.stringify(value))
 const face=card=>card.suit+card.rank
 const cardFact=card=>({id:card.id,face:face(card),slot:card.baseFace || face(card)})
-const budget=g=>({gold:g.gold,energy:g.energy,hands:g.handsLeft,prints:g.printsLeft})
+const budget=g=>({gold:g.gold,crystals:g.crystals,energy:g.energy,hands:g.handsLeft,prints:g.printsLeft})
 const sumSystem=(report,id,key)=>report?.systems?.find(row=>row.id===id)?.[key] || 0
 const selectedFaces=g=>g.selected.map(id=>cardFact(g.hand.find(card=>card.id===id)))
 const rankGroups=cards=>{
@@ -28,7 +29,7 @@ const rankGroups=cards=>{
 
 export function runBuildStrategy(route,{fixtures=true}={}) {
   const game=E.createGame({seed:route.seed,doctrine:route.doctrine})
-  const log={id:route.id,name:route.name,seed:route.seed,doctrine:route.doctrine,difficulty:game.difficulty,
+  const log={id:route.id,name:route.name,seed:route.seed,doctrine:route.doctrine,difficulty:game.difficulty,economyVersion:game.economyVersion,
     actions:[],turns:[],waves:[],fixtures:[],milestones:{},result:null}
   let capturedCConversion=false,checkpoint=0
   const capture=(id,label,snapshot=E.snapshotGame(game))=>{
@@ -56,7 +57,7 @@ export function runBuildStrategy(route,{fixtures=true}={}) {
     const target=game.allies.some(unit=>unit.type==='knight')?'knight':beforePlan.target
     if(target!==game.orderTarget)act('target',{target},()=>E.setOrderTarget(game,target))
     const plan=E.previewHand(game),before=E.snapshotGame(game)
-    if(route.id==='a' && game.wave===2 && plan.key==='flushFive')capture('a-before-3520','合法第二波同花五条出牌前',before)
+    if(route.id==='a' && game.wave===2 && plan.key==='flushFive')capture('a-before-3520','合法第二波同花五条出牌前（旧fixture ID保留，分数以实际记录为准）',before)
     if(route.id==='a' && plan.waiting)capture('a-before-legendary-reserve','合法满编传说候补出牌前',before)
     const params={cards:selectedFaces(game),target:plan.target,expectedKey:plan.key,expectedScore:plan.score.total,label}
     act('deploy',params,()=>E.deploy(game))
@@ -72,6 +73,8 @@ export function runBuildStrategy(route,{fixtures=true}={}) {
       capture('b-before-first-training','合法满编集训的出牌前',before)
       const fixture=log.fixtures.find(item=>item.id==='b-before-first-training');if(fixture)fixture.afterAction=log.actions.length-1
     }
+    if(route.id==='b' && last.count===0 && !last.waiting && last.scoreTrace.items.some(item=>item.id==='third-act' && item.actual?.triggered && item.actual.effects.xpGain>0))
+      log.milestones.thirdActTraining ||= {afterAction:log.actions.length,ordinal:game.stats.deploys,wave:game.wave,xp:last.trainingXp}
     if(route.id==='c' && last.scoreTrace.items.some(item=>item.id==='red-echo' && item.actual?.triggered) && !log.milestones.firstRedEcho) {
       const actual=last.scoreTrace.items.find(item=>item.id==='red-echo').actual
       log.milestones.firstRedEcho={afterAction:log.actions.length,wave:game.wave,actual:clone(actual)}
@@ -93,7 +96,7 @@ export function runBuildStrategy(route,{fixtures=true}={}) {
     print(source,[target]);return [source.id,target.id]
   }
   function improveArmy() {
-    if(route.id==='a' && game.wave===1 || route.id==='b' && !log.milestones.firstTraining)return
+    if(route.id==='a' && game.wave===1 || route.id==='b' && !log.milestones.thirdActTraining)return
     const pairs=workshopPairs(game)
     const ascending=pairs.ascend[0]
     const promoting=pairs.promote[0]
@@ -138,22 +141,24 @@ export function runBuildStrategy(route,{fixtures=true}={}) {
     }
   }
   function shop() {
-    const reward=route.id==='a' && game.wave===1?'supply':game.baseHp<65?'repair':'supply'
-    act('reward',{id:reward},()=>E.chooseReward(game,reward))
+    const offered=game.rewards.filter(item=>E.rewardAvailability(game,item.id).available)
+    const reward=(offered.find(item=>game.baseHp<65 && item.id==='repair') || offered.find(item=>item.id==='supply') || offered[0])?.id
+    assert.ok(reward,'A genuine random offer must be available')
+    act('reward',{id:reward,offers:game.rewards.map(item=>item.id)},()=>E.chooseReward(game,reward))
     const wants=route.id==='a'?['score-chalk','pair-ink']:route.id==='c'?['red-echo','healer-brooch']:['iron-banner']
     const rounds=route.id==='c'?3:1
     for(let round=0;round<rounds;round++) {
       for(const id of game.shop.slice()) {
-        const item=E.JOKERS.find(item=>item.id===id)
-        if(wants.includes(id) && game.gold>=item.price && (!game.jokers.some(owned=>owned.id===id) || item.stackable))
+        if(wants.includes(id) && shopActionAvailability(game,'buy',id).available)
           act('buy',{id,offers:game.shop.slice()},()=>E.buyJoker(game,id))
       }
-      if(round+1<rounds && game.gold>=7 && wants.some(id=>!game.jokers.some(item=>item.id===id)))
+      if(round+1<rounds && game.crystals>=7 && shopActionAvailability(game,'reroll').available && wants.some(id=>!game.jokers.some(item=>item.id===id)))
         act('reroll',{offersBefore:game.shop.slice()},()=>E.rerollShop(game))
       else break
     }
     const key=route.id==='a'?(game.wave===1?'pair':game.discoveredHands.includes('flushFive')?'flushFive':'pair'):route.id==='c'?'pair':game.lastDeploy.key
-    if(game.gold>=5 && game.handLevels[key]<3 && (!['five','flushHouse','flushFive'].includes(key) || game.discoveredHands.includes(key)))
+    const printReserve=route.id==='a' && game.wave===1?14:0
+    if(game.gold>=5+printReserve && game.handLevels[key]<3 && (!['five','flushHouse','flushFive'].includes(key) || game.discoveredHands.includes(key)))
       act('research',{key},()=>E.trainOrder(game,key))
     act('next-wave',{},()=>E.nextWave(game))
   }
@@ -185,7 +190,7 @@ export function runBuildStrategy(route,{fixtures=true}={}) {
     if(game.phase==='shop')shop()
   }
   assert.ok(['won','lost'].includes(game.phase),'Route must play until an actual win or loss')
-  log.result={phase:game.phase,wave:game.wave,wavesCleared:game.stats.wavesCleared,gate:game.baseHp,kills:game.stats.kills,gold:game.gold,
+  log.result={phase:game.phase,wave:game.wave,wavesCleared:game.stats.wavesCleared,gate:game.baseHp,kills:game.stats.kills,gold:game.gold,crystals:game.crystals,
     heartEngineDamage:log.waves.reduce((sum,wave)=>sum+wave.heartEngineDamage,0),redEchoHealing:log.waves.reduce((sum,wave)=>sum+wave.redEchoHealing,0),wavesRecorded:checkpoint}
   log.finalSnapshot=E.snapshotGame(game)
   return log
@@ -212,7 +217,7 @@ export function replayBuild(log,{onAction,onTick}={}) {
     else if(entry.type==='formation')result=E.setFormation(game,p.id)
     else if(entry.type==='battle-start')result=E.beginBattle(game)
     else if(entry.type==='trick')result=E.useTrick(game,p.targetId,p.step)
-    else if(entry.type==='reward')result=E.chooseReward(game,p.id)
+    else if(entry.type==='reward'){if(p.offers)assert.deepEqual(game.rewards.map(item=>item.id),p.offers);result=E.chooseReward(game,p.id)}
     else if(entry.type==='buy'){assert.deepEqual(game.shop,p.offers);result=E.buyJoker(game,p.id)}
     else if(entry.type==='sell')result=E.sellJoker(game,p.id)
     else if(entry.type==='reroll'){assert.deepEqual(game.shop,p.offersBefore);result=E.rerollShop(game)}
@@ -246,7 +251,7 @@ export async function writeBuildVerification() {
     await writeFile(join(fixtureDirectory,filename),JSON.stringify(fixtureDocument,null,2)+'\n')
     fixture.path='output/build-fixtures/'+filename;delete fixture.snapshot
   }
-  const output={version:1,createdAt:new Date().toISOString(),method:'Only public engine actions; original seeded draws, real shops, earned gold, legal printing and actual combat until win/loss. Replayed action by action.',routes}
+  const output={version:1,createdAt:new Date().toISOString(),method:'Only public engine actions; seeded cards and weighted reward offers, earned gold/crystals, real shops, legal printing and actual combat until win/loss. Every offer and both currency budgets are replayed action by action.',routes}
   await writeFile(join(directory,'build-verification.json'),JSON.stringify(output,null,2)+'\n')
   for(const route of routes)console.log(JSON.stringify({route:route.id,seed:route.seed,result:route.result,milestones:route.milestones,actions:route.actions.length,fixtures:route.fixtures.map(item=>item.path)}))
   return output

@@ -18,7 +18,7 @@ export function replenish(game, count = 8) {
 }
 
 export function printingCost(game, count = 1) {
-  const nextPrice = 2 + PRINTS_PER_WAVE - game.printsLeft
+  const nextPrice = 2 + (game.printsBudget ?? PRINTS_PER_WAVE) - game.printsLeft
   return count * nextPrice + count * (count - 1) / 2
 }
 

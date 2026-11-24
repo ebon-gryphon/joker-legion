@@ -1,3 +1,4 @@
+import {claimTestReward, setTestRewardShelf, claimAvailableReward} from './rewardFixtures.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createGame, addUnit, beginBattle, tick, WAVES, waveSchedule, chooseReward, nextWave, snapshotGame, restoreGame } from './engine.js'
@@ -41,13 +42,13 @@ test('clearing the midpoint opens supplies and wave seven; only wave twelve ends
     g.enemies=[];g.spawnIndex=g.schedule.length;g.waveTime=4
     tick(g,1/30)
     assert.equal(g.stats.wavesCleared,wave)
-    assert.equal(g.phase,wave===6?'shop':'won')
+    assert.equal(g.phase,'shop')
     assert.ok(restoreGame(snapshotGame(g)))
-    if(wave===6) {
-      assert.ok(chooseReward(g,'power'))
-      assert.ok(nextWave(g));assert.equal(g.wave,7)
-      assert.ok(restoreGame(snapshotGame(g)))
-    } else assert.equal(nextWave(g),false)
+    assert.equal(nextWave(g),false)
+    assert.ok(claimAvailableReward(g,'power'))
+    assert.ok(nextWave(g));assert.equal(g.wave,wave===6?7:12)
+    assert.equal(g.phase,wave===6?'ready':'won')
+    assert.ok(restoreGame(snapshotGame(g)))
   }
 })
 
@@ -114,7 +115,7 @@ test('twelve-wave and in-flight royal warnings roundtrip while old six-wave vict
   const continued=restoreGame(active)
   assert.ok(continued);assert.equal(continued.campaignLength,12)
   tick(continued,1/30);assert.equal(continued.phase,'shop')
-  assert.ok(chooseReward(continued,'power'));assert.ok(nextWave(continued));assert.equal(continued.wave,7)
+  assert.ok(claimTestReward(continued,'power'));assert.ok(nextWave(continued));assert.equal(continued.wave,7)
   for(const mutate of [s=>s.wave=13,s=>s.bossTelegraph.remaining=-1,s=>s.bossTelegraph.mode='unknown',s=>s.enemies[0].bossCasts=-1]) {
     const bad=snapshotGame(copy)
     // Ensure the invalid-warning cases start with a real, active warning.

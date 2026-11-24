@@ -34,8 +34,10 @@ export function buildScoreTrace(game,plan,{cards,scoring,mode='preview'}={}) {
     return entry
   })
   // The trace explains the accepted plan; it never rolls a grade or awards a score.
-  if(chips!==plan.score.chips || chips*plan.score.mult!==plan.score.total) throw new Error('Score trace disagrees with the authoritative hand score')
-  steps.push({kind:'multiply',id:'multiply',label:'牌谱倍率',chips,mult:plan.score.mult,total:plan.score.total})
+  if(chips!==plan.score.chips || chips*plan.score.mult+(plan.score.rewardBonus || 0)!==plan.score.total) throw new Error('Score trace disagrees with the authoritative hand score')
+  steps.push({kind:'multiply',id:'multiply',label:'牌谱倍率',chips,mult:plan.score.mult,total:plan.score.baseTotal ?? plan.score.total})
+  const finalBonus=plan.score.rewardPercent?{percent:plan.score.rewardPercent,amount:plan.score.rewardBonus,source:'波后奖励·下波首手'}:null
+  if(finalBonus)steps.push({kind:'scoreBonus',id:'wave-first-score',label:finalBonus.source+' +'+Math.round(finalBonus.percent*100)+'%（+'+finalBonus.amount+'分）',total:plan.score.total})
   const floor=plan.grade,rolled=mode==='resolved'?plan.captainGrade:undefined
   const quality={floor,name:QUALITIES[floor].name,odds:qualityOdds(floor),...(rolled===undefined?{}:{rolled,rolledName:QUALITIES[rolled].name})}
   const receiver=plan.trainerId?{id:plan.trainerId,name:plan.trainerName}:null
@@ -53,7 +55,7 @@ export function buildScoreTrace(game,plan,{cards,scoring,mode='preview'}={}) {
     hand:{key:plan.key,name:plan.name,level:plan.level,baseChips:rule.chips,levelChips,baseMult:rule.mult,levelMult:(plan.level-1)*rule.multGain,mult:plan.score.mult},
     selectedCards:cards.map(card=>({id:card.id,suit:card.suit,rank:card.rank,scoring:plan.scoringIds.includes(card.id)})),scoringCards,
     nonScoringCards:cards.filter(card=>!plan.scoringIds.includes(card.id)).map(card=>({id:card.id,suit:card.suit,rank:card.rank,reason:'不属于本手最高牌型，不贡献点数或按计分牌触发的道具。'})),
-    chipBonuses,chipsBeforeMult:chips,mult:plan.score.mult,finalScore:plan.score.total,quality,recruit,
+    chipBonuses,chipsBeforeMult:chips,mult:plan.score.mult,finalScore:plan.score.total,...(finalBonus?{finalBonus}:{}),quality,recruit,
     order:{sourceScore:plan.score.total,crownMultiplier:plan.containsFlush && game.jokers.some(item=>item.id==='flush-crown')?1.25:1,bonus:{...plan.bonus},label:plan.description},
     items:itemTrace(game,plan,{scoring}),steps})
 }

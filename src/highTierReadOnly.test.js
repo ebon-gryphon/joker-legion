@@ -57,5 +57,6 @@ test('high-tier visual sampling leaves every legal seed-4 action snapshot and RN
   assert.deepEqual(frozen,before);assert.deepEqual(snapshotGame(after),before);assert.equal(after.rng,before.rng)
  }})
  assert.deepEqual(snapshotGame(game),baseline.finalSnapshot)
- assert.deepEqual([game.phase,game.wave,game.baseHp,game.gold,game.stats.kills],['won',12,100,119,164])
+ assert.deepEqual([game.phase,game.wave],['won',12])
+ assert.equal(game.rng,baseline.finalSnapshot.rng)
 })

@@ -1,3 +1,4 @@
+import {claimTestReward, setTestRewardShelf, claimAvailableReward} from './rewardFixtures.js'
 import { fixtureCompany } from './armyFixtures.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -73,7 +74,7 @@ test('victory regroups everyone without a casualty trigger, but learned orders, 
   const ids=game.allies.map(u=>u.id)
   assert.equal(trainOrder(game,'pair'),false)
   assert.equal(buyJoker(game,game.shop[0]),false)
-  assert.ok(chooseReward(game,'supply'))
+  assert.ok(claimTestReward(game,'supply'))
   const gold=game.gold
   assert.ok(trainOrder(game,'pair')); assert.equal(game.handLevels.pair,2); assert.equal(game.gold,gold-5)
   const trained=snapshotGame(game)
@@ -94,6 +95,8 @@ test('legacy camps, battles and shops preserve their recorded soldiers on every 
   const fresh=snapshotGame(game); assert.deepEqual(restoreGame(fresh).allies,game.allies)
   for(const phase of ['ready','battle','shop']) {
     const legacy=structuredClone(fresh);delete legacy.orderRules;legacy.phase=phase;legacy.energy=5
+    for(const key of ['economyVersion','crystals','crystalIncomeWave','lastSettlement','rewardState','waveBonuses','printsBudget','finalWaveCleared'])delete legacy[key]
+    delete legacy.stats.crystalsEarned
     const restored=restoreGame(legacy)
     assert.ok(restored);assert.deepEqual(restored.allies.map(u=>u.id),game.allies.map(u=>u.id))
     assert.deepEqual(restored.hand,legacy.hand)
@@ -155,7 +158,7 @@ test('three camp orders survive saves and a staffed new wave resets the budget',
   assert.equal(deploy(g),false);assert.deepEqual(snapshotGame(g),spent)
   assert.ok(beginBattle(g));assert.equal(g.enemies.length,g.schedule.length)
   g.enemies=[];g.waveTime=4;tick(g,.1)
-  assert.ok(chooseReward(g,'power'));assert.ok(nextWave(g))
+  assert.ok(claimTestReward(g,'power'));assert.ok(nextWave(g))
   assert.equal(g.handsLeft,3);assert.equal(g.allies.length,3)
 })
 
@@ -226,7 +229,7 @@ test('an exhausted wave can buy a fourth play and unused purchases and price res
   const shop = snapshotGame(g)
   assert.equal(buyExtraHand(g),false)
   assert.deepEqual(snapshotGame(g),shop)
-  assert.ok(chooseReward(g,'power'));assert.ok(nextWave(g))
+  assert.ok(claimTestReward(g,'power'));assert.ok(nextWave(g))
   assert.deepEqual([g.handsLeft,g.handsBought,g.paidHandsLeft,extraHandPrice(g)],[3,0,0,4])
 })
 

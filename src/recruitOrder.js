@@ -30,6 +30,7 @@ export function issueOrder(game, secondary) {
   const baseStar=Math.max(1,preview.returning?game.champion?.level || 1:1,preview.royalOrder?3:1)
   spendCharge(game,'score-ticket')
   game.handsLeft--
+  if(game.waveBonuses?.active)game.waveBonuses.active.firstScorePercent=0
   if (preview.prepaid) game.paidHandsLeft--
   game.energy = Math.max(0, game.energy - preview.cost)
   game.preparedScore = Math.max(game.preparedScore,preview.score.total)

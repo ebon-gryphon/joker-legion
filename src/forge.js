@@ -1,4 +1,5 @@
 import { lastingStat } from './standingArmy.js'
+import { combinedRewardModifiers } from './rewardModifiers.js'
 import { ascendedGrade, QUALITIES } from './quality.js'
 import { earnedTraining, trainingBonus, soldierValue, inheritLessons, LESSONS } from './training.js'
 import { professionId, combinedProfessionJobs, professionJobs } from './professionFusion.js'
@@ -71,6 +72,7 @@ export function mergePreview(game, leaderId, donorId, kind) {
   const maxHp = leader.maxHp + gainHp + Math.round((lastingStat(donor,'maxHp') - trained.hp) * share)
   const skills=[...new Set([leader.fusion,donor.fusion,...(leader.fusionSkills || []),...(donor.fusionSkills || [])].filter(Boolean))]
   return {
+    ...combinedRewardModifiers(leader,donor),
     ...(ascending ? {grade:leader.grade + 1} : {}),
     ...(profession || leader.fusionJobs || donor.fusionJobs ? {fusionJobs:combinedProfessionJobs(leader,donor)} : {}),
     ...(skills.length && (profession || leader.fusionSkills || donor.fusionSkills || donor.fusion) ? {fusionSkills:skills,skillCharge:leader.skillCharge || 0} : {}),

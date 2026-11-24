@@ -1,6 +1,6 @@
 /** Read-only timing for an already accepted score trace. Nothing here awards a score. */
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,v))
-const weights={base:1,card:.65,item:.85,multiply:1.25,outcome:.85,order:.85,relic:.9,hand:1.1,final:2}
+const weights={base:1,card:.65,item:.85,multiply:1.25,scoreBonus:.85,outcome:.85,order:.85,relic:.9,hand:1.1,final:2}
 const highHands=new Set(['fullHouse','four','straightFlush','five','flushHouse','flushFive'])
 const unique=values=>[...new Set(values)]
 function cinematicWeight(step){
@@ -22,7 +22,7 @@ export function buildScoreSequence(trace,{cinematic=false}={}) {
   if(!source.length)return null
   if(cinematic){
     source=[{kind:'hand',id:'hand-established',label:trace.hand?.name+'成立'},...source]
-    const multiply=source.findIndex(step=>step.kind==='multiply')
+    const multiply=source.findIndex(step=>step.kind===(trace.finalBonus?'scoreBonus':'multiply'))
     if(multiply>=0)source.splice(multiply+1,0,{kind:'final',id:'final-score',label:'本手 '+trace.finalScore+' 分',chips:trace.chipsBeforeMult,mult:trace.mult,total:trace.finalScore})
   }
   const cards=source.filter(s=>s.kind==='card').length,items=source.filter(s=>s.kind==='item').length,relics=source.filter(s=>s.kind==='relic').length
@@ -84,10 +84,11 @@ export function sequenceStateAt(sequence,elapsed=0) {
     if(row.kind==='multiply')multiplied=true
   }
   const shown=sequence.steps.slice(0,index+1)
+  const visibleScore=sequence.trace.finalBonus && !shown.some(row=>row.kind==='scoreBonus')?sequence.trace.chipsBeforeMult*sequence.trace.mult:sequence.trace.finalScore
   const qualityVisible=done || shown.some(step=>step.id==='quality')
   const focus=done?'complete':sequence.cinematic && step.kind==='multiply'?'multiplier':focusOf(step,stepProgress)
-  return {index,step,focus,done,chips,mult:sequence.trace.mult,score:multiplied?sequence.trace.finalScore:null,
-    displayScore:multiplied && (done || step.kind!=='multiply' || !sequence.cinematic && stepProgress>=.45)?sequence.trace.finalScore:null,
+  return {index,step,focus,done,chips,mult:sequence.trace.mult,score:multiplied?visibleScore:null,
+    displayScore:multiplied && (done || step.kind!=='multiply' || !sequence.cinematic && stepProgress>=.45)?visibleScore:null,
     qualityVisible,musterVisible:done || shown.some(step=>step.id==='muster'),orderVisible:done || shown.some(step=>step.kind==='order'),
     revealedGrade:qualityVisible?(sequence.trace.quality?.rolled ?? sequence.trace.quality?.floor ?? 0):null,
     litCardIds:selected.map(card=>card.id),countedCardIds:shown.filter(step=>step.kind==='card').map(step=>step.id),

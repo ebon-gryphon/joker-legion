@@ -1,3 +1,4 @@
+import {claimTestReward, setTestRewardShelf, claimAvailableReward} from './rewardFixtures.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createGame, addUnit, beginBattle, deploy, snapshotGame, restoreGame, tick, useTrick, chooseReward, nextWave } from './engine.js'
@@ -122,7 +123,7 @@ test('pre-battle orders, gross gate damage, repairs, net loss, duration and rema
   assert.equal(report.majorOrders[0].count,1)
   assert.ok(validCombatRecord(report));assert.ok(validCombatStats(snapshotGame(g)))
   const original=structuredClone(report)
-  assert.ok(chooseReward(g,'repair'))
+  assert.ok(claimTestReward(g,'repair'))
   assert.deepEqual(combatSummary(g),original)
   assert.ok(nextWave(g));assert.equal(g.combatLedger.wave,2)
   assert.notEqual(g.combatLedger.waveId,report.waveId)

@@ -28,6 +28,8 @@ export function planHand(game, cardIds, reveal, {trace=true}={}) {
   const hand = ORDER_BOOK[key], level = game.handLevels[key]
   const extraChips = scoreItemChips(game,scoring,key,containsPair)
   const score = handScore(key, level, points + extraChips)
+  const rewardPercent=game.waveBonuses?.active?.firstScorePercent || 0
+  if(rewardPercent){score.baseTotal=score.total;score.rewardPercent=rewardPercent;score.total=Math.floor(score.total*(1+rewardPercent));score.rewardBonus=score.total-score.baseTotal}
   const lead = scoring.reduce((best,card)=>rankOf(card)>rankOf(best)?card:best)
   const sourceSlot = card => slotOf(game.hand.find(c => c.id === card.id))
   const legacyCard = game.champion && !game.champion.pattern && scoring.find(c=>sourceSlot(c)===game.champion.slot)

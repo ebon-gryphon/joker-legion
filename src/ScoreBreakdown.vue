@@ -11,6 +11,7 @@ const quality=computed(()=>QUALITIES[props.trace?.quality.floor ?? 0])
 const odds=computed(()=>props.trace?.quality.odds.filter(row=>row.grade!==props.trace.quality.floor) || [])
 const nonChipItems=computed(()=>props.trace?.items.filter(item=>item.phase!=='chips' && item.quantity>0) || [])
 const absentDemoItems=computed(()=>props.trace?.items.filter(item=>!item.quantity) || [])
+const finalBonus=computed(()=>Number.isFinite(props.trace?.finalBonus?.amount) && props.trace.finalBonus.amount>0?props.trace.finalBonus:null)
 const displayNumber=n=>Number.isInteger(n)?n:Number(n.toFixed(1))
 function effects(item){
   if(!item.actual)return null
@@ -25,10 +26,10 @@ function effects(item){
       <button type="button" class="score-detail-toggle key-link" :aria-expanded="details" @click="details=!details">{{ details?'收起明细':'计分明细' }} <span aria-hidden="true">{{ details?'⌃':'⌄' }}</span></button></header>
     <div class="score-equation" aria-label="最终分计算公式">
       <span class="score-chips"><b>{{ trace.chipsBeforeMult }}</b><small>筹码</small></span><i aria-hidden="true">×</i>
-      <span class="score-mult"><b>{{ trace.mult }}</b><small>牌谱倍率</small></span><i aria-hidden="true">=</i>
+      <span class="score-mult"><b>{{ trace.mult }}</b><small>牌谱倍率</small></span><template v-if="finalBonus"><i aria-hidden="true">＋</i><span class="score-final-bonus"><b>{{ finalBonus.amount }}</b><small>奖励分</small></span></template><i aria-hidden="true">=</i>
       <span class="score-total"><b>{{ trace.finalScore }}</b><small>分</small></span>
     </div>
-    <p class="score-source-summary">基础 {{ trace.hand.baseChips }}<template v-if="trace.hand.levelChips"> ＋研习 {{ trace.hand.levelChips }}</template> ＋牌点 {{ points }}<template v-if="extra"> ＋道具 {{ extra }}</template>；全部筹码合计后乘倍率。</p>
+    <p class="score-source-summary">基础 {{ trace.hand.baseChips }}<template v-if="trace.hand.levelChips"> ＋研习 {{ trace.hand.levelChips }}</template> ＋牌点 {{ points }}<template v-if="extra"> ＋道具 {{ extra }}</template>；全部筹码合计后乘倍率。<template v-if="finalBonus">{{ finalBonus.source }}另加 {{ displayNumber(finalBonus.percent*100) }}%（{{ finalBonus.amount }} 分）。</template></p>
     <div class="score-quality"><b>{{ quality.name }}保底</b><span v-if="trace.mode==='resolved' && trace.quality.rolled!==undefined">本手 {{ trace.quality.rolledName }}</span><span v-else-if="odds.length">升格机会：{{ odds.map(row=>row.name+' '+row.chance+'%').join(' · ') }}</span><span v-else>品质已确定</span></div>
     <p class="score-realized" :class="{overflow:outcome.overflow}" data-score-outcome>{{ outcome.summary }}</p>
     <p v-if="outcome.legendaryAlternative" class="score-conditional">{{ outcome.legendaryAlternative }}</p>
@@ -46,7 +47,8 @@ function effects(item){
       </div>
       <p v-if="!trace.chipBonuses.length" class="score-miss">本手没有计分道具加成。</p>
       <div class="score-ledger-row score-mult-ledger"><span>牌谱倍率 <small>基础 {{ trace.hand.baseMult }}<template v-if="trace.hand.levelMult"> ＋研习 {{ trace.hand.levelMult }}</template></small></span><b>×{{ trace.mult }}</b></div>
-      <p class="score-final-ledger">{{ trace.chipsBeforeMult }} 筹码 × {{ trace.mult }} 倍率 ＝ <b>{{ trace.finalScore }} 分</b></p>
+      <div v-if="finalBonus" class="score-ledger-row score-final-bonus" data-score-final-bonus><span>{{ finalBonus.source }}<small>计分后额外 {{ displayNumber(finalBonus.percent*100) }}%，独立于牌谱倍率</small></span><b>＋{{ finalBonus.amount }} 分</b></div>
+      <p class="score-final-ledger">{{ trace.chipsBeforeMult }} 筹码 × {{ trace.mult }} 倍率<template v-if="finalBonus"> ＋ {{ finalBonus.amount }} 奖励分</template> ＝ <b>{{ trace.finalScore }} 分</b></p>
       <p v-if="trace.recruit.statBonusSource" class="score-stat-source">{{ trace.recruit.statBonusSource }}</p>
       <p class="score-order-source">这 {{ trace.order.sourceScore }} 分也决定本手战令强度：{{ trace.order.label }}。</p>
       <template v-if="nonChipItems.length"><h4>搭档连锁</h4>

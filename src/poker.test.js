@@ -1,3 +1,4 @@
+import {claimTestReward, setTestRewardShelf, claimAvailableReward} from './rewardFixtures.js'
 import { fixtureCompany } from './armyFixtures.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -49,7 +50,7 @@ function winWave(game) {
   assert.ok(beginBattle(game))
   for (let i = 0; i < 1200 && game.phase === 'battle'; i++) tick(game,.25)
   assert.equal(game.phase,'shop')
-  assert.ok(chooseReward(game,'supply'))
+  assert.ok(claimTestReward(game,'supply'))
 }
 
 for (const key of ['five','flushHouse','flushFive']) {

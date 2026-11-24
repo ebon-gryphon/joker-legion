@@ -1,3 +1,4 @@
+import {claimTestReward, setTestRewardShelf, claimAvailableReward} from './rewardFixtures.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createGame, deploy, previewHand, beginBattle, chooseReward, nextWave, addUnit, drill,
@@ -68,7 +69,7 @@ test('different professions transfer distinct lessons, XP tiers and trained abil
   assert.deepEqual(saved(g).allies[0].lessons,cavalry.lessons)
 })
 test('sold offers keep positions, a second purchase is atomic, stacks and quantities survive reload and single-copy sale',()=>{
-  let g=createGame();g.phase='shop';g.rewardChosen='power';g.gold=200
+  let g=createGame();g.phase='shop';assert.ok(claimTestReward(g,'power'));g.crystals=200
   for (const id of ['red-echo','third-act','blood-pact','crossfire','score-chalk']) add(g,id)
   g.shop=['score-chalk','score-ticket','ward-pin']
   const offers=g.shop.slice()
@@ -91,7 +92,7 @@ test('stacked scoring, consumable charges, opening shields and wave income are a
   g.energy=16;assert.ok(deploy(g));assert.equal(copies(g,'score-ticket'),1);assert.equal(g.lastDeploy.score,hand.score.total)
   const guard=g.allies[0],shield=guard.shield;assert.ok(beginBattle(g));assert.equal(guard.shield,shield+6)
   g.baseHp-=10;let gold=g.gold;endWave(g);assert.equal(g.baseHp,g.maxBaseHp-8);assert.equal(g.gold-gold,12)
-  assert.ok(chooseReward(g,'repair'));assert.ok(nextWave(g));assert.ok(saved(g))
+  assert.ok(claimTestReward(g,'repair'));assert.ok(nextWave(g));assert.ok(saved(g))
 })
 
 test('two waiting legends can fuse on the bench, then take one free spot with their saved quality',()=>{

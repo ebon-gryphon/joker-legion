@@ -13,12 +13,17 @@ import { DETACHMENTS } from './recruitment.js'
 import { addUnit, recruitIdentity, arrangeCamp, muster } from './campArmy.js'
 import { applyOpeningItems } from './itemEffects.js'
 import { initializeCombatStats, beginCombatStats, finishCombatStats } from './combatStats.js'
+import {ECONOMY_VERSION,ECONOMY_CONFIG,gainCrystals,waveCrystalIncome} from './economy.js'
+import {createRewardShelf} from './waveRewards.js'
+import {emptyWaveBonuses,advanceRewardBonuses} from './rewardModifiers.js'
 
 export function createGame({ seed = 'JOKER-LEGION', doctrine = 'iron', difficulty = 'standard' } = {}) {
   const selected = DOCTRINES.find(item => item.id === doctrine) || DOCTRINES[0]
   const mode = Object.hasOwn(DIFFICULTIES, difficulty) ? difficulty : 'standard'
   const castle = DIFFICULTIES[mode].castle
   const game = {
+    economyVersion:ECONOMY_VERSION,crystals:0,crystalIncomeWave:0,lastSettlement:null,finalWaveCleared:false,
+    rewardState:{wave:0,claimedId:null},waveBonuses:{next:emptyWaveBonuses(),active:emptyWaveBonuses()},printsBudget:PRINTS_PER_WAVE,
     version: 1, campaignLength:WAVES.length, reserves: [], casualties: [], victorySeen: false, lastField: [], squadRules: 1, champion: null, royalMarch: false, orderRules: 3, discoveredHands: [], cardEdits: {}, printsLeft: PRINTS_PER_WAVE, orderTarget: null, trainedHere: false,
     handLevels: Object.fromEntries(Object.keys(ORDER_BOOK).map(key => [key, 1])), seed: String(seed), rng: seedNumber(seed), sequence: 0, doctrine: selected.id,
     difficulty: mode, formation: 'guard', tacticsReport: emptyTacticsReport(), waveReport: emptyWaveReport(),
@@ -33,6 +38,7 @@ export function createGame({ seed = 'JOKER-LEGION', doctrine = 'iron', difficult
     upgrades: { power: 0, regeneration: 0 },
     stats: { deploys: 0, summoned: 0, kills: 0, lost: 0, healed: 0, damage: 0, goldEarned: 0, jokerTriggers: 0, maxChain: 0, bestHand: '高牌', bestPower: 0, wavesCleared: 0, discards: 0 },
   }
+  game.stats.crystalsEarned=0
   replenish(game)
   makeSchedule(game)
   initializeCombatStats(game)
@@ -77,25 +83,22 @@ export function endWave(game) {
   if (repair && game.baseHp < game.maxBaseHp) { restoreBase(game,repair); trigger(game,'gate-rivet','修复城门') }
   game.stats.wavesCleared = game.wave
   finishCombatStats(game,'cleared')
-  if (game.wave === WAVES.length) {
-    regroupArmy(game)
-    game.phase = 'won'
-    game.selected = []
-    game.bossTelegraph = null
-    log(game, '终幕落定。你的军团守住了这座城。', 'epic')
-    effect(game, 'burst', 500, 180, '军团凯旋', '#e5c995')
-    return
-  }
+  game.finalWaveCleared=game.wave===WAVES.length
   game.phase = 'shop'
   game.selected = []
   game.bossTelegraph = null
-  const reward = 8 + game.wave * 2
-  if (game.schedule.some(spawn => spawn.type === 'bellkeeper') && game.tacticsReport.tolls === 0) {
+  const reward = game.finalWaveCleared?0:8 + game.wave * 2
+  if (!game.finalWaveCleared && game.schedule.some(spawn => spawn.type === 'bellkeeper') && game.tacticsReport.tolls === 0) {
     game.tacticsReport.bounty = SILENT_BOUNTY
     log(game, `止钟赏金 +${SILENT_BOUNTY} · 城门未受钟击`, 'epic')
   }
-  const wages = copies(game,'field-pay')
+  const wages = game.finalWaveCleared?0:copies(game,'field-pay')
   gainGold(game, reward + game.tacticsReport.bounty + wages)
+  const crystalTotal=game.crystalIncomeWave===game.wave?0:gainCrystals(game,waveCrystalIncome(game.wave))
+  game.crystalIncomeWave=game.wave
+  game.lastSettlement={wave:game.wave,gold:{base:reward,bounty:game.tacticsReport.bounty,wages,total:reward+game.tacticsReport.bounty+wages,balance:game.gold},
+    crystals:{base:Math.min(crystalTotal,ECONOMY_CONFIG.crystalsPerWave),bonus:Math.max(0,crystalTotal-ECONOMY_CONFIG.crystalsPerWave),total:crystalTotal,balance:game.crystals}}
+  if(game.lastCombatReport)game.lastCombatReport.economy=JSON.parse(JSON.stringify(game.lastSettlement))
   if (wages) trigger(game,'field-pay','分红 +'+wages+' 金币')
   // Keep the battlefield backdrop separate from the restored camp roster.
   game.lastField = game.allies.slice(0,FIELD_LIMIT).map(u => ({
@@ -105,16 +108,12 @@ export function endWave(game) {
   regroupArmy(game)
   game.victorySeen = false
   game.trainedHere = false
-  game.rewards = [
-    { id: 'repair', name: '修复城堡', description: '城堡恢复 20 生命。稳住下一波的容错。', icon: '♡' },
-    { id: 'power', name: '淬炼军团', description: '之后征募的士兵基础属性提高 8%。', icon: '♠' },
-    { id: 'supply', name: '战地补给', description: '获得 6 金币，下波额外获得 1 次弃牌。', icon: '◇' },
-  ]
-  if ([2,4].includes(game.wave)) game.rewards.push({id:'enlist', name:'收编枪兵', description:'下波一名枪兵入阵；满编时转为集训经验。', icon:'♠'})
+  game.rewards=createRewardShelf(game)
+  game.rewardState={wave:game.wave,claimedId:null}
   game.rewardChosen = false
   game.bonusDiscard = 0
   refreshShop(game)
-  log(game, `第 ${game.wave} 波守住了 · 金币 +${reward} · 军团已归营`, 'good')
+  log(game, `第 ${game.wave} 波守住了 · 金币 +${reward} · 蓝水晶 +${crystalTotal}${game.lastSettlement.crystals.bonus?'（含大波次额外 '+game.lastSettlement.crystals.bonus+'）':''} · 免费三选一`, 'good')
 }
 
 export function regroupArmy(game) {
@@ -126,11 +125,13 @@ export function regroupArmy(game) {
 }
 
 export function nextWave(game) {
-  if (game.phase !== 'shop' || !game.rewardChosen || game.wave >= WAVES.length) return false
+  if (game.phase !== 'shop' || !game.rewardChosen || game.wave > WAVES.length) return false
+  if(game.wave===WAVES.length){game.phase='won';game.selected=[];game.bossTelegraph=null;log(game,'终幕落定。你的军团守住了这座城。','epic');effect(game,'burst',500,180,'军团凯旋','#e5c995');return true}
+  advanceRewardBonuses(game)
   game.reserveUsed = false
   game.preparedScore = 0
   game.bellReady = false
-  game.handsLeft = HANDS_PER_WAVE
+  game.handsLeft = HANDS_PER_WAVE+game.waveBonuses.active.hands
   game.handsBought = 0
   game.paidHandsLeft = 0
   game.legacyFieldSize = game.allies.length > FIELD_LIMIT ? game.allies.length : 0
@@ -151,7 +152,8 @@ export function nextWave(game) {
   game.waveKills = 0
   game.waveSpawned = 0
   game.battleId++
-  game.discards = game.maxDiscards + (game.bonusDiscard || 0) + copies(game,'supply-satchel')
+  game.discards = game.maxDiscards + (game.bonusDiscard || 0) + game.waveBonuses.active.discards + copies(game,'supply-satchel')
+  game.bonusDiscard=0
   game.energy = game.maxEnergy
   game.deployCooldown = 0
   game.discardCooldown = 0
@@ -173,18 +175,19 @@ export function nextWave(game) {
     const index = game.deck.findIndex(c => slotOf(c) === game.champion.slot)
     if (index >= 0) [game.hand[7],game.deck[index]] = [game.deck[index],game.hand[7]]
   }
-  if (game.rewardChosen === 'enlist') {
-    const face = DETACHMENTS.twoPair.members[0]
-    const identity = {...recruitIdentity(face,1,'enlist'),pattern:'twoPair'}
+  for(const pattern of game.waveBonuses.active.enlistPatterns) {
+    const face = DETACHMENTS[pattern].members[0]
+    const identity = {...recruitIdentity(face,1,'enlist'),pattern}
     const plan = muster(game,identity)
     if (plan.trainer) grantExperience(game,plan.trainer,plan.xp)
     else addUnit(game,face.type,'ally',1,{identity})
     arrangeCamp(game)
   }
+  game.waveBonuses.active.enlistPatterns=[]
   game.rewardChosen = false
   game.orderTarget = null
   game.trainedHere = false
-  game.printsLeft = PRINTS_PER_WAVE
+  game.printsLeft = game.printsBudget = PRINTS_PER_WAVE+game.waveBonuses.active.prints
   makeSchedule(game)
   initializeCombatStats(game)
   log(game, `${WAVES[game.wave - 1].name}即将来袭 · 可整编驻军或继续征兵`, 'danger')

@@ -1,3 +1,4 @@
+import {claimTestReward, setTestRewardShelf, claimAvailableReward} from './rewardFixtures.js'
 import { fixtureCompany } from './armyFixtures.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -32,7 +33,7 @@ test('the best eligible cart pays automatically and exactly once across save and
     advanceTo(g,120)
     assert.equal(g.phase,'shop')
     assert.equal(g.gold,purse+bonus+10)
-    assert.ok(chooseReward(g,'supply'));assert.ok(nextWave(g))
+    assert.ok(claimTestReward(g,'supply'));assert.ok(nextWave(g))
     assert.equal(g.convoyTaken,null);assert.equal(g.preparedScore,0)
   }
 })

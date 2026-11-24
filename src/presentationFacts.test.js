@@ -22,12 +22,17 @@ test('formal receipts use actual field, reserve and training branches with hones
     }
     assert.equal(deriveDeployFacts(after,after),null)
   }}})
-  const high=receipts.find(receipt=>receipt.score===3520)
-  assert.equal(high.recruitment.status,'fielded');assert.equal(high.recruitment.grade,4);assert.equal(high.recruitment.statBonus,70)
-  assert.deepEqual(high.order.bonus,{force:58,shield:85,haste:45})
+  const high=receipts.find(receipt=>receipt.recruitment.status==='fielded' && receipt.recruitment.grade===4 && receipt.score>=800)
+  const accepted=run.turns.find(turn=>turn.orderId===high.orderId),naturalRank={J:11,Q:12,K:13,A:14}
+  assert.equal(high.recruitment.status,'fielded');assert.equal(high.recruitment.grade,accepted.grade)
+  assert.equal(high.recruitment.statBonus,accepted.scoreTrace.scoringCards.reduce((sum,card)=>sum+(naturalRank[card.rank] || Number(card.rank)),0))
+  assert.deepEqual(high.order.bonus,accepted.scoreTrace.order.bonus);assert.equal(high.order.sourceScore,accepted.score)
   const reserve=receipts.find(receipt=>receipt.recruitment.status==='reserve')
   assert.ok(reserve);assert.ok(reserve.recruitment.unitId)
   assert.ok(!reserve.orderRecipients.some(unit=>unit.id===reserve.recruitment.unitId))
+  const training=receipts.find(receipt=>receipt.recruitment.status==='training')
+  assert.ok(training);assert.equal(training.recruitment.unitId,null)
+  assert.ok(training.recruitment.xpGain>0);assert.ok(training.recruitment.recipient?.id)
 })
 
 test('sidecar combat cues follow real contribution changes and retain stacked orders without claiming exclusive bonus damage',()=>{

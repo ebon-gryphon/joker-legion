@@ -1,3 +1,4 @@
+import {claimTestReward, setTestRewardShelf, claimAvailableReward} from './rewardFixtures.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createGame, addUnit, previewHand, deploy, beginBattle, buyExtraHand, extraHandPrice,
@@ -23,7 +24,7 @@ function deal(g,faces) {
 test('expanded inventory contains 34 buyable items, with working saved stacks and sold slots',()=>{
   assert.equal(JOKERS.length,34)
   assert.equal(new Set(JOKERS.map(i=>i.id)).size,34)
-  const g=createGame();g.phase='shop';g.rewardChosen='repair';g.gold=100
+  const g=createGame();g.phase='shop';assert.ok(claimTestReward(g,'power'));g.crystals=100
   g.shop=['black-wax','ward-flask','oath-standard']
   for(const id of g.shop) assert.ok(buyJoker(g,id))
   const copy=restoreGame(snapshotGame(g)); assert.ok(copy)
@@ -65,7 +66,7 @@ test('opening items apply actual shields and tempo once, and temporary boosts ex
   assert.ok(unit.period<basePeriod);assert.ok(g.enemies.every(e=>e.cooldown>=.8))
   assert.equal(copies(g,'ward-flask'),0);assert.equal(beginBattle(g),false)
   endWave(g);assert.equal(g.allies[0].period,basePeriod)
-  assert.ok(chooseReward(g,'power'));assert.ok(nextWave(g));assert.equal(g.discards,4)
+  assert.ok(claimTestReward(g,'power'));assert.ok(nextWave(g));assert.equal(g.discards,4)
   assert.ok(restoreGame(snapshotGame(g)))
 })
 

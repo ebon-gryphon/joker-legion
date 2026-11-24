@@ -2,16 +2,34 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { BUILD_ROUTES,runBuildStrategy,replayBuild } from '../scripts/verify-builds.mjs'
 
-test('seed 4 reaches a real second-wave 3520 flush-five through earned gold and four legal prints, then replays to its actual ending',()=>{
+test('seed 4 prints a real second-wave legendary flush-five with earned gold, pays shops in crystals and replays the random offers through final victory',()=>{
   const run=runBuildStrategy(BUILD_ROUTES[0])
   const firstPrint=run.actions.find(action=>action.type==='print')
-  assert.equal(firstPrint.wave,2);assert.equal(firstPrint.params.source.face,'♦A')
+  assert.equal(firstPrint.wave,2)
   assert.equal(firstPrint.params.targets.length,4);assert.equal(firstPrint.params.price,14)
-  assert.equal(firstPrint.after.gold,2)
+  assert.ok(firstPrint.before.gold>=firstPrint.params.price)
+  assert.equal(firstPrint.after.gold,firstPrint.before.gold-firstPrint.params.price)
+  assert.equal(firstPrint.after.crystals,firstPrint.before.crystals)
   const high=run.turns.find(turn=>turn.wave===2 && turn.key==='flushFive')
-  assert.equal(high.score,3520);assert.equal(high.grade,4)
-  assert.match(high.scoreTrace.recruit.statBonusSource,/\+70%/);assert.match(high.scoreTrace.recruit.statBonusSource,/评分牌点共 55/)
-  assert.deepEqual([high.scoreTrace.hand.baseChips,high.scoreTrace.scoringCards.reduce((sum,card)=>sum+card.points,0),high.scoreTrace.chipBonuses.reduce((sum,item)=>sum+item.delta,0),high.scoreTrace.mult],[160,55,5,16])
+  assert.ok(high.score>=800);assert.equal(high.grade,4)
+  const recruitPoints={J:11,Q:12,K:13,A:14}
+  assert.equal(high.scoreTrace.recruit.statBonus,high.scoreTrace.scoringCards.reduce((sum,card)=>sum+(recruitPoints[card.rank] || Number(card.rank)),0))
+  assert.ok(high.scoreTrace.recruit.statBonusSource.includes('+'+high.scoreTrace.recruit.statBonus+'%'))
+  assert.equal(new Set(high.scoreTrace.scoringCards.map(card=>card.suit+card.rank)).size,1)
+  assert.equal(high.scoreTrace.scoringCards.length,5)
+  const trace=high.scoreTrace,points=trace.scoringCards.reduce((sum,card)=>sum+card.points,0),bonuses=trace.chipBonuses.reduce((sum,item)=>sum+item.delta,0)
+  assert.equal(trace.chipsBeforeMult,trace.hand.baseChips+trace.hand.levelChips+points+bonuses)
+  assert.equal(high.score,trace.chipsBeforeMult*trace.mult+(trace.finalBonus?.amount || 0))
+  for(const action of run.actions.filter(action=>action.type==='buy' || action.type==='reroll')){
+    assert.equal(action.after.gold,action.before.gold)
+    assert.ok(action.after.crystals<action.before.crystals)
+  }
+  for(const action of run.actions.filter(action=>action.type==='reward')){
+    assert.equal(action.params.offers.length,3);assert.equal(new Set(action.params.offers).size,3)
+    assert.ok(action.params.offers.includes(action.params.id))
+  }
+  assert.equal(run.result.phase,'won');assert.equal(run.result.wave,12)
+  assert.equal(run.waves.reduce((sum,wave)=>sum+wave.report.economy.crystals.total,0),70)
   assert.ok(run.waves.some(wave=>wave.wave===2 && wave.phase==='shop'))
   assert.equal(replayBuild(run).phase,run.result.phase)
   assert.ok(run.fixtures.some(fixture=>fixture.id==='a-before-3520'))

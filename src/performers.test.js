@@ -1,3 +1,4 @@
+import {claimTestReward, setTestRewardShelf, claimAvailableReward} from './rewardFixtures.js'
 import { fixtureCompany } from './armyFixtures.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -107,7 +108,7 @@ test('all six performers have a unique starter, selection art and HUD portrait, 
     game.trickUsed=true
     game.schedule=[];beginBattle(game)
     advance(game,3.2)
-    assert.ok(chooseReward(game,'supply'));assert.ok(nextWave(game))
+    assert.ok(claimTestReward(game,'supply'));assert.ok(nextWave(game))
     assert.equal(game.trickUsed,false)
     assert.equal(game.palmedCard,null)
   }
@@ -129,7 +130,7 @@ test('夹层 carries exactly one physical card, including its changed print, acr
   assert.equal(restoreGame({...snap,keptCardId:'missing'}),null)
   assert.equal(restoreGame({...snap,trickUsed:false}),null)
   const loaded = restoreGame(snap)
-  assert.ok(chooseReward(loaded,'supply'))
+  assert.ok(claimTestReward(loaded,'supply'))
   assert.ok(nextWave(loaded))
   assert.deepEqual(loaded.hand[0],kept)
   assert.equal(loaded.hand.length,8)

@@ -1,5 +1,6 @@
 import { fixtureCompany } from './armyFixtures.js'
 import test from 'node:test'
+import {claimAvailableReward} from './rewardFixtures.js'
 import assert from 'node:assert/strict'
 import { createGame, beginBattle, setOrderTarget, selectCard, deploy, setFeintFlag, scoutRead, FEINT, snapshotGame, restoreGame, tick, chooseReward, nextWave } from './engine.js'
 import { dailySeed, dailyRecordKey, betterDailyRun } from './daily.js'
@@ -49,7 +50,7 @@ test('marked troops draw real aggro and a counter-order prepared in camp pays on
   assert.equal(order(g,other.type),false)
   assert.equal(g.gold,gold+FEINT.payout)
   const saved=restoreGame(snapshotGame(g));assert.equal(saved.feint.result,'fooled')
-  saved.enemies=[];tick(saved,.1);chooseReward(saved,'power');nextWave(saved);assert.equal(saved.feint,null)
+  saved.enemies=[];tick(saved,.1);assert.ok(claimAvailableReward(saved,'power'));nextWave(saved);assert.equal(saved.feint,null)
 })
 
 test('premature orders, matching the enemy read, expiration and a lost stake cannot pay out',()=>{
