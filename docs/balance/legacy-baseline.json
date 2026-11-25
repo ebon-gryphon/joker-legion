@@ -1,0 +1,83 @@
+[
+  {
+    "mode": "standard",
+    "seed": 4,
+    "difficulty": "standard",
+    "phase": "won",
+    "wave": 12,
+    "rng": 498793071,
+    "sha": "f9f9ada0a8847313ab69b8c6043194e7e5e34f5b1f47e07fd209a8ac8c487db1"
+  },
+  {
+    "mode": "standard",
+    "seed": 1,
+    "difficulty": "standard",
+    "phase": "won",
+    "wave": 12,
+    "rng": 243028280,
+    "sha": "a36e07d4f4e4f1180c7051915c64947b377576dd711bc1b0e9296d86a7ffb36a"
+  },
+  {
+    "mode": "standard",
+    "seed": 3,
+    "difficulty": "standard",
+    "phase": "won",
+    "wave": 12,
+    "rng": 4274654490,
+    "sha": "8ab4d72e2bc5cf1d2d242830ac66569ce173759f875e49f788b2ca1eb2c29668"
+  },
+  {
+    "mode": "endless",
+    "seed": 4,
+    "difficulty": "standard",
+    "phase": "lost",
+    "wave": 48,
+    "rng": 456338041,
+    "sha": "77d3faa13e125884cbf6d97d8e78c6b151011f947b10f27ea0163359bbe750cf"
+  },
+  {
+    "mode": "endless",
+    "seed": 1,
+    "difficulty": "standard",
+    "phase": "lost",
+    "wave": 41,
+    "rng": 4030383476,
+    "sha": "9a002d67e4d5aadf77217f0c97da4945a9b15f071856929628ffef6e474575c2"
+  },
+  {
+    "mode": "endless",
+    "seed": 3,
+    "difficulty": "standard",
+    "phase": "lost",
+    "wave": 30,
+    "rng": 2700354850,
+    "sha": "2b5822b4fccb891bebb2598180e1acd3431782a30169a6bda82d77730022ee43"
+  },
+  {
+    "mode": "endless",
+    "seed": 8,
+    "difficulty": "standard",
+    "phase": "lost",
+    "wave": 32,
+    "rng": 232707869,
+    "sha": "f9ba9d967eccfa0a57695b93d189676d44c666511c75d74fd5f355baa5acfe76"
+  },
+  {
+    "mode": "endless",
+    "seed": 9,
+    "difficulty": "veteran",
+    "phase": "lost",
+    "wave": 41,
+    "rng": 1495464504,
+    "sha": "ce28a62aefc7c988c21f4e27f4c8a637dd7a1c474a540329b373f1ebd63f4602"
+  },
+  {
+    "mode": "endless",
+    "seed": 7,
+    "difficulty": "veteran",
+    "phase": "lost",
+    "wave": 43,
+    "rng": 3601278500,
+    "sha": "f04d0a81fa7f89a53a2f20780d3abfb16274324fc045209b2e3c888415d2aeb0"
+  }
+]

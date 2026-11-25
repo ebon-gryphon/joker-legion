@@ -12,7 +12,7 @@ export function sellValue(itemOrId) {
 }
 
 export function shopActionAvailability(game,action,id) {
-  const price=action==='reroll'?rerollCost:action==='sell'?sellValue(id):priceOf(id)
+  const price=action==='reroll'?(game.inheritance?.levels.contract && !game.inheritance.refreshUsed?0:rerollCost):action==='sell'?sellValue(id):priceOf(id)
   const result=(available,reason='')=>({available,reason,price,currency:'crystals'})
   if(game.phase!=='shop')return result(false,'商店仅在战后开放。')
   if(!game.rewardChosen)return result(false,'先领取本波补给，再使用商店。')
@@ -77,8 +77,10 @@ export function sellJoker(game, id) {
 }
 
 export function rerollShop(game) {
-  if(!shopActionAvailability(game,'reroll').available)return false
-  game.crystals -= rerollCost
+  const quote=shopActionAvailability(game,'reroll')
+  if(!quote.available)return false
+  game.crystals-=quote.price
+  if(quote.price===0)game.inheritance.refreshUsed=true
   refreshShop(game)
   return true
 }

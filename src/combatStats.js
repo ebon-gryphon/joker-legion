@@ -1,3 +1,4 @@
+import {openingLines} from './legacyRun.js'
 import { getCardDesign } from './cardCatalog.js'
 import { JOBS } from './jobs.js'
 import { QUALITIES } from './quality.js'
@@ -192,6 +193,7 @@ export function beginCombatStats(game) {
 
 function reportOf(game, ledger) {
   const current=copy(ledger)
+  if(game.inheritance && Object.values(game.inheritance.levels).some(Boolean))current.openingBenefits=openingLines(game.inheritance)
   current.duration=Math.max(0,(game.waveTime || 0)-ledger.fromWaveTime)
   current.battleDuration=game.waveTime || 0
   if(ledger.started && !ledger.partial && game.encounterVersion===1){

@@ -1,3 +1,4 @@
+import {energyLimit} from './legacyRun.js'
 import {lastingStat} from './standingArmy.js'
 import {ORDER_BOOK} from './orders.js'
 import {QUALITIES} from './quality.js'
@@ -150,7 +151,7 @@ export function commitBuildPassives(game,plan,{trainer=null,trainingBefore=0,tra
   for(const [id,amount] of [['light-march',p.light],['diamond-return',p.diamondRefund]]){
     if(id==='light-march'&&!amount || id==='diamond-return'&&!p.diamond)continue
     if(id==='light-march')c.lightMarchUses++;else consume(c,'diamond-return','diamondReturnUsed')
-    const before=game.energy;game.energy=Math.min(game.maxEnergy,game.energy+amount);const gained=game.energy-before
+    const before=game.energy;game.energy=Math.min(energyLimit(game),game.energy+amount);const gained=game.energy-before
     emit(id,{effective:gained>0,reason:gained>0?'返还本手真实支出的军令。':'本手无剩余实际支出，返还0；首次方片机会已用。',effects:{energyRefund:gained,actualSpent:plan.cost}})
   }
   if(hasBuildPassive(game,'spade-law')&&available(c,'spade-law','spadeLawUsed')&&p.suits['♠']>=rule('spade-law').minScoring){

@@ -1,4 +1,5 @@
 <script setup>
+import {LEGACY_NODES,terminalPhase} from './legacyRules.js'
 import KeyMark from './KeyMark.vue'
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { PERFORMERS, performerOf } from './performers.js'
@@ -10,8 +11,8 @@ import DealKey from './DealKey.vue'
 import TitleCourt from './TitleCourt.vue'
 import ScoreToggle from './ScoreToggle.vue'
 
-const props = defineProps({ mode:String,best:Object,doctrine:String, difficulty:String, seed:String, saved:Object, dailyBest:Object })
-const emit = defineEmits(['mode','choose','difficulty','seed','start','daily','resume','guide'])
+const props = defineProps({ mode:String,best:Object,doctrine:String, difficulty:String, seed:String, levels:Object, saved:Object, dailyBest:Object })
+const emit = defineEmits(['mode','choose','difficulty','seed','start','daily','resume','guide','legacy'])
 const selected = computed(() => performerOf(props.doctrine))
 const selecting = ref(false)
 const table = ref(null)
@@ -46,10 +47,10 @@ onMounted(() => table.value?.querySelector('.cover-start')?.focus({preventScroll
         <div class="cover-play">
           <TitleCourt @click="showSelection(true)"/>
           <button v-if="saved" class="deal-resume key-ink" @click="emit('resume')">
-            <KeyMark name="return"/><span>继续上局<small>{{ performerOf(saved.doctrine).name }} · 第 {{ saved.wave }} 波</small></span>
+            <KeyMark name="return"/><span>{{ terminalPhase(saved.phase)?'查看上局结算':'继续上局' }}<small>{{ performerOf(saved.doctrine).name }} · 第 {{ saved.wave }} 波</small></span>
           </button>
         </div>
-        <nav class="table-guides" aria-label="游戏图鉴">
+        <nav class="table-guides" aria-label="军团与图鉴"><button class="key-index legacy-open" @click="emit('legacy')">♦ 军团传承</button>
           <button class="key-index" v-for="[id,label] in guides" :key="id" @click="emit('guide',id)"><KeyMark :name="id"/>{{ label }}</button>
         </nav>
         <ScoreToggle class="cover-score"/>
@@ -63,7 +64,7 @@ onMounted(() => table.value?.querySelector('.cover-start')?.focus({preventScroll
       </div>
       <header class="casting-header">
         <div class="casting-heading"><button class="cover-back key-link" @click="showSelection(false)"><KeyMark name="return"/>← 返回封面</button><h2 id="intro-title">选你的小丑</h2></div>
-        <div class="casting-tools"><nav class="casting-guides" aria-label="游戏图鉴"><button class="key-index" v-for="[id,label] in guides" :key="id" @click="emit('guide',id)"><KeyMark :name="id"/>{{ label }}</button></nav><ScoreToggle/></div>
+        <div class="casting-tools"><button class="key-index legacy-open" @click="emit('legacy')">♦ 军团传承</button><nav class="casting-guides" aria-label="游戏图鉴"><button class="key-index" v-for="[id,label] in guides" :key="id" @click="emit('guide',id)"><KeyMark :name="id"/>{{ label }}</button></nav><ScoreToggle/></div>
       </header>
       <div class="casting-bio" aria-live="polite">
         <h3 class="casting-name">{{ selected.name }} <small>{{ selected.role }}</small></h3>
@@ -82,11 +83,12 @@ onMounted(() => table.value?.querySelector('.cover-start')?.focus({preventScroll
             <b>{{ actor.name }}</b>
           </button>
         </div>
-        <div class="deal-options mode-options" aria-label="挑战模式"><b>模式</b><button class="key-ink" v-for="[id,title] in [['standard','标准远征'],['endless','无尽挑战']]" :data-mode="id" :aria-pressed="mode===id" @click="emit('mode',id)"><span v-if="mode===id" aria-hidden="true">✓ </span>{{ title }}</button><small v-if="best">最佳 {{ best.reached || best.waves }} 波</small><button class="key-link" v-if="saved" @click="emit('resume')">继续第 {{ saved.wave }} 波</button></div>
+        <div class="deal-options mode-options" aria-label="挑战模式"><b>模式</b><button class="key-ink" v-for="[id,title] in [['standard','标准远征'],['endless','无尽挑战']]" :data-mode="id" :aria-pressed="mode===id" @click="emit('mode',id)"><span v-if="mode===id" aria-hidden="true">✓ </span>{{ title }}</button><small v-if="best">最佳 {{ best.reached || best.waves }} 波</small><button class="key-link" v-if="saved" @click="emit('resume')">{{ terminalPhase(saved.phase)?'查看上局结算':'继续第 '+saved.wave+' 波' }}</button></div>
         <div class="deal-options"><b>难度</b>
           <button class="key-tab" v-for="(mode,id) in DIFFICULTIES" :key="id" :aria-pressed="difficulty===id" @click="emit('difficulty',id)">{{ mode.name }}</button>
           <small>♥ {{ initialLifeMax(difficulty) }} 生命</small>
         </div>
+        <details v-if="levels && LEGACY_NODES.some(n=>levels[n.id])" class="deal-legacy"><summary class="key-disclosure">本次开局的军团传承</summary><ul><li v-for="n in LEGACY_NODES.filter(n=>levels[n.id])" :key="n.id">{{ n.name }} · {{ n.effect(n.amount*levels[n.id]) }}</li></ul></details>
         <label class="deal-seed">固定种子 <input class="key-input" aria-label="固定种子" :value="seed" maxlength="64" placeholder="留空随机开局" autocomplete="off" spellcheck="false" @input="emit('seed',$event.target.value)"/><small>每日同局仍使用当天种子</small></label>
         <div class="deal-actions intro-buttons">
           <DealKey :actor="selected" class="intro-start" @click="emit('start')">以{{ selected.name }}开局</DealKey>
@@ -98,6 +100,7 @@ onMounted(() => table.value?.querySelector('.cover-start')?.focus({preventScroll
 </template>
 
 <style scoped>
+.deal-legacy{font-size:13px;color:#e9c5bb;margin-bottom:8px}.deal-legacy summary{cursor:pointer}.deal-legacy ul{margin:.4em 0;padding-left:1.3em}
 .joker-table{width:100%;min-height:100svh;color:#f1dfb4;background:#0d0a0b;font-family:'PingFang SC','Microsoft YaHei',sans-serif}
 .joker-table.title-screen {
   display:grid; place-items:center; height:100dvh; background:#140f1a;

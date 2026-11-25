@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import {checkLegacyBrowser} from './legacy-browser-checks.mjs'
 import {spawn} from 'node:child_process'
 import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises'
 import {existsSync} from 'node:fs'
@@ -192,6 +193,7 @@ try {
   await button('.field-controls','继续');await wait(lens('g.phase==="won"'))
   assert.deepEqual(await state('({...g,effects:[]})'),expected)
   results.push({case:'presentation-off-fast-battle',seed:reference.seed,identical:true,rng:expected.rng})
+  await checkLegacyBrowser({folder,run,send,click,button,boot,state,wait,shot,results})
   assert.deepEqual(errors,[])
   await writeFile(new URL('browser.json',folder),JSON.stringify({viewport:[1366,900],method:'Legal action checkpoints, real play controls and browser ticker',results,errors},null,2)+'\n')
 } finally {ws?.close();browser.kill();await new Promise(r=>browser.exitCode===null?browser.once('exit',r):r());await rm(profile,{recursive:true,force:true,maxRetries:4})}

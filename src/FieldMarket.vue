@@ -15,7 +15,7 @@ const purchase=item=>shopActionAvailability(props.game,'buy',item.id)
 <template>
   <section class="field-market" aria-label="小丑商店">
     <header class="desk-section-title"><div><h3>小丑商人的货架</h3><p class="market-balance">蓝水晶余额 <b>{{ game.crystals ?? 0 }}</b><small>购买与刷新消耗，出售返还蓝水晶</small></p></div>
-      <div class="market-reroll"><button class="secondary-button key-ink" :disabled="!reroll.available" :aria-describedby="!reroll.available?'market-reroll-reason':undefined" @click="$emit('reroll')"><KeyMark name="reroll"/>换一批 · {{ reroll.price }} 蓝水晶</button><small v-if="!reroll.available" id="market-reroll-reason" class="market-unavailable">{{ reroll.reason }}</small></div>
+      <div class="market-reroll"><button class="secondary-button key-ink" :disabled="!reroll.available" :aria-describedby="!reroll.available?'market-reroll-reason':undefined" @click="$emit('reroll')"><KeyMark name="reroll"/>换一批 · {{ reroll.price ? reroll.price+' 蓝水晶' : '商行契约免费' }}</button><small v-if="!reroll.available" id="market-reroll-reason" class="market-unavailable">{{ reroll.reason }}</small></div>
     </header>
     <div class="stall-grid">
       <article v-for="joker in offers" :key="joker.id" class="stall-item" :class="{sold:game.soldShop.includes(joker.id)}" :style="{ '--item-ink':joker.color }">

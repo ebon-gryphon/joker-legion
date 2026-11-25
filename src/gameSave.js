@@ -19,6 +19,7 @@ import { FUSION_BY_ID } from './forge.js'
 import { validFusionJobs } from './professionFusion.js'
 import { LURE_TRAVEL, LURE_REVEAL } from './performers.js'
 import { PAY_WAGONS } from './convoy.js'
+import {validRunInheritance,energyLimit} from './legacyRun.js'
 import { createGame } from './campaign.js'
 import { makeSchedule, spawnEnemies, waveSchedule } from './waveSchedule.js'
 import { PERFORMANCES } from './performance.js'
@@ -48,6 +49,7 @@ export function restoreGame(snapshot) {
   // Never merge persisted data into live objects; whitelist and validate a full snapshot.
   try {
     const data = typeof snapshot === 'string' ? JSON.parse(snapshot) : JSON.parse(JSON.stringify(snapshot))
+    if(!data || !validRunInheritance(data))return null
     if(data?.encounterVersion!=null && data.encounterVersion!==1)return null
     if(data?.endlessRevision!=null && ![1,2].includes(data.endlessRevision))return null
     if(data?.encounterVersion==null && data?.waveTimeout)data.waveTimeout.legacyDuration=data.waveTime
@@ -69,7 +71,7 @@ function validExpedition(data) {
   for (const key of ['baseHp', 'maxBaseHp', 'energy', 'maxEnergy', 'gold', 'time', 'waveTime', 'rng', 'sequence', 'accumulator', 'deployCooldown', 'discardCooldown', 'discards', 'waveKills', 'waveSpawned', 'spawnIndex', 'energyRegen']) {
     if (!Number.isFinite(data[key]) || data[key] < 0) return false
   }
-  if (data.baseHp > data.maxBaseHp || data.maxBaseHp > lifeMaxCap(data) || data.energy > data.maxEnergy || data.maxEnergy > 30 || data.gold > Number.MAX_SAFE_INTEGER || data.sequence > 1e9 || data.energyRegen > 10 || data.accumulator >= STEP + 1e-6 || data.spawnIndex > data.schedule?.length) return false
+  if (data.baseHp > data.maxBaseHp || data.maxBaseHp > lifeMaxCap(data) || data.energy > energyLimit(data) || data.maxEnergy > 30 || data.gold > Number.MAX_SAFE_INTEGER || data.sequence > 1e9 || data.energyRegen > 10 || data.accumulator >= STEP + 1e-6 || data.spawnIndex > data.schedule?.length) return false
   return true
 }
 
@@ -385,7 +387,7 @@ function migrateExpedition(data) {
   const legacyHands = data.handsBought === undefined && data.paidHandsLeft === undefined
   const pristine = createGame({ seed: data.seed, doctrine: data.doctrine, difficulty: data.difficulty,mode:data.mode })
   for (const key of Object.keys(pristine)) if (Object.hasOwn(data, key)) pristine[key] = data[key]
-  for (const key of ['bonusDiscard']) if (Object.hasOwn(data, key)) pristine[key] = data[key]
+  for (const key of ['bonusDiscard','runId','inheritance']) if (Object.hasOwn(data, key)) pristine[key] = data[key]
   // Completed six-wave records remain completed; active old expeditions continue to twelve.
   pristine.campaignLength = data.phase === 'won' && data.wave === 6 ? 6 : WAVES.length
   if (pristine.champion) {

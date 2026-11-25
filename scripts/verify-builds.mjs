@@ -27,9 +27,10 @@ const rankGroups=cards=>{
   return [...groups.values()]
 }
 
-export function runBuildStrategy(route,{fixtures=true,onBattleStart,onBattleEnd}={}) {
-  const game=E.createGame({seed:route.seed,mode:route.mode,doctrine:route.doctrine,difficulty:route.difficulty || 'standard'})
-  const log={id:route.id,name:route.name,mode:game.mode,seed:route.seed,doctrine:route.doctrine,difficulty:game.difficulty,economyVersion:game.economyVersion,
+export function runBuildStrategy(route,{fixtures=true,onStart,onBattleStart,onBattleEnd}={}) {
+  const game=E.createGame({runId:route.runId,legacyLevels:route.legacyLevels,seed:route.seed,mode:route.mode,doctrine:route.doctrine,difficulty:route.difficulty || 'standard'})
+  onStart?.(game)
+  const log={...(game.runId?{runId:game.runId,legacyLevels:game.inheritance.levels}:{}),id:route.id,name:route.name,mode:game.mode,seed:route.seed,doctrine:route.doctrine,difficulty:game.difficulty,economyVersion:game.economyVersion,
     actions:[],turns:[],waves:[],fixtures:[],milestones:{},result:null}
   let capturedCConversion=false,checkpoint=0
   const capture=(id,label,snapshot=E.snapshotGame(game))=>{
@@ -201,7 +202,7 @@ export function runBuildStrategy(route,{fixtures=true,onBattleStart,onBattleEnd}
 }
 
 export function replayBuild(log,{onAction,onTick}={}) {
-  const game=E.createGame({mode:log.mode,seed:log.seed,doctrine:log.doctrine,difficulty:log.difficulty})
+  const game=E.createGame({runId:log.runId,legacyLevels:log.legacyLevels,mode:log.mode,seed:log.seed,doctrine:log.doctrine,difficulty:log.difficulty})
   for(const entry of log.actions) {
     const before=onAction?E.snapshotGame(game):null
     assert.equal(game.wave,entry.wave,'Replay wave at action '+entry.n)

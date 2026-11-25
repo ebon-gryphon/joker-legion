@@ -1,3 +1,4 @@
+import {energyLimit} from './legacyRun.js'
 import { JOKERS, JOKER_BY_ID } from './campaignRules.js'
 import { ORDER_BOOK, MAX_ORDER_LEVEL } from './orders.js'
 import { random, gainGold, restoreBase, log } from './gameState.js'
@@ -191,7 +192,7 @@ export function chooseWaveReward(game,id) {
   else if(effect.kind==='power')game.upgrades.power=Math.min(payload.cap,cleanNumber(game.upgrades.power+payload.amount))
   else if(effect.kind==='maxDiscards')game.maxDiscards=Math.min(payload.cap,game.maxDiscards+payload.amount)
   else if(effect.kind==='maxEnergy') {
-    const gain=Math.min(payload.amount,room(payload.cap,game.maxEnergy));game.maxEnergy+=gain;game.energy=Math.min(game.maxEnergy,game.energy+gain)
+    const gain=Math.min(payload.amount,room(payload.cap,game.maxEnergy));game.maxEnergy+=gain;game.energy=Math.min(energyLimit(game),game.energy+gain)
   } else if(effect.kind==='gateMax') {
     expandLifeMax(game,payload.amount,{source:'reward',sourceId:id,heal:payload.repair})
   } else if(effect.kind==='supply' || effect.kind==='next' || effect.kind==='enlist') {

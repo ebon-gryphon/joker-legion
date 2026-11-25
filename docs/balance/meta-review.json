@@ -1,0 +1,181 @@
+{
+  "baseline": "d0102c4",
+  "sameUnupgradedWaves": 235,
+  "snapshotReference": "legacy-baseline.json",
+  "cases": [
+    {
+      "seed": 4,
+      "difficulty": "standard",
+      "without": {
+        "seed": 4,
+        "difficulty": "standard",
+        "reached": 48,
+        "firstLoss": 39,
+        "minLife": 0,
+        "cause": "breach",
+        "lastSeconds": 12.27,
+        "lastClearSeconds": 11.07,
+        "peakAttack": 8207,
+        "lastAttack": 8189
+      },
+      "maxLevel": {
+        "seed": 4,
+        "difficulty": "standard",
+        "reached": 52,
+        "firstLoss": 39,
+        "minLife": 0,
+        "cause": "breach",
+        "lastSeconds": 12.27,
+        "lastClearSeconds": 10.13,
+        "peakAttack": 16715,
+        "lastAttack": 16715
+      },
+      "maxLevelFirstLossCasualties": 0
+    },
+    {
+      "seed": 1,
+      "difficulty": "standard",
+      "without": {
+        "seed": 1,
+        "difficulty": "standard",
+        "reached": 41,
+        "firstLoss": 31,
+        "minLife": 0,
+        "cause": "timeout",
+        "lastSeconds": 40,
+        "lastClearSeconds": 19.8,
+        "peakAttack": 4869,
+        "lastAttack": 4869
+      },
+      "maxLevel": {
+        "seed": 1,
+        "difficulty": "standard",
+        "reached": 41,
+        "firstLoss": 31,
+        "minLife": 0,
+        "cause": "timeout",
+        "lastSeconds": 40,
+        "lastClearSeconds": 19.8,
+        "peakAttack": 4869,
+        "lastAttack": 4869
+      },
+      "maxLevelFirstLossCasualties": 0
+    },
+    {
+      "seed": 3,
+      "difficulty": "standard",
+      "without": {
+        "seed": 3,
+        "difficulty": "standard",
+        "reached": 30,
+        "firstLoss": 22,
+        "minLife": 0,
+        "cause": "boss-timeout",
+        "lastSeconds": 60,
+        "lastClearSeconds": 31.47,
+        "peakAttack": 470,
+        "lastAttack": 470
+      },
+      "maxLevel": {
+        "seed": 3,
+        "difficulty": "standard",
+        "reached": 30,
+        "firstLoss": 23,
+        "minLife": 0,
+        "cause": "boss-timeout",
+        "lastSeconds": 60,
+        "lastClearSeconds": 26.63,
+        "peakAttack": 548,
+        "lastAttack": 548
+      },
+      "maxLevelFirstLossCasualties": 0
+    },
+    {
+      "seed": 8,
+      "difficulty": "standard",
+      "without": {
+        "seed": 8,
+        "difficulty": "standard",
+        "reached": 32,
+        "firstLoss": 23,
+        "minLife": 0,
+        "cause": "breach",
+        "lastSeconds": 13.23,
+        "lastClearSeconds": 27.83,
+        "peakAttack": 586,
+        "lastAttack": 586
+      },
+      "maxLevel": {
+        "seed": 8,
+        "difficulty": "standard",
+        "reached": 32,
+        "firstLoss": 22,
+        "minLife": 0,
+        "cause": "breach",
+        "lastSeconds": 25.67,
+        "lastClearSeconds": 36.43,
+        "peakAttack": 584,
+        "lastAttack": 584
+      },
+      "maxLevelFirstLossCasualties": 0
+    },
+    {
+      "seed": 9,
+      "difficulty": "veteran",
+      "without": {
+        "seed": 9,
+        "difficulty": "veteran",
+        "reached": 41,
+        "firstLoss": 35,
+        "minLife": 0,
+        "cause": "timeout",
+        "lastSeconds": 40,
+        "lastClearSeconds": 16.07,
+        "peakAttack": 5157,
+        "lastAttack": 5157
+      },
+      "maxLevel": {
+        "seed": 9,
+        "difficulty": "veteran",
+        "reached": 41,
+        "firstLoss": 35,
+        "minLife": 0,
+        "cause": "timeout",
+        "lastSeconds": 40,
+        "lastClearSeconds": 16.07,
+        "peakAttack": 5157,
+        "lastAttack": 5157
+      },
+      "maxLevelFirstLossCasualties": 0
+    },
+    {
+      "seed": 7,
+      "difficulty": "veteran",
+      "without": {
+        "seed": 7,
+        "difficulty": "veteran",
+        "reached": 43,
+        "firstLoss": 32,
+        "minLife": 0,
+        "cause": "breach",
+        "lastSeconds": 13.23,
+        "lastClearSeconds": 15.13,
+        "peakAttack": 6346,
+        "lastAttack": 6346
+      },
+      "maxLevel": {
+        "seed": 7,
+        "difficulty": "veteran",
+        "reached": 36,
+        "firstLoss": 31,
+        "minLife": 0,
+        "cause": "breach",
+        "lastSeconds": 12.27,
+        "lastClearSeconds": 17.13,
+        "peakAttack": 1994,
+        "lastAttack": 1994
+      },
+      "maxLevelFirstLossCasualties": 0
+    }
+  ]
+}

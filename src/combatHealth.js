@@ -72,6 +72,7 @@ export function damageUnit(game, unit, amount, delay = 0, source = null) {
     recordEnemy(game,'bonus',source,{target:unit.id,name:unit.name,amount:Math.max(0,dealt+blocked-Math.min(effectiveCap,baseHit))})
   }
   unit.hp = Math.max(0, unit.hp - dealt)
+  if(game.inheritance && unit.side==='enemy' && isBoss(unit.type) && unit.hp===0 && dealt>0 && !game.inheritance.bossWaves.includes(game.wave))game.inheritance.bossWaves.push(game.wave)
   if(specialEnemy(unit.type)){
     recordEnemy(game,'hit',unit,{amount:dealt,source:source?.id || source?.system || 'system'})
     if(unit.hp===0)unit.killedInCombat=true

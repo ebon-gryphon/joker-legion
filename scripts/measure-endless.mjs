@@ -1,4 +1,5 @@
 import {runBuildStrategy,BUILD_ROUTES} from './verify-builds.mjs'
+import {fullLevels,emptyLevels} from '../src/legacyRules.js'
 import {addUnit} from '../src/campArmy.js'
 import {mkdir,readFile,writeFile} from 'node:fs/promises'
 import {ENEMY_RULES} from '../src/enemyBehavior.js'
@@ -12,10 +13,11 @@ const destination=new URL('../output/balance/',import.meta.url)
 await mkdir(destination,{recursive:true})
 const cases=[...BUILD_ROUTES,{...BUILD_ROUTES[2],seed:8},...[9,7].map(seed=>({...BUILD_ROUTES[1],seed,difficulty:'veteran'}))]
 const results=[]
+const maximum=process.argv.includes('--max-legacy')
 for(const base of cases){
   const waves=[]
   let army,health,opening
-  const route=runBuildStrategy({...base,mode:'endless',stopWave:60},{fixtures:false,onBattleStart:g=>{
+  const route=runBuildStrategy({...base,...(maximum || label==='meta-review'?{runId:'measure-'+base.seed,legacyLevels:maximum?fullLevels():emptyLevels()}:{}),mode:'endless',stopWave:60},{fixtures:false,onBattleStart:g=>{
     opening=g.spawnIndex
     army=structuredClone(g.allies.filter(u=>u.echoUntil==null).map(u=>({name:u.name,atk:u.atk,heal:u.heal,maxHp:u.maxHp,period:u.period,
       xp:u.trainingXp,grade:u.grade,stars:u.level,job:u.jobId,training:u.trainingGrowth,order:u.waveBonus,permanent:u.rewardModifiers})))
@@ -45,7 +47,7 @@ for(const file of ['campArmy','campaign','combatActions','endless','forge','trai
   rules.update(await readFile(new URL('src/'+file+'.js',root)))
 }
 const basedOn=execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim()
-const header={basedOn,rulesSha256:rules.digest('hex'),strategy:'runBuildStrategy',limit:60}
+const header={basedOn,rulesSha256:rules.digest('hex'),strategy:'runBuildStrategy',limit:60,...(maximum?{legacyLevels:fullLevels()}:{})}
 await writeFile(new URL(label+'.json',destination),JSON.stringify({...header,cases:results},null,2)+'\n')
 // One line per observation makes before/after comparisons independent of the checkout.
 const records=[header]

@@ -33,7 +33,7 @@ export {
   useTrick
 } from './performerActions.js'
 export {
-  createGame, beginBattle, nextWave
+  createGame, createPlayerRun, beginBattle, nextWave
 } from './campaign.js'
 export {
   trainOrder, buyJoker, sellJoker, rerollShop, chooseReward, rewardAvailability

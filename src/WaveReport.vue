@@ -45,6 +45,7 @@ const gateView=computed(()=> {
   <details :open="expanded" v-if="expanded || combat || report.length || Object.keys(shownUses).length || shownTactics.tolls || shownTactics.interrupts" class="field-report">
     <summary class="key-disclosure"><KeyMark name="order"/>本波战报 · {{ combat?'士兵贡献':'各兵种贡献' }}</summary>
     <template v-if="combat">
+      <p v-if="combat.openingBenefits?.length">开局传承 · {{ combat.openingBenefits.join(' ／ ') }}</p>
       <p class="report-overview"><b>{{ combat.result==='lost'?'远征失守':combat.ended?'本波守住':'本波记录' }}</b><span>{{ combat.battleDuration===undefined?'已记录交战':'交战总时长' }} {{ (combat.battleDuration ?? combat.duration).toFixed(1) }} 秒<template v-if="combat.battleDuration===undefined">（旧口径）</template></span><span v-if="combat.enemyForce">编成 {{ combat.enemyForce.regular }} · 鸣钟召来 {{ combat.enemyForce.summoned }} · 分裂幼兽 {{ combat.enemyForce.brood }} · 实际出场 {{ combat.enemyForce.total }}</span><span>剩余军令 {{ rounded(combat.energyLeft) }}</span></p>
       <LifeReport v-if="modernLife" :combat="combat"/>
       <template v-else-if="combat.postWaveLife"><p class="report-caveat">读档后波后生命 · 以下为新规则下的真实补给变化。</p><LifeReport :combat="combat.postWaveLife"/></template>

@@ -1,3 +1,4 @@
+import {applyInheritance,newRunId,openingLines} from './legacyRun.js'
 import {waveInfo,finalWave} from './endless.js'
 import { DOCTRINES, PRINTS_PER_WAVE, HANDS_PER_WAVE, JOKER_BY_ID, WAVES, FIELD_LIMIT } from './campaignRules.js'
 import { DIFFICULTIES, SILENT_BOUNTY } from './tactics.js'
@@ -20,7 +21,11 @@ import {emptyWaveBonuses,advanceRewardBonuses} from './rewardModifiers.js'
 import {LIFE_RULES,initialLifeMax,recordLifeEvent} from './playerLife.js'
 import {createBuildState,resetBuildWave} from './buildPassives.js'
 
-export function createGame({ seed = 'JOKER-LEGION', doctrine = 'iron', difficulty = 'standard', mode: expeditionMode = 'standard' } = {}) {
+export function createPlayerRun(options,levels){
+  return createGame({...options,runId:newRunId(),legacyLevels:levels})
+}
+
+export function createGame({ seed = 'JOKER-LEGION', doctrine = 'iron', difficulty = 'standard', mode: expeditionMode = 'standard', runId, legacyLevels } = {}) {
   const selected = DOCTRINES.find(item => item.id === doctrine) || DOCTRINES[0]
   const mode = Object.hasOwn(DIFFICULTIES, difficulty) ? difficulty : 'standard'
   const castle = initialLifeMax(mode)
@@ -46,8 +51,10 @@ export function createGame({ seed = 'JOKER-LEGION', doctrine = 'iron', difficult
   game.stats.crystalsEarned=0
   replenish(game)
   makeSchedule(game)
-  initializeCombatStats(game)
-  log(game, `${performerOf(selected.id).name}已就位 · 起始搭档 ${game.jokers[0].name}`, 'good')
+  if(runId)applyInheritance(game,runId,legacyLevels)
+  initializeCombatStats(game,{runId})
+  const grants=openingLines(game.inheritance)
+  log(game, `${performerOf(selected.id).name}已就位 · 起始搭档 ${game.jokers[0].name}`+(grants.length?' · '+grants.join(' ／ '):''), 'good')
   return game
 }
 
