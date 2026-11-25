@@ -5,6 +5,7 @@ import { gainCrystals } from './economy.js'
 import { armyRewardAvailable, applyArmyReward } from './rewardModifiers.js'
 import {LIFE_RULES,lifeMaxCap,expandLifeMax} from './playerLife.js'
 import {BUILD_PASSIVES,hasBuildPassive,acquireBuildPassive} from './buildPassives.js'
+import {syncPostWaveRewardReport} from './combatStats.js'
 
 function freezeData(value) {
   if(value && typeof value==='object'){Object.values(value).forEach(freezeData);Object.freeze(value)}
@@ -216,6 +217,7 @@ export function chooseWaveReward(game,id) {
   game.rewardChosen=id
   game.rewardState={wave:game.wave,claimedId:id}
   log(game,`战利品 · ${offer.name} · ${offer.description}`,'good')
+  syncPostWaveRewardReport(game)
   return true
 }
 

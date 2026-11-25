@@ -5,6 +5,8 @@ import {WAVES,STEP,MAX_ENEMIES} from './campaignRules.js'
 import {DIFFICULTIES,BELL_INTERVAL} from './tactics.js'
 import {damageUnit,settleDeaths} from './combatHealth.js'
 import {resetBuildWave} from './buildPassives.js'
+import {combatSummary,validCombatRecord} from './combatStats.js'
+import {saveCombatHistory,loadCombatHistory,exportCombatHistory} from './combatHistory.js'
 
 function practice(types,{life=12,wave=1}={}) {
   const g=E.createGame({seed:'LIFE-COMBAT'});g.wave=wave
@@ -109,4 +111,68 @@ test('the first prepared bell interrupt remains real and a full enemy field cann
   assert.equal(crowded.lifeEvents.filter(event=>event.kind==='bell-summon').length,0)
   assert.equal(crowded.lifeEvents.filter(event=>event.kind==='bell-blocked').length,1)
   assert.equal(crowded.baseHp,12)
+})
+
+test('post-wave life rewards extend the saved timeline once while preserving frozen combat facts and RNG',()=>{
+  const clone=value=>JSON.parse(JSON.stringify(value))
+  const battleFacts=report=>{const facts=clone(report);for(const key of ['lifeEvents','passiveEvents','lifeEnd','lifeMaxEnd'])delete facts[key];return facts}
+  for(const [id,seed] of [['repair','reward-report-4'],['gate-masonry','reward-report-15']]){
+    const g=E.createGame({seed});g.jokers=[]
+    const soldier=E.addUnit(g,'knight','ally',1);Object.assign(soldier,{atk:0,range:0,speed:0,cooldown:100})
+    g.schedule=[];g.spawnIndex=0;E.beginBattle(g);g.waveTime=4;g.baseHp=8
+    const enemy=E.addUnit(g,'raider','enemy',1);Object.assign(enemy,{x:54,y:250,speed:0,range:0,cooldown:100,atk:0})
+    damageUnit(g,soldier,soldier.hp);settleDeaths(g);E.tick(g,STEP)
+    assert.equal(g.phase,'shop');assert.ok(g.rewards.some(offer=>offer.id===id),'the seeded real shelf contains '+id)
+    const before=combatSummary(g),frozen=clone(before),rng=g.rng,shopSnapshot=E.snapshotGame(g)
+    assert.equal(before.units.find(row=>row.unitId===soldier.id).alive,false)
+    assert.ok(g.allies.some(unit=>unit.id===soldier.id&&unit.hp>0),'the fallen soldier already regrouped')
+    const data=new Map(),storage={getItem:key=>data.get(key) || null,setItem:(key,value)=>data.set(key,value)}
+    saveCombatHistory(storage,before)
+    assert.ok(E.chooseReward(g,id));const after=combatSummary(g)
+    assert.notEqual(after,before);assert.deepEqual(before,frozen);assert.deepEqual(battleFacts(after),battleFacts(before))
+    assert.deepEqual(after.lifeEvents,g.lifeEvents);assert.deepEqual(after.passiveEvents,g.buildPassives.events)
+    assert.equal(after.lifeEnd,g.baseHp);assert.equal(after.lifeMaxEnd,g.maxBaseHp)
+    const rewardEvents=after.lifeEvents.filter(event=>event.sourceId===id)
+    assert.deepEqual(rewardEvents.map(event=>event.kind),id==='repair'?['heal']:['max','heal'])
+    assert.equal(rewardEvents.find(event=>event.kind==='heal').amount,2)
+    assert.equal(g.rng,rng)
+    saveCombatHistory(storage,after)
+    const history=loadCombatHistory(storage);assert.equal(history.length,1);assert.deepEqual(history[0].lifeEvents,after.lifeEvents)
+    assert.deepEqual(JSON.parse(exportCombatHistory(history)).records[0].lifeEvents,after.lifeEvents)
+    const loaded=E.restoreGame(JSON.stringify(E.snapshotGame(g)));assert.ok(loaded)
+    assert.deepEqual(combatSummary(loaded).lifeEvents,after.lifeEvents)
+    const claimed=E.snapshotGame(g);assert.equal(E.chooseReward(g,id),false);assert.deepEqual(E.snapshotGame(g),claimed);assert.equal(combatSummary(g),after)
+    const legacy=clone(shopSnapshot)
+    for(const key of ['lifeVersion','lifeFailed','lifeEvents','lifeItemState','buildPassives','legacyLifeHistory'])delete legacy[key]
+    for(const record of [legacy.combatLedger,legacy.lastCombatReport])for(const key of ['lifeVersion','lifeStart','lifeMaxStart','lifeEnd','lifeMaxEnd','lifeEvents','passiveEvents'])delete record[key]
+    legacy.baseHp=58;legacy.maxBaseHp=100
+    const old=E.restoreGame(legacy);assert.ok(old)
+    const oldReport=combatSummary(old),oldFacts=clone(oldReport),oldLife=old.baseHp,oldMax=old.maxBaseHp,oldRng=old.rng
+    assert.ok(E.chooseReward(old,id));const updated=combatSummary(old)
+    assert.notEqual(updated,oldReport);assert.deepEqual(oldReport,oldFacts)
+    assert.equal(updated.lifeVersion,undefined);assert.deepEqual(updated.gate,oldFacts.gate)
+    assert.equal(updated.postWaveLife.lifeStart,oldLife);assert.equal(updated.postWaveLife.lifeMaxStart,oldMax)
+    assert.deepEqual(updated.postWaveLife.lifeEvents,old.lifeEvents);assert.equal(updated.postWaveLife.lifeEnd,old.baseHp)
+    assert.equal(updated.postWaveLife.lifeMaxEnd,old.maxBaseHp);assert.equal(old.rng,oldRng)
+    assert.ok(validCombatRecord(updated));const malformed=clone(updated);malformed.postWaveLife.lifeEnd=NaN;assert.equal(validCombatRecord(malformed),false)
+    saveCombatHistory(storage,updated);assert.deepEqual(loadCombatHistory(storage)[0].postWaveLife,updated.postWaveLife)
+    const oldReloaded=E.restoreGame(JSON.stringify(E.snapshotGame(old)));assert.ok(oldReloaded)
+    assert.deepEqual(combatSummary(oldReloaded).postWaveLife,updated.postWaveLife)
+    const oldClaimed=E.snapshotGame(old);assert.equal(E.chooseReward(old,id),false);assert.deepEqual(E.snapshotGame(old),oldClaimed)
+  }
+  const fused=E.createGame({seed:'passive-postwave-16'});fused.jokers=[]
+  const leader=E.addUnit(fused,'knight','ally'),donor=E.addUnit(fused,'healer','ally')
+  assert.ok(E.forgeUnit(fused,leader.id,donor.id,'profession'));Object.assign(leader,{range:0,speed:0,cooldown:100})
+  fused.schedule=[];fused.spawnIndex=0;E.beginBattle(fused);fused.waveTime=4;fused.baseHp=8
+  const enemy=E.addUnit(fused,'raider','enemy');Object.assign(enemy,{x:54,y:250,speed:0,range:0,cooldown:100});E.tick(fused,STEP)
+  assert.equal(fused.phase,'shop');assert.ok(fused.rewards.some(offer=>offer.id==='fusion-code'))
+  const oldSnapshot=E.snapshotGame(fused)
+  for(const key of ['lifeVersion','lifeFailed','lifeEvents','lifeItemState','buildPassives','legacyLifeHistory'])delete oldSnapshot[key]
+  for(const record of [oldSnapshot.combatLedger,oldSnapshot.lastCombatReport])for(const key of ['lifeVersion','lifeStart','lifeMaxStart','lifeEnd','lifeMaxEnd','lifeEvents','passiveEvents'])delete record[key]
+  oldSnapshot.baseHp=58;oldSnapshot.maxBaseHp=100
+  const old=E.restoreGame(oldSnapshot);assert.ok(old);const before=old.lastCombatReport,rng=old.rng
+  assert.ok(E.chooseReward(old,'fusion-code'));const after=combatSummary(old)
+  assert.notEqual(after,before);assert.equal(after.postWaveLife,undefined);assert.equal(old.lifeEvents.length,0);assert.equal(old.rng,rng)
+  assert.deepEqual(after.passiveEvents,old.buildPassives.events);assert.ok(after.passiveEvents.some(event=>event.id==='fusion-code'&&event.effective))
+  const restored=E.restoreGame(JSON.stringify(E.snapshotGame(old)));assert.ok(restored);assert.deepEqual(restored.lastCombatReport.passiveEvents,after.passiveEvents)
 })

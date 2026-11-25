@@ -240,6 +240,24 @@ export function combatSummary(game) {
   return game.combatLedger ? reportOf(game,game.combatLedger) : null
 }
 
+// Rewards extend the current wave's factual timeline after combat has ended.
+// Reuse the frozen battle rows: regrouped soldiers must not become survivors
+// retroactively, and the new object lets local history replace this wave.
+export function syncPostWaveRewardReport(game) {
+  const report=game.lastCombatReport,ledger=game.combatLedger
+  if(!ledger?.ended || !report?.ended || report.wave!==game.wave ||
+      report.battleId!==game.battleId || report.waveId!==ledger.waveId)return report || null
+  const lifeEvents=copy(game.lifeEvents || []),passiveEvents=copy(game.buildPassives?.events || [])
+  if(report.lifeVersion===1)game.lastCombatReport={...report,lifeEvents,passiveEvents,lifeEnd:game.baseHp,lifeMaxEnd:game.maxBaseHp}
+  else {
+    const merged=new Map([...(report.passiveEvents || []),...passiveEvents].map(event=>[event.eventId,event]))
+    const postWaveLife=lifeEvents.length?{lifeVersion:1,wave:game.wave,lifeStart:lifeEvents[0].before,lifeMaxStart:lifeEvents[0].maxBefore,
+      lifeEnd:game.baseHp,lifeMaxEnd:game.maxBaseHp,lifeEvents}:report.postWaveLife
+    game.lastCombatReport={...report,passiveEvents:copy([...merged.values()]),...(postWaveLife?{postWaveLife}:{})}
+  }
+  return game.lastCombatReport
+}
+
 export function migrateCombatStats(game, original) {
   if (original.combatLedger) return
   initializeCombatStats(game,{partial:true})
@@ -306,13 +324,20 @@ export function discardInvalidScoreMetadata(container) {
   if(container.lastDeploy?.scoreTrace!==undefined && !validOrderScoreTrace(container.lastDeploy.scoreTrace,true)) delete container.lastDeploy.scoreTrace
   return container
 }
+const validLifeEvent=row=>row&&text(row.id)&&text(row.source)&&text(row.sourceId)&&
+  ['loss','heal','max','failure','end','bell-summon','bell-blocked','bell-kill','bell-breach','bell-timeout'].includes(row.kind)&&
+  ['before','after','amount','maxBefore','maxAfter','at'].every(key=>safe(row[key]))&&Number.isSafeInteger(row.wave)&&row.wave>=1
 export function validCombatRecord(value, ledger=false) {
   if(value?.passiveEvents!==undefined&&(!Array.isArray(value.passiveEvents)||!value.passiveEvents.every(validBuildPassiveEvent)))return false
   if(value?.lifeVersion!==undefined&&(value.lifeVersion!==1||!safe(value.lifeStart)||!safe(value.lifeMaxStart)||value.lifeStart>value.lifeMaxStart ||
       !ledger&&(!safe(value.lifeEnd)||!safe(value.lifeMaxEnd)||value.lifeEnd>value.lifeMaxEnd)))return false
-  if(value?.lifeEvents!==undefined&&(!Array.isArray(value.lifeEvents)||!value.lifeEvents.every(row=>row&&text(row.id)&&text(row.source)&&text(row.sourceId)&&
-      ['loss','heal','max','failure','end','bell-summon','bell-blocked','bell-kill','bell-breach','bell-timeout'].includes(row.kind)&&
-      ['before','after','amount','maxBefore','maxAfter','at'].every(key=>safe(row[key]))&&Number.isSafeInteger(row.wave)&&row.wave>=1)))return false
+  if(value?.lifeEvents!==undefined&&(!Array.isArray(value.lifeEvents)||!value.lifeEvents.every(validLifeEvent)))return false
+  if(value?.postWaveLife!==undefined){
+    const post=value.postWaveLife
+    if(!post || post.lifeVersion!==1 || post.wave!==value.wave || !['lifeStart','lifeMaxStart','lifeEnd','lifeMaxEnd'].every(key=>safe(post[key])) ||
+      post.lifeStart>post.lifeMaxStart || post.lifeEnd>post.lifeMaxEnd || !Array.isArray(post.lifeEvents) || !post.lifeEvents.length ||
+      !post.lifeEvents.every(row=>validLifeEvent(row)&&row.wave===post.wave))return false
+  }
   if(!value || value.version!==1 || ![value.runId,value.waveId,value.seed,value.doctrine,value.difficulty].every(text) ||
     !Number.isSafeInteger(value.wave) || value.wave<1 || value.wave>WAVES.length || !Number.isSafeInteger(value.battleId) || value.battleId<1 ||
     value.waveId!==identity({battleId:value.battleId,wave:value.wave},value.runId) ||

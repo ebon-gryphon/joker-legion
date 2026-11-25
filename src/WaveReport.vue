@@ -41,6 +41,7 @@ const gateView=computed(()=> {
     <template v-if="combat">
       <p class="report-overview"><b>{{ combat.result==='lost'?'远征失守':combat.ended?'本波守住':'本波记录' }}</b><span>{{ combat.battleDuration===undefined?'已记录交战':'交战总时长' }} {{ (combat.battleDuration ?? combat.duration).toFixed(1) }} 秒<template v-if="combat.battleDuration===undefined">（旧口径）</template></span><span>剩余军令 {{ rounded(combat.energyLeft) }}</span></p>
       <LifeReport v-if="modernLife" :combat="combat"/>
+      <template v-else-if="combat.postWaveLife"><p class="report-caveat">读档后波后生命 · 以下为新规则下的真实补给变化。</p><LifeReport :combat="combat.postWaveLife"/></template>
       <p v-if="gateView" class="report-gate"><b>旧制防线记录（不换算、不重复计入红心生命）</b><span>旧制数值 {{ rounded(gateView.start) }} → {{ rounded(gateView.end) }}</span><span v-if="gateView.partitioned">旧制损失 {{ rounded(gateView.damage) }} · 旧制恢复 {{ rounded(gateView.repaired) }}</span><span v-if="!gateView.partitioned">旧制整波损失 {{ rounded((combat.legacyGate || combat.gate).damage) }} · 恢复 {{ rounded((combat.legacyGate || combat.gate).repaired) }}（含备战）</span></p>
       <p v-if="combat.partial" class="report-caveat">其中记录了 {{ combat.duration.toFixed(1) }} 秒的贡献，早先数据没有分配给个人。</p>
       <p v-if="!modernLife && Math.abs(combat.gate?.untracked || 0)>.01" class="report-caveat">旧制另有 {{ rounded(Math.abs(combat.gate.untracked)) }} 点未分类变化，不计入新生命事件。</p>
