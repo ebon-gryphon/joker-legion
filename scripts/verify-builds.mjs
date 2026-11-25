@@ -27,7 +27,7 @@ const rankGroups=cards=>{
   return [...groups.values()]
 }
 
-export function runBuildStrategy(route,{fixtures=true}={}) {
+export function runBuildStrategy(route,{fixtures=true,onBattleStart,onBattleEnd}={}) {
   const game=E.createGame({seed:route.seed,mode:route.mode,doctrine:route.doctrine,difficulty:route.difficulty || 'standard'})
   const log={id:route.id,name:route.name,mode:game.mode,seed:route.seed,doctrine:route.doctrine,difficulty:game.difficulty,economyVersion:game.economyVersion,
     actions:[],turns:[],waves:[],fixtures:[],milestones:{},result:null}
@@ -165,6 +165,7 @@ export function runBuildStrategy(route,{fixtures=true}={}) {
   for(let guard=0;guard<(route.stopWave || 100)+2 && !['won','retired','lost'].includes(game.phase);guard++) {
     if(game.phase==='ready')camp()
     if(game.phase==='battle') {
+      onBattleStart?.(game)
       let ticks=0
       const wave=game.wave,before=budget(game),beforeAction=log.actions.length
       while(game.phase==='battle' && ticks<1000) {
@@ -182,6 +183,7 @@ export function runBuildStrategy(route,{fixtures=true}={}) {
       }
       assert.ok(ticks<1000,'Battle must reach an actual engine ending')
       log.actions.push({n:log.actions.length+1,wave,phase:'battle',type:'tick',params:{count:ticks,dt:.25},before,after:budget(game)})
+      onBattleEnd?.(game)
       const report=clone(game.lastCombatReport)
       log.waves.push({afterAction:log.actions.length,wave,phase:game.phase,hp:game.baseHp,life:game.baseHp,maxLife:game.maxBaseHp,report,itemEvents:clone(report?.itemEvents || []),
         heartEngineDamage:sumSystem(report,'heart-engine','damage'),redEchoHealing:sumSystem(report,'red-echo','healed')})

@@ -1,3 +1,4 @@
+import {developmentWave} from './endless.js'
 import { lastingStat } from './standingArmy.js'
 import { log } from './gameState.js'
 import { gradeOf } from './quality.js'
@@ -56,7 +57,8 @@ export function grantExperience(game, unit, amount, announce = true) {
 function grantExperienceBase(game, unit, amount, announce) {
   const xp = unit.trainingXp || 0
   const next = Math.min(999, xp + amount)
-  const before = trainingBonus(xp, game.wave), after = trainingBonus(next, game.wave)
+  const wave=developmentWave(game)
+  const before = trainingBonus(xp, wave), after = trainingBonus(next, wave)
   const earned = earnedTraining(unit, game.wave)
   unit.trainingGrowth = { hp: earned.hp + after.hp - before.hp, atk: earned.atk + after.atk - before.atk }
   unit.hp += after.hp - before.hp

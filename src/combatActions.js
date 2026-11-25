@@ -426,7 +426,7 @@ export function bossStep(game, dt, onAction) {
       const strength = boss.type === 'finalBoss' && boss.hp <= boss.maxHp / 2 ? 1.2 : 1
       for (const unit of targets) {
         const ward = mark.mode === 'pulse' && unit.shield > 0 ? .5 : 1
-        formationDamage(game, unit, skill.damage * endlessScale(game) * strength * ward, true, 0, boss)
+        formationDamage(game, unit, skill.damage * endlessScale(game,'attack') * strength * ward, true, 0, boss)
         if (mark.mode === 'rupture' && unit.hp > 0) unit.cooldown += 1.2
       }
       effect(game, 'burst', mark.x, mark.y, mark.name, boss.color)

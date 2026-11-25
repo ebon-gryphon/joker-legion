@@ -154,6 +154,7 @@ export function nextWave(game) {
   game.paidHandsLeft = 0
   game.legacyFieldSize = game.allies.length > FIELD_LIMIT ? game.allies.length : 0
   game.wave++
+  makeSchedule(game)
   game.lifeEvents=[];game.lifeItemState={redEchoUsed:false,flushCrownUsed:false};resetBuildWave(game)
   game.royalMarch = false
   game.lastField = []
@@ -207,7 +208,6 @@ export function nextWave(game) {
   game.orderTarget = null
   game.trainedHere = false
   game.printsLeft = game.printsBudget = PRINTS_PER_WAVE+game.waveBonuses.active.prints
-  makeSchedule(game)
   initializeCombatStats(game)
   log(game, `${waveInfo(game).name}即将来袭 · 可整编驻军或继续征兵`, 'danger')
   if (kept) log(game,'夹层从袖底取回 ' + faceOf(kept),'good')

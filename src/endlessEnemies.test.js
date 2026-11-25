@@ -103,9 +103,10 @@ test('种子支配分批组合，十八和二十四波使用交替首领技能',
 test('无尽使用冻结的十二波基线与指数曲线，不加快行动',()=>{
   for(const wave of [13,18,24,49]){
     const g=game('endless',wave),u=enemy(g,'cantor')
-    const scale=(1+.22*11)*1.07**(wave-12)
-    assert.equal(u.maxHp,Math.round(HOSTILE.cantor.hp*scale));assert.equal(u.atk,Math.round(HOSTILE.cantor.atk*scale))
-    assert.equal(u.period,HOSTILE.cantor.period);assert.equal(endlessScale(g),1.07**(wave-12))
+    const early=1.07**(Math.min(wave,23)-12),late=Math.max(0,wave-23)
+    const scale=(1+.22*11)*early*1.145**late
+    assert.equal(u.maxHp,Math.round(HOSTILE.cantor.hp*scale));assert.equal(u.atk,Math.round(HOSTILE.cantor.atk*(1+.22*11)*early*1.10**late))
+    assert.equal(u.period,HOSTILE.cantor.period);assert.equal(endlessScale(g),early*1.145**late)
   }
 })
 test('标准终幕直达胜利，无尽终幕上架三项，第十五波额外水晶独立',()=>{

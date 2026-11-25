@@ -1,3 +1,4 @@
+import {developmentWave,ENDLESS} from './endless.js'
 import { lastingStat } from './standingArmy.js'
 import { combinedRewardModifiers } from './rewardModifiers.js'
 import { ascendedGrade, QUALITIES } from './quality.js'
@@ -55,6 +56,17 @@ export function workshopPairs(game) {
   return pairs
 }
 
+function materialShare(game,leader,donor,kind) {
+  const base=kind==='ascend'?.5:kind==='profession'?1:kind==='promote'?.8:.6
+  if(game.mode!=='endless' || game.wave<=12 || game.endlessRevision===1)return base
+  if(kind==='profession'){
+    const known=professionJobs(leader)
+    if(professionJobs(donor).some(id=>!known.includes(id)))return base
+  }
+  const force=Math.max(unmodifiedBuildStat(leader,'atk'),unmodifiedBuildStat(leader,'heal'))
+  return base/Math.sqrt(Math.max(1,force/ENDLESS.veteranAttack))
+}
+
 export function mergePreview(game, leaderId, donorId, kind) {
   if (game.phase !== 'ready') return null
   const members = [...game.allies, ...(game.reserves || [])]
@@ -64,11 +76,11 @@ export function mergePreview(game, leaderId, donorId, kind) {
   if (!kind || (mergeKind(leader, donor) !== kind && !legacyPair(leader,donor,kind))) return null
   const ascending = kind === 'ascend'
   const profession = kind === 'profession'
-  const share = ascending ? .5 : profession ? 1 : kind === 'promote' ? .8 : .6
+  const share=materialShare(game,leader,donor,kind)
   const trained = earnedTraining(donor, game.wave)
   const retained = earnedTraining(leader, game.wave)
   const xp = Math.min(999,(leader.trainingXp || 0) + (ascending ? soldierValue(donor) : donor.trainingXp || 0))
-  const before = trainingBonus(leader.trainingXp || 0,game.wave), after = trainingBonus(xp,game.wave)
+  const before = trainingBonus(leader.trainingXp || 0,developmentWave(game)), after = trainingBonus(xp,developmentWave(game))
   const gainHp = after.hp-before.hp, gainAtk=after.atk-before.atk
   const maxHp = leader.maxHp + gainHp + Math.round((lastingStat(donor,'maxHp') - trained.hp) * share)
   const skills=[...new Set([leader.fusion,donor.fusion,...(leader.fusionSkills || []),...(donor.fusionSkills || [])].filter(Boolean))]
@@ -104,7 +116,7 @@ export function mergeWarning(game, leaderId, donorId, kind='promote') {
   const members=[...game.allies,...(game.reserves || [])]
   const leader=members.find(u=>u.id===leaderId),donor=members.find(u=>u.id===donorId)
   const main=materialIdentity(leader),material=materialIdentity(donor)
-  const share=kind==='ascend'?.5:kind==='profession'?1:kind==='promote'?.8:.6
+  const share=materialShare(game,leader,donor,kind)
   const lostXp=Math.max(0,main.xp+material.xp-preview.trainingXp)
   const quality=QUALITIES[preview.grade ?? main.grade].name
   const warning={kind,leader:main,donor:material,share,retainedQuality:quality,

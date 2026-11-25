@@ -57,6 +57,10 @@ export function drawUnit(c, unit, sample, time, lag, yMap, enemyArt, cameraTop, 
   const ground = yMap(sample.y)
   const y = Math.round(boss ? Math.max(ground, cameraTop + height + 26) : ground)
   rect(c, x - width * .3, y - 1, width * .6, 4, '#12131f'); rect(c, x - width * .4, y - 2, width * .8, 2, '#161420')
+  if(enemy && hostile){
+    const rim='#b5a89b'
+    rect(c,x-width*.26,y+1,width*.12,2,rim);rect(c,x+width*.14,y+1,width*.12,2,rim)
+  }
   paintUnitPresentation(c,unit,presentation,x,y,width,height)
   if (unit.grade >= 5 && !presentation?.pending) {
     diamond(c,x,y+1,24,7,gradeOf(unit).color)
@@ -88,6 +92,9 @@ export function drawUnit(c, unit, sample, time, lag, yMap, enemyArt, cameraTop, 
     line(c, edge, mid + 4, edge - direction * 5, mid + 9, tint)
   }
   c.save()
+  if(enemy && ['banner','hunter','cantor','splitter'].includes(unit.type)){
+    c.shadowColor='#b2a896';c.shadowOffsetX=-1;c.shadowOffsetY=0;c.shadowBlur=0
+  }
   if (unit.echoUntil != null) c.globalAlpha = .63
   const wingLift = 0
   const drawn = drawCardSprite(c,artworkUnit,x-width/2+wingLift,y+(body ? 0 : bob)-height-wingLift,
@@ -112,7 +119,7 @@ export function drawUnit(c, unit, sample, time, lag, yMap, enemyArt, cameraTop, 
   }
   if (pose) paintGesture(c,profile,pose,x,y,height,direction)
   const ratio = Math.max(0, Math.min(1, (unit.hp + sample.pendingDamage) / Math.max(1, unit.maxHp || unit.hp || 1))), barWidth = boss ? 66 : enemy && unit.type === 'brute' ? 32 : 26
-  if (!inCamp && ratio === 1 && !boss && unit.type !== 'bellkeeper' && !unit.command && !unit.crowned && !unit.fusion && !unit.standard) return bounds
+  if (!sample.showName && !inCamp && ratio === 1 && !boss && unit.type !== 'bellkeeper' && !unit.command && !unit.crowned && !unit.fusion && !unit.standard) return bounds
   const barY = Math.max(cameraTop + 6, y - height - (flying ? 15 : enemy ? 8 : 14))
   rect(c, x - barWidth / 2 - 2, barY - 2, barWidth + 4, boss ? 9 : 7, '#0e0e19'); rect(c, x - barWidth / 2, barY, barWidth, boss ? 5 : 3, '#3f293b')
   if (ratio > 0) rect(c, x - barWidth / 2, barY, Math.max(2, Math.floor(barWidth * ratio / 2) * 2), boss ? 5 : 3, enemy ? '#d4778c' : faction)
@@ -135,7 +142,7 @@ export function drawUnit(c, unit, sample, time, lag, yMap, enemyArt, cameraTop, 
     for (let i = 0; i < 3; i++) rect(c, x - 8 + i * 6, barY + 5, 4, 2, i < unit.skillCharge ? faction : '#585064')
   }
   if (unit.crowned || unit.command || unit.standard) glyph(c, x - 7, snap(barY - 27), CROWN, unit.crowned || unit.standard ? '#ffdf91' : '#c6bedf', 2)
-  else if (boss) labels.push({text:HOSTILE[unit.type]?.name || '首领',x,y:barY-6,size:14,color:'#ffd4ce'})
+  else if (boss) labels.push({priority:'warning',text:HOSTILE[unit.type]?.name || '首领',x,y:barY-6,size:14,color:'#ffd4ce'})
   return bounds
 
 }

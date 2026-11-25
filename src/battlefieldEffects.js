@@ -170,5 +170,5 @@ export function telegraph(c, mark, time, yMap, labels) {
   const label = `${mark.name || '猩红轰击'} ${remaining.toFixed(1)}s`
   c.font = 'bold 12px "PingFang SC", monospace'; c.textAlign = 'center'; const ww = Math.ceil(c.measureText(label).width / 2) * 2 + 16
   rect(c, x - ww / 2, y - 45, ww, 22, '#2c172b'); outline(c, x - ww / 2, y - 45, ww, 22, '#b36b81'); rect(c, x - ww / 2 + 2, y - 27, (ww - 4) * (1 - remaining / duration), 2, '#efa7b2')
-  labels.push({text:label,x,y:y-30,size:14,color:'#ffd5cf'}); c.restore()
+  labels.push({priority:'warning',text:label,x,y:y-30,size:14,color:'#ffd5cf'}); c.restore()
 }

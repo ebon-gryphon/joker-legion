@@ -185,7 +185,7 @@ function merge() {
     <section class="forge-bench">
       <div class="forge-bench-scroll" tabindex="0" aria-label="融合预览与职业能力">
       <div class="forge-subhead"><h3>{{ outputName }}</h3><small>{{ isFusion ? '保留主兵身份与星级' : '同职业 · 最高三星' }}</small></div>
-      <p class="forge-note">{{ isFusion ? '不同职业，一星即可融合。副兵永久基础属性全部相加，经验与能力保留；融合兵可继续融合其他职业。同族的刀兵、枪兵与骑兵也能互相融合。' : '两名同职业、同星士兵合编。主将升一星并继承副手八成属性，保留双方已经学会的能力。' }}</p>
+      <p class="forge-note">{{ isFusion ? '不同职业，一星即可融合。保留经验与能力，属性继承比例见下方材料预览；融合兵可继续融合其他职业。同族的刀兵、枪兵与骑兵也能互相融合。' : '两名同职业、同星士兵合编。主将升一星并按预览比例继承副手属性，保留双方已经学会的能力。' }}</p>
       <div class="forge-formula">
         <template v-for="(slot,index) in sourceList" :key="slot.label">
           <span v-if="index" class="forge-sign" aria-hidden="true">＋</span>
@@ -209,7 +209,7 @@ function merge() {
       </div>
       <div v-if="result" class="forge-stats"><span v-for="stat in stats" :key="stat.label">{{ stat.label }} <del>{{ stat.before }}</del> → <b>{{ stat.after }}</b></span></div>
       </div>
-      <footer class="forge-commit"><div class="forge-warning-stack"><MergeWarning v-if="consumptionWarning" compact :warning="consumptionWarning"/><small v-else>{{ isFusion ? '职业融合消耗副兵，保留主兵身份与品质；副兵永久基础属性全部并入。' : '升星消耗一名同职业同星副兵，保留主兵品质；副兵基础属性仅继承80%。' }}上锁的士兵不能作为材料。</small></div>
+      <footer class="forge-commit"><div class="forge-warning-stack"><MergeWarning v-if="consumptionWarning" compact :warning="consumptionWarning"/><small v-else>{{ isFusion ? '职业融合消耗副兵，保留主兵身份与品质；选定两人后可查看实际继承属性。' : '升星消耗一名同职业同星副兵，保留主兵品质；选定两人后可查看实际继承比例。' }}上锁的士兵不能作为材料。</small></div>
         <button class="gold-button key-command" :disabled="!result || !affordable" @click="merge"><KeyMark name="forge"/>{{ !result ? '材料未齐' : !affordable ? '还缺 '+(price-game.gold)+' 金币' : isFusion ? '消耗副兵并融合' : '消耗副兵升至'+result.level+'星' }}<small class="forge-price">{{ isFusion ? price+' 金币' : '免费' }}</small></button>
       </footer>
     </section>

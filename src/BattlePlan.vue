@@ -19,6 +19,11 @@ function inspect(type) {
   guideOpen.value = true
 }
 const selected = computed(() => FORMATION_BY_ID[props.inShop ? browsing.value : props.formation])
+const lastGroup=computed(()=>{
+  const at=props.schedule.at(-1)?.at
+  if(!at)return null
+  return {at,seconds:props.wave.duration-at,names:props.schedule.filter(slot=>slot.at===at).map(slot=>HOSTILE[slot.type].name).join('、')}
+})
 const seconds = value => Number(value.toFixed(1))
 const intelRows = computed(() => [...props.intel.enemies].sort((a, b) => {
   const priority = { finalBoss:3, boss: 2, bellkeeper: 1 }
@@ -48,7 +53,7 @@ function choose(id) {
         </li>
       </ul>
       <p v-if="intel.enemies.some(e=>e.type==='hunter')" class="brief-warning"><b>刺客追击</b> {{ quarryName || '等待友军入阵' }} · 优先牧师，其次游侠、术士。</p>
-      <p v-if="schedule.some(s=>s.at>0)" class="brief-warning">分批入场 · {{ [...new Set(schedule.map(s=>s.at))].join(' / ') }} 秒</p>
+      <p v-if="schedule.some(s=>s.at>0)" class="brief-warning">分批入场 · {{ [...new Set(schedule.map(s=>s.at))].join(' / ') }} 秒<template v-if="lastGroup"><br/>末批 {{ lastGroup.names }} · 入场后剩 {{ lastGroup.seconds }} 秒</template></p>
       <p v-else class="brief-warning"><b>整队出击</b> 开战时 {{ intel.total }} 名敌军同时入场。</p>
       <p class="brief-warning"><b>限时 {{ wave.duration }} 秒</b> 时间到，普通残敌逐名按突破结算，每名损失 1 生命。生命降到 0 仍可继续，但不能再放入任何敌人。<template v-if="wave.boss">首领突破或超时仍存活会直接结束远征。</template></p>
       <p v-if="intel.bells.length" class="brief-warning"><b>鸣钟使</b> {{ intel.bells.map(seconds).join(' / ') }} 秒入场，首次蓄力 {{ BELL_WINDUP }} 秒。鸣钟会从右侧召唤流寇援军；援军可被击退，也会真实突破或在超时时结算。</p>

@@ -1,4 +1,4 @@
-import {ENDLESS} from './endless.js'
+import {ENDLESS,endlessBudget,hasRearguard,lastBatchTime} from './endless.js'
 import { seedNumber, random, log, effect } from './gameState.js'
 import { isBackline, HOSTILE } from './tactics.js'
 import { isBoss } from './bossRules.js'
@@ -9,13 +9,21 @@ export function waveSchedule(seed, wave, difficulty = 'standard', mode='standard
   const rollState = { rng: seedNumber(String(seed) + '/wave/' + wave) }
   if(wave>12 && mode==='endless') {
     const packs=[['banner','archer','splitter'],['cantor','brute','banner'],['hunter','raider','brute'],['splitter','warlock','cantor']]
-    const budget=Math.min(ENDLESS.maxBudget,ENDLESS.initialBudget+2*Math.floor((wave-13)/3))
+    const budget=endlessBudget(wave)
+    if(wave>=18)packs.push(['banner','splitter','hunter'],['cantor','brute','archer'])
+    if(wave>=25)packs.push(['banner','cantor','splitter'],['hunter','bat','splitter'])
     const queue=[]
     for(let i=0;i<budget;i+=3){
       const pack=packs[Math.floor(random(rollState)*packs.length)]
       for(const type of pack.slice(0,budget-i))queue.push({type,at:Math.floor(queue.length/ENDLESS.batchSize)*ENDLESS.batchInterval})
     }
     if(wave%6===0)queue[0].type=wave%12===0?'finalBoss':'boss'
+    if(hasRearguard(wave)) {
+      const last=queue.slice(-ENDLESS.reserveSize)
+      for(const unit of last)unit.at=lastBatchTime(wave)
+      if(wave%3===1){last[0].type='banner';last[1].type='splitter'}
+      if(wave%3===2){last[0].type='banner';last[1].type='splitter';last[2].type='cantor'}
+    }
     return queue
   }
   const count = [0, 9, 11, 10, 10, 10, 8, 13, 14, 15, 16, 17, 12][wave]
@@ -54,6 +62,7 @@ export function waveSchedule(seed, wave, difficulty = 'standard', mode='standard
 }
 
 export function makeSchedule(game) {
+  if(game.mode==='endless')game.endlessRevision=2
   game.schedule = waveSchedule(game.seed, game.wave, game.difficulty, game.mode)
   game.spawnIndex = 0
 }

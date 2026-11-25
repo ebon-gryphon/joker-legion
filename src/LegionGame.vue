@@ -900,6 +900,7 @@ onBeforeUnmount(() => {
               <div class="battle-timer" role="timer" :class="{ urgent: game.phase === 'battle' && secondsLeft <= 10 }">
                 <small>{{ game.phase === 'ready' ? '限时' : '剩余' }}</small> <b>{{ secondsLeft }}</b> <small>秒</small>
               </div>
+              <span v-if="game.phase==='battle' && game.schedule[game.spawnIndex]?.at>game.waveTime" class="army-tag">增援 <b>{{ Math.ceil(game.schedule[game.spawnIndex].at-game.waveTime) }} 秒</b></span>
               <span class="army-tag enemy-tag">来敌 <b>{{ game.phase==='ready'?scout.total:liveEnemies.length }}</b><i></i></span>
               <button v-if="game.phase==='battle' && lastCombatCue && !game.bossTelegraph && !chime" class="payoff-button key-tab" :title="lastCombatCue.label+'。'+lastCombatCue.reason" @click="setDesk('watch')">{{ lastCombatCue.label }} ↗</button>
             </div>

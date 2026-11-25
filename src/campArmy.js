@@ -1,5 +1,5 @@
 import {ENEMY_RULES} from './enemyBehavior.js'
-import {endlessScale} from './endless.js'
+import {developmentWave,endlessScale} from './endless.js'
 import { waveChange } from './standingArmy.js'
 import { getCardDesign } from './cardCatalog.js'
 import { FIELD_LIMIT, MAX_ENEMIES, ALLIED, RECRUIT_STRENGTH } from './campaignRules.js'
@@ -116,14 +116,15 @@ export function addUnit(game, type, side, level = 1, { identity, reserve = false
   if (!reserve && team.length >= (side === 'ally' ? FIELD_LIMIT : MAX_ENEMIES)) return null
   const definition = side === 'ally' ? ALLIED[type] : HOSTILE[type]
   if (!definition) return null
-  const strength = side === 'ally' ? (1 + (level - 1) * 0.34) * (1 + game.upgrades.power + (game.wave - 1) * .26) : (isBoss(type) ? 1 : 1 + (Math.min(12,game.wave) - 1) * 0.22) * endlessScale(game)
+  const enemyBase=isBoss(type)?1:1+(Math.min(12,game.wave)-1)*.22
+  const strength = side === 'ally' ? (1 + (level - 1) * 0.34) * (1 + game.upgrades.power + (developmentWave(game) - 1) * .26) : enemyBase * endlessScale(game)
   const maxHp = Math.round(definition.hp * strength * (side === 'ally' && type === 'mage' && owns(game, 'diamond-bank') ? 1.2 : 1))
   const lane = Math.floor(random(game) * 3)
   const unit = {
     id: uid(game, side), type, side, name: definition.name, icon: definition.icon, color: definition.color,
     x: side === 'ally' ? 100 + random(game) * 50 : 920 + random(game) * 48,
     y: 205 + lane * 43 + random(game) * 17,
-    hp: maxHp, maxHp, atk: Math.round(definition.atk * strength),
+    hp: maxHp, maxHp, atk: Math.round(definition.atk * (side==='ally'?strength:enemyBase*endlessScale(game,'attack'))),
     heal: definition.heal ? Math.round(definition.heal * strength) : 0,
     range: definition.range, speed: definition.speed, period: definition.period,
     cooldown: random(game) * 0.4, level, attacks: 0, shield: 0,

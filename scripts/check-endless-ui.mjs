@@ -40,6 +40,38 @@ try {
   const lens=expr=>'(()=>{const raw=document.querySelector(".scene-shell").__vueParentComponent.setupState.game;const g=raw?.__v_isRef?raw.value:raw;return '+expr+'})()'
   const state=expr=>run(lens('JSON.parse(JSON.stringify(('+expr+') ?? null))'))
   async function shot(name){const r=await send('Page.captureScreenshot',{format:'png'});await writeFile(new URL(name+'.png',folder),Buffer.from(r.data,'base64'))}
+  async function verifyBackground(name){
+    const measured=await run(`(async()=>{
+      const resource=performance.getEntriesByType('resource').find(r=>new URL(r.name).pathname.endsWith('/battlefield.png'))
+      if(!resource)throw Error('Missing battlefield request')
+      const bytes=await (await fetch(resource.name)).arrayBuffer()
+      const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),n=>n.toString(16).padStart(2,'0')).join('')
+      const image=new Image();image.src=resource.name;await image.decode()
+      const canvas=document.querySelector('.battle-canvas'),w=canvas.width,h=canvas.height
+      const reference=document.createElement('canvas');reference.width=w;reference.height=h
+      const c=reference.getContext('2d');c.imageSmoothingEnabled=false
+      const scale=Math.max(w/image.width,h/image.height),dw=image.width*scale,dh=image.height*scale
+      c.drawImage(image,Math.round((w-dw)*.14),Math.round((h-dh)*.48),dw,dh)
+      const a=c.getImageData(0,0,w,h).data,b=canvas.getContext('2d').getImageData(0,0,w,h).data
+      const hits=[0,0,0,0],samples=[0,0,0,0],light=[0,0],count=[0,0],edgeHits=[0,0,0,0],edges=[0,0,0,0]
+      for(let y=6;y<h;y+=17)for(let x=5;x<w;x+=17){
+        const zone=Number(x>w/2)+2*Number(y>h/2),k=4*(y*w+x)
+        samples[zone]++
+        const matches=[0,1,2].every(ch=>Math.abs(a[k+ch]-b[k+ch])<=1)
+        if(matches)hits[zone]++
+        // The outer sky and near foreground remain visible even when the hostile formation fills a quadrant.
+        if(y<h*.09 || y>h*.94){edges[zone]++;if(matches)edgeHits[zone]++}
+        if(y>h*.54 && y<h*.82 && (x<w*.25 || x>w*.75)){
+          const side=Number(x>w*.75);light[side]+=.2126*b[k]+.7152*b[k+1]+.0722*b[k+2];count[side]++
+        }
+      }
+      return {digest,source:[image.width,image.height],edgeMatch:edgeHits.map((n,i)=>n/edges[i]),match:hits.map((n,i)=>n/samples[i]),luminance:light.map((n,i)=>n/count[i])}
+    })()`)
+    assert.equal(measured.digest,'2afeffe53f76841bfbd9dd65ff2fdabc0669dc0ce7ba22f20d8d01918be661c7')
+    assert.deepEqual(measured.source,[1536,804]);assert.ok(measured.edgeMatch.every(n=>n>.8) && measured.match.reduce((a,b)=>a+b)/4>.60,name+' background '+JSON.stringify(measured))
+    assert.ok(measured.luminance[0]>measured.luminance[1],name+' faction contrast')
+    results.push({case:'background-'+name,...measured});await shot('open-'+name)
+  }
   async function boot(name){
     const snapshot=JSON.parse(await readFile(new URL(name+'.json',folder),'utf8'))
     const key='joker.legion.demo.v1'+(snapshot.mode==='endless'?'.endless':'')
@@ -60,11 +92,37 @@ try {
   await send('Runtime.enable');await send('Page.enable')
   await send('Emulation.setDeviceMetricsOverride',{width:1366,height:900,deviceScaleFactor:1,mobile:false})
   await boot('scout')
-  await click('.scene-close')
+  await click('.scene-close');await verifyBackground('deployment')
+  const picked=await run(`(()=>{const vm=document.querySelector('.scene-shell').__vueParentComponent.setupState,c=document.querySelector('.battle-canvas'),b=c.getBoundingClientRect(),r=vm.renderer.deploymentGeometry();return r.names.map(n=>vm.renderer.pickUnit(b.left+n.x,b.top+n.y-n.size/2,'ally')===n.id)})()`)
+  assert.ok(picked.length && picked.every(Boolean))
+  const drag=await run(`(()=>{
+    const vm=document.querySelector('.scene-shell').__vueParentComponent.setupState
+    const c=document.querySelector('.battle-canvas'),b=c.getBoundingClientRect(),r=vm.renderer.deploymentGeometry()
+    const from=r.names.find(n=>document.elementFromPoint(b.left+n.x,b.top+n.y-n.size/2)===c)
+    if(!from)return null
+    for(const x of [390,145,290,70])for(const y of [320,255,195]){
+      const tx=b.left+r.left+x*r.scale,ty=b.top+r.top+(r.laneStart+(y-192)*r.laneScale)*r.scale
+      if(document.elementFromPoint(tx,ty)===c && !vm.renderer.pickUnit(tx,ty,'ally') && Math.hypot(tx-b.left-from.x,ty-b.top-from.y)>50)
+        return {id:from.id,sx:b.left+from.x,sy:b.top+from.y-from.size/2,tx,ty,x,y}
+    }
+  })()`)
+  assert.ok(drag,'unobstructed deployment destination')
+  await send('Input.dispatchMouseEvent',{type:'mousePressed',x:drag.sx,y:drag.sy,button:'left',buttons:1,clickCount:1})
+  await send('Input.dispatchMouseEvent',{type:'mouseMoved',x:drag.tx,y:drag.ty,buttons:1})
+  await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:drag.tx,y:drag.ty,button:'left',clickCount:1})
+  const spot=await state('g.allies.find(a=>a.id==='+JSON.stringify(drag.id)+').campSpot')
+  assert.ok(spot && Math.hypot(spot.x-drag.x,spot.y-drag.y)<2,'real deployment drop')
+  results.push({case:'deployment-controls',names:picked.length,moved:drag.id,spot})
+
   await click('[data-tool=brief]')
   await wait('document.querySelector(".brief-intel")?.innerText.includes("刺客追击")')
   await shot('scout')
   results.push({case:'scout',intel:await run('document.querySelector(".brief-intel").innerText')})
+  for(const name of ['boss-cast','late-field']){
+    await boot(name)
+    assert.ok(await state(name==='boss-cast'?'g.bossTelegraph?.remaining>0':'g.wave>=30 && g.enemies.some(e=>e.chanting)'))
+    await verifyBackground(name)
+  }
   for(const name of ['bonus','guard','hunt','split','chant','heal','late-loss','standard12','endless12']){
     const before=await boot(name),start=before.combatLedger.enemyEvents.length
     await button('.field-controls','继续')
@@ -74,7 +132,11 @@ try {
     if(await state('g.phase==="battle"'))await button('.field-controls','暂停')
     const event=['bonus','guard','hunt','split','heal'].includes(name)?await state(find):null
     const row={case:name,mode:before.mode,seed:before.seed,wave:before.wave,at:await state('g.waveTime'),beforeLife:before.baseHp,life:await state('g.baseHp'),event,phase:await state('g.phase')}
-    if(name==='late-loss'){row.loss=await state('g.lifeEvents.filter(e=>e.kind==="loss").at(-1)');assert.ok(['breach','timeout'].includes(row.loss.source));assert.equal(row.loss.amount,1)}
+    if(name==='late-loss'){
+      row.loss=await state('g.lifeEvents.slice('+before.lifeEvents.length+').find(e=>e.source==="breach" && e.unitType==="brood")')
+      assert.equal(row.loss.amount,1)
+    }
+    if(name==='chant')await verifyBackground('combat')
     if(name==='split'){row.children=await state('g.enemies.filter(e=>e.parentId==='+JSON.stringify(event.actor)+').map(e=>e.id)');assert.deepEqual(row.children,event.children)}
     if(name==='hunt')assert.ok((await run('document.body.innerText')).includes('刺客追击'))
     if(name==='standard12'){assert.equal(row.phase,'won');assert.equal(await state('g.rewards.length+g.shop.length'),0)}
@@ -93,6 +155,14 @@ try {
   assert.equal(await state('g.lastCombatReport.runOutcome.status'),'retired')
   await shot('retired')
   results.push({case:'retired',outcome:await state('g.lastCombatReport.runOutcome')})
+  const reference=await boot('standard12')
+  await button('.field-controls','继续');await wait(lens('g.phase==="won"'))
+  const expected=await state('({...g,effects:[]})')
+  await boot('standard12');await click('.scene-menu-key');await click('.presentation-switch')
+  await click('.scene-close');await click('.field-controls [aria-label*="倍速"]')
+  await button('.field-controls','继续');await wait(lens('g.phase==="won"'))
+  assert.deepEqual(await state('({...g,effects:[]})'),expected)
+  results.push({case:'presentation-off-fast-battle',seed:reference.seed,identical:true,rng:expected.rng})
   assert.deepEqual(errors,[])
   await writeFile(new URL('browser.json',folder),JSON.stringify({viewport:[1366,900],method:'Legal action checkpoints, real play controls and browser ticker',results,errors},null,2)+'\n')
 } finally {ws?.close();browser.kill();await new Promise(r=>browser.exitCode===null?browser.once('exit',r):r());await rm(profile,{recursive:true,force:true,maxRetries:4})}

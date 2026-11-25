@@ -48,6 +48,10 @@ export function restoreGame(snapshot) {
   // Never merge persisted data into live objects; whitelist and validate a full snapshot.
   try {
     const data = typeof snapshot === 'string' ? JSON.parse(snapshot) : JSON.parse(JSON.stringify(snapshot))
+    if(data?.mode==='endless'){
+      data.endlessRevision??=1
+      if(![1,2].includes(data.endlessRevision))return null
+    }
     if(data?.lifeVersion===undefined && !prepareLegacyLife(data))return null
     discardInvalidScoreMetadata(data)
     if (!validExpedition(data) || !validDeck(data) || !validHandAndTricks(data) ||
@@ -375,7 +379,7 @@ function validRewardEconomy(data) {
 
 function migrateExpedition(data) {
   const legacyHands = data.handsBought === undefined && data.paidHandsLeft === undefined
-  const pristine = createGame({ seed: data.seed, doctrine: data.doctrine, difficulty: data.difficulty })
+  const pristine = createGame({ seed: data.seed, doctrine: data.doctrine, difficulty: data.difficulty,mode:data.mode })
   for (const key of Object.keys(pristine)) if (Object.hasOwn(data, key)) pristine[key] = data[key]
   for (const key of ['bonusDiscard']) if (Object.hasOwn(data, key)) pristine[key] = data[key]
   // Completed six-wave records remain completed; active old expeditions continue to twelve.
