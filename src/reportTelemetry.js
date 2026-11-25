@@ -36,6 +36,7 @@ export function gateSourceRows(combat) {
 export function runOutcomeText(combat) {
   const outcome=combat?.runOutcome
   if(!outcome) return null
+  if(outcome.status==='retired') return '主动结束无尽挑战，守住第 '+outcome.wave+' 波。'
   if(outcome.status==='defeat') return '第 '+outcome.finalWave+' 波失守，已守住 '+outcome.clearedWaves+' 波。'
   if(outcome.status==='victory') return '第 '+outcome.finalWave+' 波完成远征，共守住 '+outcome.clearedWaves+' 波。'
   if(outcome.status==='wave-cleared') return '已守住 '+outcome.clearedWaves+' 波，远征继续。'

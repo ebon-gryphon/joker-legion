@@ -28,8 +28,8 @@ const rankGroups=cards=>{
 }
 
 export function runBuildStrategy(route,{fixtures=true}={}) {
-  const game=E.createGame({seed:route.seed,doctrine:route.doctrine,difficulty:route.difficulty || 'standard'})
-  const log={id:route.id,name:route.name,seed:route.seed,doctrine:route.doctrine,difficulty:game.difficulty,economyVersion:game.economyVersion,
+  const game=E.createGame({seed:route.seed,mode:route.mode,doctrine:route.doctrine,difficulty:route.difficulty || 'standard'})
+  const log={id:route.id,name:route.name,mode:game.mode,seed:route.seed,doctrine:route.doctrine,difficulty:game.difficulty,economyVersion:game.economyVersion,
     actions:[],turns:[],waves:[],fixtures:[],milestones:{},result:null}
   let capturedCConversion=false,checkpoint=0
   const capture=(id,label,snapshot=E.snapshotGame(game))=>{
@@ -162,7 +162,7 @@ export function runBuildStrategy(route,{fixtures=true}={}) {
       act('research',{key},()=>E.trainOrder(game,key))
     act('next-wave',{},()=>E.nextWave(game))
   }
-  for(let guard=0;guard<100 && !['won','lost'].includes(game.phase);guard++) {
+  for(let guard=0;guard<(route.stopWave || 100)+2 && !['won','retired','lost'].includes(game.phase);guard++) {
     if(game.phase==='ready')camp()
     if(game.phase==='battle') {
       let ticks=0
@@ -187,9 +187,10 @@ export function runBuildStrategy(route,{fixtures=true}={}) {
         heartEngineDamage:sumSystem(report,'heart-engine','damage'),redEchoHealing:sumSystem(report,'red-echo','healed')})
       checkpoint++
     }
-    if(game.phase==='shop')shop()
+    if(game.phase==='shop' && game.mode==='endless' && game.wave===route.stopWave)act('retire',{},()=>E.retireEndless(game))
+    else if(game.phase==='shop')shop()
   }
-  assert.ok(['won','lost'].includes(game.phase),'Route must play until an actual win or loss')
+  assert.ok(['won','lost','retired'].includes(game.phase),'Route must play until an actual win or loss')
   log.result={phase:game.phase,wave:game.wave,wavesCleared:game.stats.wavesCleared,gate:game.baseHp,kills:game.stats.kills,gold:game.gold,crystals:game.crystals,
     life:game.baseHp,maxLife:game.maxBaseHp,lifeFailed:!!game.lifeFailed,buildPassives:clone(game.buildPassives),
     heartEngineDamage:log.waves.reduce((sum,wave)=>sum+wave.heartEngineDamage,0),redEchoHealing:log.waves.reduce((sum,wave)=>sum+wave.redEchoHealing,0),wavesRecorded:checkpoint}
@@ -198,7 +199,7 @@ export function runBuildStrategy(route,{fixtures=true}={}) {
 }
 
 export function replayBuild(log,{onAction,onTick}={}) {
-  const game=E.createGame({seed:log.seed,doctrine:log.doctrine,difficulty:log.difficulty})
+  const game=E.createGame({mode:log.mode,seed:log.seed,doctrine:log.doctrine,difficulty:log.difficulty})
   for(const entry of log.actions) {
     const before=onAction?E.snapshotGame(game):null
     assert.equal(game.wave,entry.wave,'Replay wave at action '+entry.n)
@@ -223,6 +224,7 @@ export function replayBuild(log,{onAction,onTick}={}) {
     else if(entry.type==='sell')result=E.sellJoker(game,p.id)
     else if(entry.type==='reroll'){assert.deepEqual(game.shop,p.offersBefore);result=E.rerollShop(game)}
     else if(entry.type==='research')result=E.trainOrder(game,p.key)
+    else if(entry.type==='retire')result=E.retireEndless(game)
     else if(entry.type==='next-wave')result=E.nextWave(game)
     else if(entry.type==='tick'){for(let i=0;i<p.count;i++){E.tick(game,p.dt);onTick?.(game)}result=true}
     else throw Error('Unknown action '+entry.type)
@@ -247,7 +249,7 @@ export async function writeBuildVerification() {
       assert.equal(tick.type,'tick')
       tick.params.count=fixture.tickOffset.ticks;tick.after=budget(fixture.snapshot);actions.push(tick)
     }
-    const fixtureDocument={version:1,route:route.id,label:fixture.label,seed:route.seed,doctrine:route.doctrine,difficulty:route.difficulty,actions,snapshot:fixture.snapshot}
+    const fixtureDocument={version:1,route:route.id,label:fixture.label,seed:route.seed,mode:route.mode,doctrine:route.doctrine,difficulty:route.difficulty,actions,snapshot:fixture.snapshot}
     replayBuild({...route,actions,finalSnapshot:fixture.snapshot})
     await writeFile(join(fixtureDirectory,filename),JSON.stringify(fixtureDocument,null,2)+'\n')
     fixture.path='output/build-fixtures/'+filename;delete fixture.snapshot

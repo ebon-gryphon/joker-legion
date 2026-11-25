@@ -1,5 +1,7 @@
 <script setup>
-import { computed } from 'vue'
+import {behaviorLabels} from './enemyBehavior.js'
+import {HOSTILE} from './tactics.js'
+import { computed,ref,watch } from 'vue'
 import KeyMark from './KeyMark.vue'
 import EconomySummary from './EconomySummary.vue'
 import LifeReport from './LifeReport.vue'
@@ -10,6 +12,10 @@ import { FORMATION_BY_ID } from './tactics.js'
 import { itemEventGroups, actualEffectText, gateSourceRows, runOutcomeText } from './reportTelemetry.js'
 import { deriveReportHighlights } from './presentationFacts.js'
 const props=defineProps({ expanded:Boolean, combat:{type:Object,default:null}, report:{type:Array,default:()=>[]}, uses:{type:Object,default:()=>({})}, tactics:{type:Object,default:()=>({})}, formation:{type:String,default:''}, liveEvents:{type:Array,default:()=>[]}, finalSettlement:{type:String,default:''} })
+const eventLimit=ref(24)
+const eventsOpen=ref(false)
+watch(()=>props.combat?.waveId,()=>{eventLimit.value=24})
+const recentEnemyEvents=computed(()=>eventsOpen.value ? (props.combat?.enemyEvents || []).slice(-eventLimit.value).reverse() : [])
 const people=computed(()=>props.combat?.units.filter(row=>row.participated || row.damage || row.healed || row.taken || row.kills) || [])
 const rounded=n=>Math.round(n || 0)
 const regiment=type=>REGIMENTS[type]?.name || type
@@ -53,6 +59,7 @@ const gateView=computed(()=> {
       </details>
       <details v-if="gateView" class="report-gate-sources"><summary class="key-disclosure">旧制损失来源</summary><p v-if="gateSources===null" class="report-caveat">这份旧记录没有保存来源分类。</p><p v-else-if="!gateSources.length">旧制没有已记录的损失。</p><p v-for="source in gateSources || []" :key="source.id">{{ source.label }} <b>{{ rounded(source.amount) }}</b></p><small>仅回看旧制事实，不再扣除或恢复当前红心生命。</small></details>
       <details v-if="combat.passiveEvents?.length" class="report-passive-events"><summary class="key-disclosure">构筑被动实际触发 · {{ combat.passiveEvents.length }} 条</summary><ol><li v-for="(event,index) in combat.passiveEvents" :key="event.eventId || index" :data-passive-event="event.id"><strong>{{ Number(event.at || 0).toFixed(1) }} 秒 · {{ BUILD_PASSIVE_BY_ID[event.id]?.name || event.id }} · {{ event.triggered?(event.effective?'已生效':'触发但无收益'):'未触发' }}</strong><p>{{ event.reason }}</p><small>{{ actualEffectText(event.effects) }}</small></li></ol><small>读取原触发记录；最终分与战令的合计结果不重复相加。</small></details>
+      <details v-if="combat.enemyEvents?.length" class="enemy-event-report" @toggle="eventsOpen=$event.currentTarget.open"><summary class="key-disclosure">敌军行为 · {{ combat.enemyEvents.length }} 条</summary><p v-for="(e,i) in recentEnemyEvents" :key="i">{{ e.at.toFixed(1) }}秒 · {{ HOSTILE[e.type]?.name }} {{ e.actor }} · {{ behaviorLabels[e.kind] }} {{ e.name || e.target || '' }} {{ e.children?.join('、') }} {{ e.amount==null?'':Number(e.amount.toFixed(1)) }}<template v-if="e.kind==='strike'"> · 护盾吸收 {{ Number(e.absorbed.toFixed(1)) }}{{ e.killed?' · 击倒':'' }}</template></p><button v-if="eventsOpen && eventLimit<combat.enemyEvents.length" class="key-link" @click="eventLimit+=48">查看更早的记录</button></details>
       <table class="personal-report">
         <caption>个人贡献 · 伤害与承伤按生命损失计，治疗不计溢出</caption>
         <thead><tr><th scope="col">士兵</th><th scope="col">伤害</th><th scope="col">治疗</th><th scope="col">承伤</th><th scope="col">击杀</th></tr></thead>

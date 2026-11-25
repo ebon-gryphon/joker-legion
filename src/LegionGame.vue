@@ -1,4 +1,7 @@
 <script setup>
+import {waveInfo as getWaveInfo} from './endless.js'
+import {spawnPosition} from './waveSchedule.js'
+import {quarry} from './enemyBehavior.js'
 import KeyMark from './KeyMark.vue'
 import { provide, ref, computed, onMounted, onBeforeUnmount, watch, nextTick, toRaw } from 'vue'
 import * as rules from './engine.js'
@@ -144,7 +147,7 @@ function resetPresentation({fresh=false}={}) {
   presentationSuppressedUnits=[]
   presentationSuppressedEffects=[]
   presentationSounds.clear()
-  const boundary=game.value.logs.findIndex(row=>row.text===waves[game.value.wave-1]?.name+'即将来袭 · 可整编驻军或继续征兵')
+  const boundary=game.value.logs.findIndex(row=>row.text===getWaveInfo(game.value)?.name+'即将来袭 · 可整编驻军或继续征兵')
   const recent=boundary>=0?game.value.logs.slice(0,boundary):game.value.logs
   const past=(game.value.combatLedger?.orders || []).some(order=>(order.recruitment?.grade || 0)>4) || recent.some(row=>/融合为(神话|棱彩)/.test(row.text))
   presentationScene.prime(sceneWave(),past)
@@ -197,7 +200,7 @@ const trickBlock = computed(() => {
     const kept = g.hand.find(card => card.id === g.keptCardId)
     return kept ? '袖中 ' + kept.suit + kept.rank + ' · 下波起手取回' : '本波已用'
   }
-  if (id === 'sleeve') return g.phase === 'shop' ? '' : g.wave === waves.length ? '终幕无下波留牌' : '战后商店可藏一张手牌'
+  if (id === 'sleeve') return g.phase === 'shop' ? '' : g.mode!=='endless' && g.wave === waves.length ? '终幕无下波留牌' : '战后商店可藏一张手牌'
   if (id === 'ghost' || id === 'voice') {
     if (!rules.inCamp(g)) return '战前可用'
     if (!ordersOpen.value) return '出牌次数已用完'
@@ -279,6 +282,7 @@ function enterPhase() {
 const intro = ref(true), help = ref(false), confirmRestart = ref(false), inspectedJoker = ref(null)
 const promotionPending = ref(null)
 const quickPromotionWarning = computed(()=>promotionPending.value && mergeWarning(game.value,promotionPending.value.leaderId,promotionPending.value.donorId,'promote'))
+const pickedMode=ref('standard')
 const pickedDifficulty = ref('standard')
 const pickedSeed = ref('')
 const pickedDoctrine = ref(doctrines[0].id), manualPaused = ref(false), hidden = ref(document.hidden)
@@ -296,19 +300,25 @@ let frame, renderer, lastTime = 0, toastTimer, saveClock = 0, lastFocus
 const audio = createAudio()
 provide('legionAudio',{audio,sound,toggleSound,reducedMotion,musicActive,toggleMusic})
 const dealDay = ref(dailySeed()), requestedSeed = ref(null), dailyRecords = ref({})
-const lifeDailyKey=(seed,doctrine,difficulty)=>{const key=dailyRecordKey(seed,doctrine,difficulty);return key?key+'/life-v1':null}
-const selectedDailyBest = computed(() => dailyRecords.value[lifeDailyKey(dealDay.value,pickedDoctrine.value,pickedDifficulty.value)] || dailyRecords.value[dailyRecordKey(dealDay.value,pickedDoctrine.value,pickedDifficulty.value)])
-const runRecordKey = computed(() => lifeDailyKey(game.value.seed,game.value.doctrine,game.value.difficulty))
-const runBest = computed(() => dailyRecords.value[runRecordKey.value] || dailyRecords.value[dailyRecordKey(game.value.seed,game.value.doctrine,game.value.difficulty)])
+const lifeDailyKey=(seed,doctrine,difficulty,mode)=>{const key=dailyRecordKey(seed,doctrine,difficulty,mode);return key?key+'/life-v1':null}
+const selectedDailyBest = computed(() => dailyRecords.value[lifeDailyKey(dealDay.value,pickedDoctrine.value,pickedDifficulty.value,pickedMode.value)] || dailyRecords.value[dailyRecordKey(dealDay.value,pickedDoctrine.value,pickedDifficulty.value,pickedMode.value)])
+const runRecordKey = computed(() => lifeDailyKey(game.value.seed,game.value.doctrine,game.value.difficulty,game.value.mode))
+const runBest = computed(() => dailyRecords.value[runRecordKey.value] || dailyRecords.value[dailyRecordKey(game.value.seed,game.value.doctrine,game.value.difficulty,game.value.mode)])
 try {
   const entries = JSON.parse(localStorage.getItem(storageKey + '.daily') || '{}')
-  dailyRecords.value = Object.fromEntries(Object.entries(entries).filter(([,v]) => validDailyRecord(v)))
+  dailyRecords.value = Object.fromEntries(Object.entries(entries).filter(([key,v]) => validDailyRecord(v,key.split('/').includes('endless')?'endless':'standard')))
 } catch { /* A damaged scorecard does not affect the expedition save. */ }
 function recordDaily() {
-  if (!runRecordKey.value) return
+
   const g = game.value
-  const score = { waves:g.stats.wavesCleared, gate:Math.ceil(g.baseHp), kills:g.stats.kills,lifeVersion:g.lifeVersion }
-  if (!betterDailyRun(score,dailyRecords.value[runRecordKey.value])) return
+  const score = { mode:g.mode, reached:g.wave, waves:g.stats.wavesCleared, gate:Math.ceil(g.baseHp), kills:g.stats.kills,lifeVersion:g.lifeVersion }
+  const bestKey=['best',g.doctrine,g.difficulty,g.mode].join('/')
+  const previous=dailyRecords.value[bestKey]
+  if(betterDailyRun(score,previous)){
+    dailyRecords.value[bestKey]=score
+    try {localStorage.setItem(storageKey+'.daily',JSON.stringify(dailyRecords.value))} catch {storageAvailable.value=false}
+  }
+  if (!runRecordKey.value || !betterDailyRun(score,dailyRecords.value[runRecordKey.value])) return
   dailyRecords.value[runRecordKey.value] = score
   try { localStorage.setItem(storageKey + '.daily',JSON.stringify(dailyRecords.value)) } catch { storageAvailable.value=false }
 }
@@ -320,7 +330,7 @@ try {
 } catch { storageAvailable.value = false }
 audio.setEnabled(sound.value)
 const inPlay = computed(() => ['ready', 'battle'].includes(game.value.phase))
-const hasModal = computed(() => intro.value || pokerPanel.value || briefing.value || codex.value || help.value || confirmRestart.value || !!promotionPending.value || !!inspectedJoker.value || ['won', 'lost'].includes(game.value.phase))
+const hasModal = computed(() => intro.value || pokerPanel.value || briefing.value || codex.value || help.value || confirmRestart.value || !!promotionPending.value || !!inspectedJoker.value || ['won', 'lost','retired'].includes(game.value.phase))
 const paused = computed(() => manualPaused.value || (desk.value !== 'field' && desk.value !== 'watch') || trickArmed.value || hidden.value || hasModal.value || game.value.phase !== 'battle')
 const musicScene = computed(() => {
   if (!musicActive.value || hidden.value) return null
@@ -333,7 +343,7 @@ const quietMusic = computed(() => Boolean(briefing.value || pokerPanel.value || 
   (musicScene.value === 'battle' && paused.value)))
 watch([musicScene, quietMusic], ([scene, quiet]) => audio.setScore(scene, quiet), { immediate:true, flush:'sync' })
 const chosenDoctrine = computed(() => doctrines.find(d => d.id === game.value.doctrine) || doctrines.find(d => d.id === game.value.doctrine?.id) || doctrines[0])
-const waveInfo = computed(() => waves[game.value.wave - 1] || {})
+const waveInfo = computed(() => getWaveInfo(game.value) || {})
 const secondsLeft = computed(() => Math.max(0, Math.ceil(waveInfo.value.duration - game.value.waveTime - 1e-8)))
 const timeoutMessage = computed(() => game.value.waveTimeout ? rules.describeWaveTimeout(game.value.waveTimeout) : '')
 const feintHint = computed(() => {
@@ -347,9 +357,29 @@ const feintHint = computed(() => {
 function chooseFlag(type) {
   if (rules.setFeintFlag(game.value, type)) { audio.play('select'); save() }
 }
-const scoutSchedule = computed(() => game.value.phase === 'shop' ? rules.waveSchedule(game.value.seed, game.value.wave + 1, game.value.difficulty) : game.value.schedule)
+const scoutSchedule = computed(() => game.value.phase === 'shop' ? rules.waveSchedule(game.value.seed, game.value.wave + 1, game.value.difficulty,game.value.mode) : game.value.schedule)
+const hostileNotice=computed(()=>{
+  const g=game.value
+  if(g.phase!=='battle')return ''
+  const events=g.combatLedger?.enemyEvents || []
+  for(let i=events.length-1;i>=0 && events[i].at>=g.waveTime-1.4;i--){
+    const e=events[i]
+    if(e.kind==='bonus' && e.amount>0)return '猎巫刺客 · 对'+(e.name || e.target)+'额外造成 '+Number(e.amount.toFixed(1))+' 点伤害'
+    if(e.kind==='split')return '分裂兽倒下 · 幼兽入场 ×'+e.amount
+    if(e.kind==='heal')return '祭司治疗 · '+(e.name || e.target)+' +'+Number(e.amount.toFixed(1))
+    if(e.kind==='no-target')return '祭司收势 · 无伤员，回复 0'
+    if(e.kind==='interrupt')return '祭司倒下 · 治疗被打断'
+  }
+  return ''
+})
+const scoutQuarry=computed(()=>{
+  const index=scoutSchedule.value.findIndex(slot=>slot.type==='hunter')
+  if(index<0)return ''
+  const next=game.value.wave+Number(game.value.phase==='shop')
+  return quarry(game.value.allies,spawnPosition(scoutSchedule.value,index,next))?.name
+})
 const scout = computed(() => scoutWave(scoutSchedule.value))
-const scoutWaveInfo = computed(() => waves[game.value.wave - (game.value.phase === 'shop' ? 0 : 1)])
+const scoutWaveInfo = computed(() => getWaveInfo(game.value,game.value.wave+(game.value.phase==='shop'?1:0)) || getWaveInfo(game.value))
 const formation = computed(() => FORMATION_BY_ID[game.value.formation])
 const chime = computed(() => game.value.phase === 'battle' ? nextChime(game.value) : null)
 const fieldDrag=ref(null)
@@ -458,7 +488,7 @@ const liveAllies = computed(() => game.value.allies.filter(u => u.hp > 0 && !u.d
 const liveEnemies = computed(() => game.value.enemies.filter(u => u.hp > 0 && !u.dead))
 const recentLogs = computed(() => game.value.logs.slice(0, 5))
 const veteran = computed(() => {
-  if (!['won', 'lost'].includes(game.value.phase)) return null
+  if (!['won', 'lost','retired'].includes(game.value.phase)) return null
   return rules.vanguard(game.value).find(unit => unit.fusion || unit.fusionJobs?.length > 1)
 })
 const report = computed(() => Object.entries(game.value.waveReport).map(([type, entry]) => ({
@@ -543,7 +573,7 @@ const deployLabel = computed(() => {
   if (!preview.value.actualUnits) return '打出' + preview.value.name + ' · 转训／候补'
   return '打出' + preview.value.name + ' · ' + preview.value.actualUnits + '人'
 })
-const phaseLabel = computed(() => ({ ready:'战前准备', shop:'战后商店', won:'远征胜利', lost:'远征失守' }[game.value.phase] || (paused.value?'战术暂停':'交战中')))
+const phaseLabel = computed(() => ({ ready:'战前准备', shop:'战后商店', won:'远征胜利', retired:'无尽归营', lost:'远征失守' }[game.value.phase] || (paused.value?'战术暂停':'交战中')))
 const regiments = computed(()=>Object.entries(REGIMENTS).map(([type,role])=>{
   const members=liveAllies.value.filter(unit=>unit.type===type)
   const hp=members.reduce((n,u)=>n+u.hp,0), max=members.reduce((n,u)=>n+u.maxHp,0)
@@ -571,11 +601,15 @@ function showRunSelection() {
   if (!intro.value) {
     cancelTrick(); save(); dealDay.value = dailySeed()
     resetPresentation()
-    savedGame.value = ['won', 'lost'].includes(game.value.phase) ? null : game.value
+    savedGame.value = ['won', 'lost','retired'].includes(game.value.phase) ? null : game.value
     pickedDoctrine.value = game.value.doctrine
     pickedDifficulty.value = game.value.difficulty
     intro.value = true
   }
+}
+function pickMode(mode){
+  pickedMode.value=mode
+  try { savedGame.value=loadExpedition(localStorage,mode) } catch {savedGame.value=null}
 }
 function requestStart(daily = false) {
   dealDay.value = dailySeed()
@@ -583,9 +617,9 @@ function requestStart(daily = false) {
   if (savedGame.value) confirmRestart.value = true
   else startRun()
 }
-function startRun(seed = requestedSeed.value ?? newSeed(), doctrine = pickedDoctrine.value, difficulty = pickedDifficulty.value) {
+function startRun(seed = requestedSeed.value ?? newSeed(), doctrine = pickedDoctrine.value, difficulty = pickedDifficulty.value, mode=pickedMode.value) {
   requestedSeed.value = null
-  game.value = createGame({ seed, doctrine, difficulty })
+  game.value = createGame({ seed, doctrine, difficulty,mode })
   resetPresentation({fresh:true})
   initializeCombatStats(game.value,{runId:globalThis.crypto?.randomUUID?.() || 'run-'+Date.now()+'-'+newSeed()})
   initOnboarding(game.value,{enabled:true})
@@ -749,14 +783,14 @@ watch(() => game.value.phase, (phase, previous) => {
   enterPhase()
   clearTimeout(receiptTimer);rarityReceipt.value=null
   clearTimeout(toastTimer); toast.value = null
-  if (phase === 'won' || phase === 'lost') recordDaily()
+  if (['won','lost','retired'].includes(phase)){recordDaily();save()}
   if (phase === 'shop' || phase === 'won') audio.play('win')
   if (phase === 'lost') audio.play('lose')
   if (previous === 'battle') save()
 })
 watch(paused, value => { if (value) audio.quietBattle() })
 watch(() => chime.value?.id, id => { if (id && !hidden.value && !hasModal.value) audio.play('bell') })
-const modalIdentity = computed(() => pokerPanel.value || (briefing.value ? 'brief' : codex.value ? 'codex' : help.value ? 'help' : promotionPending.value ? 'promotion' : confirmRestart.value ? 'restart' : inspectedJoker.value ? `joker-${inspectedJoker.value.id}` : intro.value ? 'intro' : ['won', 'lost'].includes(game.value.phase) ? game.value.phase : null))
+const modalIdentity = computed(() => pokerPanel.value || (briefing.value ? 'brief' : codex.value ? 'codex' : help.value ? 'help' : promotionPending.value ? 'promotion' : confirmRestart.value ? 'restart' : inspectedJoker.value ? `joker-${inspectedJoker.value.id}` : intro.value ? 'intro' : ['won', 'lost','retired'].includes(game.value.phase) ? game.value.phase : null))
 watch(modalIdentity, async (open, previous) => {
   if (open) {
     const menuTrigger = open === 'intro' && previous === 'performer' ? introEl.value?.querySelector('.build-link') : null
@@ -764,7 +798,7 @@ watch(modalIdentity, async (open, previous) => {
     if (!returnToMenu) lastFocus = document.activeElement
     await nextTick()
     const dialog = open === 'intro' ? introEl.value : modalEl.value
-    const resultOpen=['won','lost'].includes(open)
+    const resultOpen=['won','lost','retired'].includes(open)
     const target = returnToMenu ? menuTrigger || lastFocus : resultOpen ? dialog : dialog?.querySelector('button:not([disabled])')
     target?.focus(resultOpen?{preventScroll:true}:undefined)
     if(resultOpen && dialog)dialog.scrollTop=0
@@ -842,7 +876,7 @@ onBeforeUnmount(() => {
         <div class="field-shade" aria-hidden="true"></div>
         <DraggedSoldier v-if="fieldDrag?.moving && draggedFace" :unit="draggedFace" :drag="fieldDrag" :hint="dragHint"/>
         <header class="field-head">
-          <div class="field-title"><span class="wave-index">第 <b>{{ game.wave }}</b> / {{ waves.length }} 波</span><h1>{{ waveInfo.name }}</h1><span class="field-phase" :class="{live:game.phase==='battle' && !paused}">{{ phaseLabel }}</span></div>
+          <div class="field-title"><span class="wave-index">第 <b>{{ game.wave }}</b> / {{ game.mode==='endless'?'∞':waves.length }} 波</span><h1>{{ waveInfo.name }}</h1><span class="field-phase" :class="{live:game.phase==='battle' && !paused}">{{ phaseLabel }}</span></div>
           <div class="hud-relics" role="group" aria-label="随军搭档" v-if="ownJokers.length">
             <button v-for="joker in ownJokers" :key="joker.id" type="button" class="key-chit" :title="joker.name+(joker.quantity>1?' ×'+joker.quantity:'')" :aria-label="'查看'+joker.name+(joker.quantity>1?' ×'+joker.quantity:'')" @click="inspectedJoker=joker">
               <RelicArt :item="joker" :frame="relicFrame(joker)"/><b v-if="joker.quantity>1" class="relic-count">{{ joker.quantity }}</b>
@@ -914,14 +948,18 @@ onBeforeUnmount(() => {
           </button>
         </nav>
         <div class="scene-action">
+          <small v-if="game.phase==='ready' && desk==='field' && scoutQuarry" class="feint-call">刺客预计追击 · {{ scoutQuarry }}</small>
+          <small v-if="hostileNotice && desk==='field'" class="feint-call" data-hostile-event>{{ hostileNotice }}</small>
+          <small v-if="game.phase==='battle' && desk==='field' && game.enemies.some(e=>e.quarryId)" class="feint-call">刺客追击 · {{ game.allies.find(a=>a.id===game.enemies.find(e=>e.quarryId)?.quarryId)?.name || '重新寻敌' }}</small>
           <small v-if="game.phase==='battle' && feintHint && desk==='field'" class="feint-call">{{ feintHint }}</small>
           <button v-if="game.phase==='ready' && !liveAllies.length && desk!=='orders'" class="field-advance key-command" @click="setDesk('orders',$event.currentTarget)"><KeyMark name="cards"/>打开手牌 ↗</button>
           <button v-else-if="game.phase==='ready'" class="field-advance key-command" :disabled="!liveAllies.length" @click="sendArmy"><KeyMark name="allies"/>全军出战 ↗</button>
-          <button v-else-if="game.phase==='shop' && desk==='market' && game.wave<waves.length" class="field-advance key-command" :disabled="!game.rewardChosen" @click="advance"><KeyMark name="allies"/>迎战第 {{ game.wave+1 }} 波 ↗</button>
+          <button v-else-if="game.phase==='shop' && desk==='market' && (game.mode==='endless'||game.wave<waves.length)" class="field-advance key-command" :disabled="!game.rewardChosen" @click="advance"><KeyMark name="allies"/>迎战第 {{ game.wave+1 }} 波 ↗</button>
         </div>
         <section v-if="desk!=='field'" ref="scenePanel" class="scene-panel" role="region" tabindex="-1" :aria-label="deskName">
           <button v-if="game.phase!=='shop' || desk!==postBattleDesk" class="scene-close key-close" aria-label="收起面板" title="返回（Esc）" @click="closeDesk"><KeyMark name="close"/></button>
-        <div ref="deskBody" class="desk-body" :key="game.wave" :data-section="desk">
+        <button v-if="game.phase==='shop' && game.mode==='endless'" class="retire-run key-link" @click="rules.retireEndless(game)">结束无尽挑战并结算</button>
+        <div ref="deskBody"  class="desk-body" :key="game.wave" :data-section="desk">
           <TutorialCoach v-if="onboarding && ['orders','brief','supply','market'].includes(desk)" :game="game" @skip-step="skipTutorial('step')" @skip-all="skipTutorial('all')" @open="openTutorialTarget"/>
           <section v-if="desk==='victory'" class="wave-victory" role="status">
             <span class="victory-wave">第 {{ game.wave }} 波 · {{ waveInfo.name }}</span>
@@ -985,7 +1023,7 @@ onBeforeUnmount(() => {
           <div class="hand-footnote"><span v-if="wagonHint" class="desk-wagon"><KeyMark name="coin"/>{{ wagonHint }}</span><span v-else>出牌次数在下一波补满。换牌与升星另算。</span><span>空格 暂停<span class="dot-separator">·</span>Enter 出牌<span class="dot-separator">·</span>H 提示</span></div>
         </section>
           <div v-else-if="desk==='forge'" class="forge-modal embedded-panel"><div v-if="fusionReceipt" class="fusion-reveal"><HighTierReveal :receipt="fusionReceipt" :actual-unit="fusionReceipt.actualUnit" kind="fusion" :controls="false" :enabled="presentationEnabled" :speed="presentationSpeed" :reduced-motion="reducedMotion"/><div class="fusion-reveal-controls"><button class="key-tab" @click="presentationSpeed=presentationSpeed===1?2:1">{{ presentationSpeed }}×</button><button class="key-link" @click="skipPresentation">收起亮相 / 跳过欢呼</button></div></div><CampRoster v-if="!fusionReceipt" :game="game" :pairs="pairs" :apply-merge="forge" @champion="chooseChampion" @lock="lockSoldier" @field-reserve="id=>{if(rules.fieldReserve(game,id)){audio.play('deploy');save()}}" @commission="appoint" @close="setDesk('orders')"/></div>
-          <div v-else-if="desk==='brief'" class="brief-modal embedded-panel"><BattlePlan embedded :wave="scoutWaveInfo" :intel="scout" :schedule="scoutSchedule" :formation="game.formation" :in-shop="game.phase==='shop'" @choose="changeFormation"/></div>
+          <div v-else-if="desk==='brief'" class="brief-modal embedded-panel"><BattlePlan :quarry-name="scoutQuarry" embedded :wave="scoutWaveInfo" :intel="scout" :schedule="scoutSchedule" :formation="game.formation" :in-shop="game.phase==='shop'" @choose="changeFormation"/></div>
           <section v-else-if="desk==='press'" class="inline-press"><CardPress :game="game" :apply="applyPrint"/></section>
           <section v-else-if="desk==='supply'" class="supply-section">
             <div class="section-title"><span>{{ game.rewardChosen ? '本波补给已领取' : '先选择一项战后补给' }}</span><small>{{ game.rewards.length }} 选一 · 免费</small></div><p class="reward-flow-hint">{{ game.rewardChosen?'补给已兑现，可以购物或继续远征。':'先免费领取一项，再进入商店。' }}</p>
@@ -1003,7 +1041,7 @@ onBeforeUnmount(() => {
           <section v-else-if="desk==='report'">
             <div class="battle-history-tools">
               <label>战报记录<select class="key-select" aria-label="选择本地战报" v-model="historySelection"><option value="">当前波次</option>
-                <option v-for="record in combatHistory.slice().reverse()" :key="record.waveId" :value="record.waveId">第 {{ record.wave }} 波 · {{ record.seed }} · {{ record.result==='lost'?'失守':'守住' }}{{ record.partial?' · 部分记录':'' }}</option>
+                <option v-for="record in combatHistory.slice().reverse()" :key="record.waveId" :value="record.waveId">{{ record.mode==='endless'?'无尽':'标准远征' }} · 第 {{ record.wave }} 波 · {{ record.seed }} · {{ record.result==='lost'?'失守':'守住' }}{{ record.partial?' · 部分记录':'' }}</option>
               </select></label>
               <button class="key-ink" @click="downloadCombatHistory" :disabled="!combatHistory.length && !game.lastCombatReport">导出本地战报 JSON</button>
             </div>
@@ -1049,7 +1087,7 @@ onBeforeUnmount(() => {
 
     <div v-if="intro" class="modal-scrim deal-scrim" :inert="modalIdentity!=='intro'" @keydown="trapFocus">
       <section ref="introEl" class="joker-entry" role="dialog" aria-modal="true" aria-labelledby="intro-title">
-        <JokerTable :doctrine="pickedDoctrine" :difficulty="pickedDifficulty" :seed="pickedSeed" :saved="savedGame" :daily-best="selectedDailyBest"
+        <JokerTable :mode="pickedMode" @mode="pickMode" :best="dailyRecords[['best',pickedDoctrine,pickedDifficulty,pickedMode].join('/')]" :doctrine="pickedDoctrine" :difficulty="pickedDifficulty" :seed="pickedSeed" :saved="savedGame" :daily-best="selectedDailyBest"
           @choose="id => { pickedDoctrine=id; audio.play('select') }" @difficulty="pickedDifficulty=$event" @seed="pickedSeed=$event"
           @guide="openGuide" @resume="resumeRun" @start="requestStart(false)" @daily="requestStart(true)"/>
       </section>
@@ -1061,7 +1099,7 @@ onBeforeUnmount(() => {
       <section v-else-if="pokerPanel==='book'" ref="modalEl" class="poker-modal" role="dialog" aria-modal="true" aria-labelledby="handbook-title">
         <HandBook :levels="game.handLevels" :discovered="game.discoveredHands" @close="pokerPanel = null"/>
       </section>
-      <section v-else-if="briefing" ref="modalEl" class="brief-modal" role="dialog" aria-modal="true" aria-labelledby="brief-title"><BattlePlan :guide-only="briefing === 'guide'" :wave="scoutWaveInfo" :intel="scout" :schedule="scoutSchedule" :formation="game.formation" :in-shop="game.phase === 'shop'" @choose="changeFormation" @close="briefing = false"/></section>
+      <section v-else-if="briefing" ref="modalEl" class="brief-modal" role="dialog" aria-modal="true" aria-labelledby="brief-title"><BattlePlan :quarry-name="scoutQuarry" :guide-only="briefing === 'guide'" :wave="scoutWaveInfo" :intel="scout" :schedule="scoutSchedule" :formation="game.formation" :in-shop="game.phase === 'shop'" @choose="changeFormation" @close="briefing = false"/></section>
       <section v-else-if="codex" ref="modalEl" class="codex-modal" role="dialog" aria-modal="true" aria-labelledby="codex-title">
         <ArmyCodex v-model:suit="codexSuit" v-model:member="codexMember" @close="codex=false"/>
       </section>
@@ -1079,7 +1117,7 @@ onBeforeUnmount(() => {
 
 
 
-      <section v-else ref="modalEl" class="modal result-modal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="result-title"><div class="result-emblem">{{ game.phase === 'won' ? '♛' : '♠' }}</div><p class="eyebrow">{{ game.phase === 'won' ? 'THE FINAL CURTAIN' : 'EVERY END IS A NEW HAND' }}</p><h2 id="result-title">{{ game.phase === 'won' ? '今夜，命运听你的。' : '这一幕，暂且落幕。' }}</h2><p>{{ timeoutMessage || (game.phase === 'won' ? (game.campaignLength===6 ? '旧版六波远征已完成，你的胜利记录已保留。' : '十二波敌军尽数退场，无冕之王与缀命皇后已被击败。') : '本次远征已经结束。带着这局的经验，重新组合你的下一手。') }}</p><div class="result-resources" aria-label="本局最终资源"><strong data-result-life>♥ 生命 {{ life.current }} / {{ life.max }}</strong><span data-result-gold>金币 {{ game.gold }}</span><span data-result-crystals>蓝水晶 {{ game.crystals ?? 0 }}</span></div><BuildPassives class="result-builds" :state="game.buildPassives"/><WaveReport :combat="currentCombat" :live-events="presentationEvents" :report="report" :uses="game.fusionUses" :tactics="game.tacticsReport" :formation="formation.name"/><p v-if="runBest" class="daily-result">每日同局 · {{ game.seed.slice(6) }}<br/>本机最佳守住 {{ runBest.waves }} 波 · {{ runBest.lifeVersion===1?'生命':'旧制防线值' }} {{ runBest.gate }} · 击退 {{ runBest.kills }} 名</p><div class="result-stats"><div><strong>{{ game.stats.wavesCleared }}<small>/ {{ game.campaignLength || waves.length }}</small></strong><span>突破波次</span></div><div><strong>{{ game.stats.deploys }}</strong><span>出牌指令</span></div><div><strong>{{ game.stats?.kills || 0 }}</strong><span>击退敌军</span></div><div><strong>{{ game.stats?.bestHand || '—' }}</strong><span>最佳牌型</span></div></div><div v-if="game.promotions || game.fusions" class="result-training"><PixelSprite v-if="veteran" v-bind="getSpriteFrame(veteran)"/><div><strong v-if="veteran">幸存精英 · {{ veteran.fusionJobs?.length > 1 ? fusionProfessionNames(veteran).join(' · ') : FUSION_BY_ID[veteran.fusion]?.name }}</strong><small v-if="veteran">{{ veteran.suit }}{{ veteran.rank }} {{ displayName(veteran) }}</small><p>本局升星 {{ game.promotions }} 次 · 融合 {{ game.fusions }} 次</p></div></div><div class="result-jokers"><RelicArt v-for="joker in ownJokers" :key="joker.id" :item="joker" :frame="relicFrame(joker)" /></div><div class="modal-button-row"><button class="secondary-button key-ink" @click="startRun(game.seed, game.doctrine, game.difficulty)"><KeyMark name="cards"/>重试同一开局</button><button class="gold-button key-command" @click="intro = true; savedGame = null"><KeyMark name="trick"/>再开一局 <span>↗</span></button></div><small class="result-seed">{{ hero.name }} · {{ chosenDoctrine.name }} · {{ game.difficulty === 'veteran' ? '险境' : '标准' }} · 种子 {{ game.seed }}</small></section>
+      <section v-else ref="modalEl" class="modal result-modal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="result-title"><div class="result-emblem">{{ game.phase === 'won' ? '♛' : '♠' }}</div><p class="eyebrow">{{ game.phase === 'won' ? 'THE FINAL CURTAIN' : 'EVERY END IS A NEW HAND' }}</p><h2 id="result-title">{{ game.phase === 'won' ? '今夜，命运听你的。' : game.phase==='retired'?'军团凯旋归营。':'这一幕，暂且落幕。' }}</h2><p>{{ timeoutMessage || (game.phase === 'won' ? (game.campaignLength===6 ? '旧版六波远征已完成，你的胜利记录已保留。' : '十二波敌军尽数退场，无冕之王与缀命皇后已被击败。') : game.phase==='retired' ? '本波守住后，你带着军团和本局构筑主动归营。' : '本次远征已经结束。带着这局的经验，重新组合你的下一手。') }}</p><p v-if="game.mode==='endless'">无尽挑战 · 到达第 {{ game.wave }} 波 · 已守住 {{ game.stats.wavesCleared }} 波</p><div class="result-resources" aria-label="本局最终资源"><strong data-result-life>♥ 生命 {{ life.current }} / {{ life.max }}</strong><span data-result-gold>金币 {{ game.gold }}</span><span data-result-crystals>蓝水晶 {{ game.crystals ?? 0 }}</span></div><BuildPassives class="result-builds" :state="game.buildPassives"/><WaveReport :combat="currentCombat" :live-events="presentationEvents" :report="report" :uses="game.fusionUses" :tactics="game.tacticsReport" :formation="formation.name"/><p v-if="runBest" class="daily-result">每日同局 · {{ game.seed.slice(6) }}<br/>本机最佳守住 {{ runBest.waves }} 波 · {{ runBest.lifeVersion===1?'生命':'旧制防线值' }} {{ runBest.gate }} · 击退 {{ runBest.kills }} 名</p><div class="result-stats"><div><strong>{{ game.stats.wavesCleared }}<small>/ {{ game.mode==='endless'?'∞':game.campaignLength || waves.length }}</small></strong><span>突破波次</span></div><div><strong>{{ game.stats.deploys }}</strong><span>出牌指令</span></div><div><strong>{{ game.stats?.kills || 0 }}</strong><span>击退敌军</span></div><div><strong>{{ game.stats?.bestHand || '—' }}</strong><span>最佳牌型</span></div></div><div v-if="game.promotions || game.fusions" class="result-training"><PixelSprite v-if="veteran" v-bind="getSpriteFrame(veteran)"/><div><strong v-if="veteran">幸存精英 · {{ veteran.fusionJobs?.length > 1 ? fusionProfessionNames(veteran).join(' · ') : FUSION_BY_ID[veteran.fusion]?.name }}</strong><small v-if="veteran">{{ veteran.suit }}{{ veteran.rank }} {{ displayName(veteran) }}</small><p>本局升星 {{ game.promotions }} 次 · 融合 {{ game.fusions }} 次</p></div></div><div class="result-jokers"><RelicArt v-for="joker in ownJokers" :key="joker.id" :item="joker" :frame="relicFrame(joker)" /></div><div class="modal-button-row"><button class="secondary-button key-ink" @click="startRun(game.seed, game.doctrine, game.difficulty)"><KeyMark name="cards"/>重试同一开局</button><button class="gold-button key-command" @click="intro = true; savedGame = null"><KeyMark name="trick"/>再开一局 <span>↗</span></button></div><small class="result-seed">{{ hero.name }} · {{ chosenDoctrine.name }} · {{ game.difficulty === 'veteran' ? '险境' : '标准' }} · 种子 {{ game.seed }}</small></section>
     </div>
   </div>
 </template>

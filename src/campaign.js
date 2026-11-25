@@ -1,3 +1,4 @@
+import {waveInfo,finalWave} from './endless.js'
 import { DOCTRINES, PRINTS_PER_WAVE, HANDS_PER_WAVE, JOKER_BY_ID, WAVES, FIELD_LIMIT } from './campaignRules.js'
 import { DIFFICULTIES, SILENT_BOUNTY } from './tactics.js'
 import { ORDER_BOOK, REGIMENTS } from './orders.js'
@@ -19,12 +20,12 @@ import {emptyWaveBonuses,advanceRewardBonuses} from './rewardModifiers.js'
 import {LIFE_RULES,initialLifeMax,recordLifeEvent} from './playerLife.js'
 import {createBuildState,resetBuildWave} from './buildPassives.js'
 
-export function createGame({ seed = 'JOKER-LEGION', doctrine = 'iron', difficulty = 'standard' } = {}) {
+export function createGame({ seed = 'JOKER-LEGION', doctrine = 'iron', difficulty = 'standard', mode: expeditionMode = 'standard' } = {}) {
   const selected = DOCTRINES.find(item => item.id === doctrine) || DOCTRINES[0]
   const mode = Object.hasOwn(DIFFICULTIES, difficulty) ? difficulty : 'standard'
   const castle = initialLifeMax(mode)
   const game = {
-    lifeVersion:LIFE_RULES.version,lifeFailed:false,lifeEvents:[],lifeItemState:{redEchoUsed:false,flushCrownUsed:false},
+    mode:expeditionMode==='endless'?'endless':'standard', lifeVersion:LIFE_RULES.version,lifeFailed:false,lifeEvents:[],lifeItemState:{redEchoUsed:false,flushCrownUsed:false},
     buildPassives:createBuildState(1),legacyLifeHistory:null,
     economyVersion:ECONOMY_VERSION,crystals:0,crystalIncomeWave:0,lastSettlement:null,finalWaveCleared:false,
     rewardState:{wave:0,claimedId:null},waveBonuses:{next:emptyWaveBonuses(),active:emptyWaveBonuses()},printsBudget:PRINTS_PER_WAVE,
@@ -73,7 +74,7 @@ export function beginBattle(game) {
   }
   spawnEnemies(game)
   applyOpeningItems(game)
-  log(game, `${WAVES[game.wave - 1].name}全军入场 · 军团自动交战`, 'danger')
+  log(game, `${waveInfo(game).name} · ${game.schedule.some(slot=>slot.at>0)?'首批敌军入场':'全军入场'} · 军团自动交战`, 'danger')
   return true
 }
 
@@ -88,7 +89,7 @@ export function endWave(game) {
   game.stats.wavesCleared = game.wave
   recordLifeEvent(game,{kind:'end',source:'wave-clear',sourceId:'wave-'+game.wave})
   finishCombatStats(game,'cleared')
-  game.finalWaveCleared=game.wave===WAVES.length
+  game.finalWaveCleared=finalWave(game)
   if(game.finalWaveCleared){
     regroupArmy(game);game.phase='won';game.selected=[];game.bossTelegraph=null
     game.rewards=[];game.shop=[];game.soldShop=[];game.rewardChosen=false;game.rewardState={wave:game.wave,claimedId:null};game.lastSettlement=null
@@ -126,6 +127,14 @@ export function endWave(game) {
   log(game, `第 ${game.wave} 波守住了 · 金币 +${reward} · 蓝水晶 +${crystalTotal}${game.lastSettlement.crystals.bonus?'（含大波次额外 '+game.lastSettlement.crystals.bonus+'）':''} · 免费三选一`, 'good')
 }
 
+export function retireEndless(game) {
+  if(game.mode!=='endless' || game.phase!=='shop') return false
+  game.phase='retired'
+  game.bossTelegraph=null
+  game.lastCombatReport={...game.lastCombatReport,runOutcome:{status:'retired',wave:game.wave,clearedWaves:game.stats.wavesCleared,terminal:true,finalWave:game.wave}}
+  return true
+}
+
 export function regroupArmy(game) {
   game.allies = [...game.allies.filter(u => u.echoUntil == null).map(restedSoldier), ...game.casualties]
   game.casualties = []
@@ -135,7 +144,7 @@ export function regroupArmy(game) {
 }
 
 export function nextWave(game) {
-  if (game.phase !== 'shop' || !game.rewardChosen || game.wave >= WAVES.length) return false
+  if (game.phase !== 'shop' || !game.rewardChosen || finalWave(game)) return false
   advanceRewardBonuses(game)
   game.reserveUsed = false
   game.preparedScore = 0
@@ -200,7 +209,7 @@ export function nextWave(game) {
   game.printsLeft = game.printsBudget = PRINTS_PER_WAVE+game.waveBonuses.active.prints
   makeSchedule(game)
   initializeCombatStats(game)
-  log(game, `${WAVES[game.wave - 1].name}即将来袭 · 可整编驻军或继续征兵`, 'danger')
+  log(game, `${waveInfo(game).name}即将来袭 · 可整编驻军或继续征兵`, 'danger')
   if (kept) log(game,'夹层从袖底取回 ' + faceOf(kept),'good')
   return true
 }

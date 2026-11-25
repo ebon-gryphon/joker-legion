@@ -1,3 +1,5 @@
+import {quarry,recordEnemy,advanceRite} from './enemyBehavior.js'
+import {endlessScale} from './endless.js'
 import { CAMP_AREA } from './formation.js'
 import { distance, clamp, effect, owns, trigger, log } from './gameState.js'
 import { damageUnit, healUnit, nearest } from './combatHealth.js'
@@ -343,6 +345,20 @@ export function unitStep(game, unit, dt, onAction) {
   }
   if (professionJobs(unit).includes('assassin')) enemy = nearest(unit,enemies.filter(e=>e.hp>0 && isBackline(e.type))) || enemy
   if (professionJobs(unit).includes('sniper')) enemy = enemies.filter(e=>e.hp>0 && distance(unit,e)<=unit.range+5).sort((a,b)=>a.hp-b.hp)[0] || enemy
+  if(unit.type==='hunter') {
+    enemy=quarry(game.allies,unit)
+    if((enemy?.id || null)!==unit.quarryId){
+      unit.quarryId=enemy?.id || null
+      if(enemy)recordEnemy(game,'hunt',unit,{target:enemy.id,name:enemy.name})
+    }
+  }
+  if(unit.side==='ally' && ['mage','ranger'].includes(unit.type)){
+    enemy=nearest(unit,enemies.filter(e=>e.type==='banner' && e.hp>0 && distance(unit,e)<=unit.range+5)) || enemy
+  }
+  if(unit.type==='cantor'){
+    if(advanceRite(game,unit,dt))perform(game,unit,'heal',unit,onAction)
+    if(unit.chanting && unit.x>56)return
+  }
   let healingTarget
   if (unit.side === 'ally' && unit.type === 'healer') {
     const hurt = game.allies.filter(ally => ally.hp > 0 && ally.hp < ally.maxHp - 2 && distance(unit, ally) < unit.range).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0]
@@ -410,7 +426,7 @@ export function bossStep(game, dt, onAction) {
       const strength = boss.type === 'finalBoss' && boss.hp <= boss.maxHp / 2 ? 1.2 : 1
       for (const unit of targets) {
         const ward = mark.mode === 'pulse' && unit.shield > 0 ? .5 : 1
-        formationDamage(game, unit, skill.damage * strength * ward, true, 0, boss)
+        formationDamage(game, unit, skill.damage * endlessScale(game) * strength * ward, true, 0, boss)
         if (mark.mode === 'rupture' && unit.hp > 0) unit.cooldown += 1.2
       }
       effect(game, 'burst', mark.x, mark.y, mark.name, boss.color)

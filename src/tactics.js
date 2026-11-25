@@ -1,6 +1,11 @@
 import { isBoss } from './bossRules.js'
 
 export const HOSTILE = {
+  banner: {name:'护旗手',icon:'⚑',color:'#6ab6b3',hp:180,atk:14,range:150,speed:31,period:1.5,breach:1},
+  hunter: {name:'猎巫刺客',icon:'⚔',color:'#b28cd3',hp:102,atk:18,range:36,speed:62,period:1.15,breach:1},
+  splitter: {name:'分裂兽',icon:'◈',color:'#e29157',hp:155,atk:23,range:40,speed:38,period:1.45,breach:1},
+  brood: {name:'小分裂兽',icon:'◇',color:'#da995f',hp:54,atk:8,range:30,speed:48,period:1.45,breach:1},
+  cantor: {name:'汲魂祭司',icon:'☽',color:'#91d6ac',hp:155,atk:13,range:210,speed:30,period:1.8,breach:1},
   raider: { name: '流寇', icon: '†', color: '#e87876', hp: 96, atk: 19, range: 38, speed: 42, period: 1.2, breach: 1 },
   bat: { name: '夜翼', icon: '⌁', color: '#c08ad9', hp: 52, atk: 12, range: 33, speed: 64, period: 0.9, breach: 1 },
   archer: { name: '暗弓手', icon: '↟', color: '#d4948a', hp: 82, atk: 20, range: 195, speed: 33, period: 1.5, breach: 1 },
@@ -13,7 +18,7 @@ export const HOSTILE = {
 
 export const FORMATIONS = [
   { id: 'guard', name: '护卫阵', color: '#9bb9df', summary: '铁卫护住前列', rule: '铁卫承受的普通攻击直击伤害降低 20%。' },
-  { id: 'hunt', name: '猎手阵', color: '#e0bb85', summary: '远程集火后排', rule: '游侠和术士前移，优先射击射程内的鸣钟使，再瞄准暗弓手与猩红术士。普攻直击这些目标时伤害提高 30%。' },
+  { id: 'hunt', name: '猎手阵', color: '#e0bb85', summary: '远程集火后排', rule: '游侠和术士前移，优先射击射程内的护旗手、鸣钟使，再瞄准其他后排敌军。普攻直击这些目标时伤害提高 30%。' },
   { id: 'spread', name: '散兵阵', color: '#bba3e7', summary: '分散承受轰击', rule: '全军承受的溅射与首领轰击伤害降低 40%，牧师普通治疗量降低 20%。' },
 ]
 export const FORMATION_BY_ID = Object.fromEntries(FORMATIONS.map(item => [item.id, item]))
@@ -27,7 +32,7 @@ export const SILENT_BOUNTY = 3
 export const BELL_SUMMON=Object.freeze({type:'raider',x:1000})
 // Compatibility export for old callers: ringing now summons a real enemy.
 export function tollDamage() { return 0 }
-export function isBackline(type) { return ['bellkeeper', 'archer', 'warlock'].includes(type) }
+export function isBackline(type) { return ['bellkeeper', 'archer', 'warlock', 'banner', 'cantor'].includes(type) }
 
 export function nextChime(game) {
   let first = null

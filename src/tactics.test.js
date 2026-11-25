@@ -9,14 +9,14 @@ import { resetBuildWave } from './buildPassives.js'
 
 test('every enemy matches its field guide portrait and the king changes pose exactly at half health', () => {
   assert.deepEqual(Object.keys(ENEMY_CATALOG), Object.keys(HOSTILE))
-  assert.equal(new Set(Object.keys(HOSTILE).map(type => { const f=getSpriteFrame({type,side:'enemy'});return f.atlas+':'+f.frame })).size, Object.keys(HOSTILE).length)
+  assert.equal(new Set(Object.keys(HOSTILE).map(type => { const f=getSpriteFrame({type,side:'enemy'});return f.atlas+':'+f.frame })).size, Object.keys(HOSTILE).length-1) // Offspring shares its parent artwork.
   for (const type of Object.keys(HOSTILE)) {
     for (const hp of [100, 51, 50, 1]) {
       const field = getSpriteFrame({ type, side: 'enemy', hp, maxHp: 100 })
-      const book = getSpriteFrame({ atlas: type==='finalBoss'?'queen-motion':'enemies', frame: type==='finalBoss'?0:enemyFrame(type, hp <= 50) })
+      const book = getSpriteFrame({ atlas: ENEMY_CATALOG[type].atlas || 'enemies', frame: type==='finalBoss'?0:enemyFrame(type, hp <= 50) })
       assert.deepEqual(field, book)
       assert.equal(field.frame, type==='finalBoss'?0:type === 'boss' && hp <= 50 ? 7 : ENEMY_CATALOG[type].frame)
-      assert.equal(field.column + 4 * field.row, field.frame)
+      assert.equal(field.column + (field.atlas==='hostile-company'?2:4) * field.row, field.frame)
     }
   }
 })

@@ -10,8 +10,8 @@ import DealKey from './DealKey.vue'
 import TitleCourt from './TitleCourt.vue'
 import ScoreToggle from './ScoreToggle.vue'
 
-const props = defineProps({ doctrine:String, difficulty:String, seed:String, saved:Object, dailyBest:Object })
-const emit = defineEmits(['choose','difficulty','seed','start','daily','resume','guide'])
+const props = defineProps({ mode:String,best:Object,doctrine:String, difficulty:String, seed:String, saved:Object, dailyBest:Object })
+const emit = defineEmits(['mode','choose','difficulty','seed','start','daily','resume','guide'])
 const selected = computed(() => performerOf(props.doctrine))
 const selecting = ref(false)
 const table = ref(null)
@@ -82,6 +82,7 @@ onMounted(() => table.value?.querySelector('.cover-start')?.focus({preventScroll
             <b>{{ actor.name }}</b>
           </button>
         </div>
+        <div class="deal-options mode-options" aria-label="挑战模式"><b>模式</b><button class="key-ink" v-for="[id,title] in [['standard','标准远征'],['endless','无尽挑战']]" :data-mode="id" :aria-pressed="mode===id" @click="emit('mode',id)"><span v-if="mode===id" aria-hidden="true">✓ </span>{{ title }}</button><small v-if="best">最佳 {{ best.reached || best.waves }} 波</small><button class="key-link" v-if="saved" @click="emit('resume')">继续第 {{ saved.wave }} 波</button></div>
         <div class="deal-options"><b>难度</b>
           <button class="key-tab" v-for="(mode,id) in DIFFICULTIES" :key="id" :aria-pressed="difficulty===id" @click="emit('difficulty',id)">{{ mode.name }}</button>
           <small>♥ {{ initialLifeMax(difficulty) }} 生命</small>
@@ -220,7 +221,7 @@ onMounted(() => table.value?.querySelector('.cover-start')?.focus({preventScroll
 .joker-portrait.picked .avatar-window:after{content:'';position:absolute;bottom:-2px;left:calc(50% - 4px);width:8px;height:5px;background:#ffe2a1;clip-path:polygon(0 100%,50% 0,100% 100%)}
 .joker-portrait:focus-visible{outline:2px solid #fff4d7;outline-offset:3px}
 .deal-options{display:flex;align-items:center;gap:7px;padding:14px 0;margin-top:14px;border-top:1px solid #806657}
-.deal-options b{font-size:13px;margin-right:5px}.deal-options button{color:#d7c6b2;border:1px solid #80685a;background:#20181be6;padding:6px 12px;border-radius:2px;font-size:13px}
+.mode-options button{white-space:nowrap;min-height:36px}.deal-options b{font-size:13px;margin-right:5px}.deal-options button{color:#d7c6b2;border:1px solid #80685a;background:#20181be6;padding:6px 12px;border-radius:2px;font-size:13px}
 .deal-options button[aria-pressed=true]{color:#281813;background:#dcc39b;border-color:#efd4a8}.deal-options small{margin-left:auto}
 .deal-seed{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 12px;font-size:12px;color:#d7c6b2}.deal-seed input{min-width:0;width:130px;border:1px solid #80685a;border-radius:2px;background:#20181be6;color:#f7e9cc;padding:6px 8px;font:inherit}.deal-seed input:focus-visible{outline:2px solid #efd4a8;outline-offset:2px}.deal-seed small{font-size:10px;color:#b4a191}
 .deal-actions.intro-buttons{display:flex;width:100%;align-items:center;justify-content:flex-start}

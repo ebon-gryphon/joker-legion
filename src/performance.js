@@ -71,6 +71,11 @@ company('diamonds','#d5b1ff',[
   ['K','群星坠印','slam','star','organ',123,[7,0,-12],.34,.5,14,9],
 ])
 company('enemy','#eb929c',[
+  ['banner','旌旗压阵','standard','shield','cloth',184,[0,7],.24,.38,10,2],
+  ['hunter','双镰追猎','crouch','fang','edge',461,[7,-5],.13,.27,15,4],
+  ['splitter','裂甲突牙','bash','fang','chop',93,[0,-5],.23,.37,11,4],
+  ['brood','幼兽扑咬','dive','fang','wood',266,[3,-5],.14,.24,10,3],
+  ['cantor','提灯引魂','offer','ring','goblet',326,[0,3,7],.27,.43,9,5],
   ['raider','俯肩劈斧','cleave','fang','chop',155,[0,-7],.16,.28,13,3],
   ['bat','折翼俯扑','dive','wing','wing',880,[5,-12],.12,.27,17,9],
   ['archer','暗羽冷箭','crouch','arrow','bow',173,[0,-7],.23,.3,10,2],

@@ -1,3 +1,4 @@
+import {waveInfo} from './endless.js'
 import { CAMP_AREA } from './formation.js'
 import { bossStep, unitStep } from './combatActions.js'
 import { log, effect, clamp } from './gameState.js'
@@ -64,7 +65,7 @@ function advanceCombat(game, dt, onAction) {
 }
 
 function simulationStep(game, dt, onAction) {
-  const deadline = WAVES[game.wave - 1].duration
+  const deadline = waveInfo(game).duration
   if (game.phase === 'battle') dt = Math.min(dt, Math.max(0, deadline - game.waveTime))
   game.time += dt
   for (const item of game.effects) item.life -= dt

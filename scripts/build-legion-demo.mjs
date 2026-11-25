@@ -80,7 +80,7 @@ async function main() {
   if (!styles.length) throw new Error('没有找到试玩样式文件。')
 
   // Keep the offline image list in sync with both portrait renderers.
-  const imageNames = ['title-command', 'queen-motion', 'regalia', 'armory', 'high-tier-parts', 'high-tier-fusion-parts', 'spades', 'hearts', 'clubs', 'diamonds', 'relics', 'battlefield', 'fusions', 'enemies', 'combat-motion', 'convoy', 'performer-avatars', 'control-stamps', 'control-ink', 'control-ticket', 'control-banner', 'control-tab']
+  const imageNames = ['title-command', 'hostile-company', 'queen-motion', 'regalia', 'armory', 'high-tier-parts', 'high-tier-fusion-parts', 'spades', 'hearts', 'clubs', 'diamonds', 'relics', 'battlefield', 'fusions', 'enemies', 'combat-motion', 'convoy', 'performer-avatars', 'control-stamps', 'control-ink', 'control-ticket', 'control-banner', 'control-tab']
   for (const name of imageNames) {
     if (!existsSync(join(root, 'public/legion-pixel', `${name}.png`))) throw new Error(`缺少像素素材 ${name}.png。`)
   }
@@ -114,7 +114,7 @@ async function main() {
   await mkdir(dirname(destination), { recursive: true })
   await writeFile(destination, html, 'utf8')
   const size = (Buffer.byteLength(html) / 1024 / 1024).toFixed(1)
-  console.log(`离线试玩已生成：${destination}\n${PERFORMERS.length} 位可玩小丑、52 张牌绘、7 套品质军装、12 种征兵牌型、66 对职业融合、12 波双首领、8 类敌军、${JOKERS.length} 种商店物品、战场及三段配乐已内联 · ${size} MiB · 双击 HTML 即可开始，无需联网或启动服务器。`)
+  console.log(`离线试玩已生成：${destination}\n${PERFORMERS.length} 位可玩小丑、52 张牌绘、7 套品质军装、12 种征兵牌型、66 对职业融合、十二波远征与无尽挑战、双首领和行为型敌军、${JOKERS.length} 种商店物品、战场及三段配乐已内联 · ${size} MiB · 双击 HTML 即可开始，无需联网或启动服务器。`)
 }
 
 main().catch(error => {

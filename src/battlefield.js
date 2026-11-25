@@ -1,3 +1,4 @@
+import {paintHostileSignals} from './hostileSignals.js'
 import { W, H, rect, hash, line, diamond } from './pixelDrawing.js'
 import { backdrop, banner, gate } from './battlefieldScenery.js'
 import { loadFactionAtlases, pixelAssetUrl } from './spriteAtlas.js'
@@ -179,6 +180,7 @@ export function createBattlefield(canvas) {
     }
     for (const effect of stageEffects) if (['summon', 'burst', 'telegraph', 'death'].includes(effect.type)) drawEffect(c, effect, t, yMap, reduced, lag, labels)
     if (wagon) drawWagon(c, wagonArt, wagon, game.waveTime-lag, wagonPoint, yMap, reduced)
+    paintHostileSignals(c,game,yMap,labels)
     telegraph(c, game.bossTelegraph, t, yMap, labels); units.sort((a, b) => a.y - b.y || a.x - b.x)
     for (const unit of units) {
       if (framing && unit.id===options.liftedUnit) continue

@@ -1,3 +1,4 @@
+import {waveInfo} from './endless.js'
 import { inCampArea } from './formation.js'
 import { addUnit, arrangeCamp } from './campArmy.js'
 import { lastingStat } from './standingArmy.js'
@@ -57,7 +58,9 @@ export function restoreGame(snapshot) {
 
 function validExpedition(data) {
   if (!data || data.version !== 1 || !DOCTRINES.some(item => item.id === data.doctrine)) return false
-  if (!['ready', 'battle', 'shop', 'won', 'lost'].includes(data.phase) || !Number.isInteger(data.wave) || data.wave < 1 || data.wave > WAVES.length) return false
+  if(data.mode!==undefined && !['standard','endless'].includes(data.mode))return false
+  if(data.mode==='endless' && data.phase==='won' || data.phase==='retired' && (data.mode!=='endless' || data.stats?.wavesCleared!==data.wave))return false
+  if (!['ready', 'battle', 'shop', 'won', 'lost','retired'].includes(data.phase) || !Number.isSafeInteger(data.wave) || data.wave < 1 || data.mode!=='endless' && data.wave > WAVES.length) return false
   if (data.campaignLength !== undefined && ![6,WAVES.length].includes(data.campaignLength)) return false
   if (data.phase === 'won' && !(data.wave === WAVES.length || data.wave === 6 && (data.campaignLength == null || data.campaignLength === 6))) return false
   for (const key of ['baseHp', 'maxBaseHp', 'energy', 'maxEnergy', 'gold', 'time', 'waveTime', 'rng', 'sequence', 'accumulator', 'deployCooldown', 'discardCooldown', 'discards', 'waveKills', 'waveSpawned', 'spawnIndex', 'energyRegen']) {
@@ -97,7 +100,7 @@ function prepareLegacyLife(data) {
       preparationDamage:0,preparationRepaired:0,battleDamage:0,battleRepaired:0,sources:{bell:0,breach:0,timeout:0,unknown:0}}
     if(data.tacticsReport)data.tacticsReport.gateDamage=0
   }
-  if(data.phase==='shop' && data.wave===WAVES.length && data.stats?.wavesCleared===WAVES.length){
+  if(data.mode!=='endless' && data.phase==='shop' && data.wave===WAVES.length && data.stats?.wavesCleared===WAVES.length){
     data.legacyLifeHistory.rewards=data.rewards;data.phase='won';data.finalWaveCleared=true
     data.rewards=[];data.shop=[];data.soldShop=[];data.rewardChosen=false;data.rewardState={wave:data.wave,claimedId:null}
   }else if(data.economyVersion!==undefined && Array.isArray(data.rewards)){
@@ -118,7 +121,7 @@ function prepareLegacyLife(data) {
 }
 
 function validLifeBuild(data) {
-  if(data.phase==='shop' && data.wave===WAVES.length)return false
+  if(data.mode!=='endless' && data.phase==='shop' && data.wave===WAVES.length)return false
   if(data.lifeVersion!==LIFE_RULES.version || typeof data.lifeFailed!=='boolean' || data.lifeFailed && data.baseHp!==0 ||
     !Number.isSafeInteger(data.baseHp) || !Number.isSafeInteger(data.maxBaseHp) || data.maxBaseHp<initialLifeMax(data.difficulty) ||
     !data.lifeItemState || !['redEchoUsed','flushCrownUsed'].every(key=>typeof data.lifeItemState[key]==='boolean') ||
@@ -157,7 +160,7 @@ function validHandAndTricks(data) {
     if (result === 'active' && (data.phase !== 'battle' || data.reserveUsed)) return false
   }
   if (data.keptCardId != null && (!data.trickUsed || data.doctrine !== 'sleeve' ||
-      data.phase !== 'shop' || !data.hand.some(card => card.id === data.keptCardId))) return false
+      !['shop','retired'].includes(data.phase) || !data.hand.some(card => card.id === data.keptCardId))) return false
   if (data.palmedCard != null) {
     const card = data.hand.find(item => item.id === data.palmedCard.id)
     if (!data.trickUsed || data.doctrine !== 'iron' || !card || !shiftedRank(card.rank,data.palmedCard.step)) return false
@@ -180,14 +183,14 @@ function validArmies(data) {
     if (!Array.isArray(data[field]) || data[field].length > limit) return false
     if (side === 'ally' && data.allies.filter(u=>u?.echoUntil == null).length + fallen.length > limit) return false
     const units = side === 'ally' ? data.allies.concat(fallen, reserves) : data.enemies
-    if (!units.every(unit => unit && Object.hasOwn(definition, unit.type) && unit.side === side && ['x', 'y', 'hp', 'maxHp', 'atk', 'range', 'cooldown', 'level', 'speed', 'period'].every(key => Number.isFinite(unit[key])) && unit.hp > 0 && unit.hp <= unit.maxHp && unit.x >= 0 && unit.x <= 1100 && unit.y >= 150 && unit.y <= 350 && unit.level >= 1 && unit.level <= 3 && unit.maxHp <= 100000 && unit.atk >= 0 && unit.atk <= 20000 && unit.period > 0 && unit.speed >= 0)) return false
+    if (!units.every(unit => unit && Object.hasOwn(definition, unit.type) && unit.side === side && ['x', 'y', 'hp', 'maxHp', 'atk', 'range', 'cooldown', 'level', 'speed', 'period'].every(key => Number.isFinite(unit[key])) && unit.hp > 0 && unit.hp <= unit.maxHp && unit.x >= 0 && unit.x <= 1100 && unit.y >= 150 && unit.y <= 350 && unit.level >= 1 && unit.level <= 3 && (data.mode==='endless'||unit.maxHp <= 100000) && unit.atk >= 0 && (data.mode==='endless'||unit.atk <= 20000) && unit.period > 0 && unit.speed >= 0)) return false
     if (new Set(units.map(unit => unit.id)).size !== units.length) return false
     if (side === 'ally') for (const unit of units) {
       const buildPercent=buildUnitPercent(data,unit)
       if(!validBuildUnitStats(unit) || unit.echoUntil==null && (buildPercent>0&&!unit.buildPassiveStats || unit.buildPassiveStats&&Math.abs(unit.buildPassiveStats.percent-buildPercent)>1e-9))return false
       if(unit.rewardModifiers && (!['attackPercent','healthPercent'].every(key=>Number.isFinite(unit.rewardModifiers[key]) && unit.rewardModifiers[key]>=0 && unit.rewardModifiers[key]<=10) || Object.keys(unit.rewardModifiers).length!==2))return false
       if (unit.waveBonus && (!Object.entries(unit.waveBonus).every(([k,v]) => ['maxHp','atk','heal','period'].includes(k) && Number.isFinite(v)) ||
-          lastingStat(unit,'maxHp') < 1 || lastingStat(unit,'maxHp') > 100000 || lastingStat(unit,'atk') > 20000 || lastingStat(unit,'period') <= 0 || lastingStat(unit,'atk') < 0 || lastingStat(unit,'heal') < 0)) return false
+          lastingStat(unit,'maxHp') < 1 || data.mode!=='endless' && (lastingStat(unit,'maxHp') > 100000 || lastingStat(unit,'atk') > 20000) || lastingStat(unit,'period') <= 0 || lastingStat(unit,'atk') < 0 || lastingStat(unit,'heal') < 0)) return false
       if (unit.royalWard !== undefined && typeof unit.royalWard !== 'boolean') return false
       if (unit.royalStars !== undefined && (!Number.isInteger(unit.royalStars) || unit.royalStars<0 || unit.royalStars>3)) return false
       if (unit.legendGuard !== undefined && (unit.legendGuard !== true || unit.grade!==4)) return false
@@ -230,11 +233,15 @@ function validArmies(data) {
 }
 
 function validWave(data) {
+  if(data.enemies.some(unit=>
+    unit.parentId!==undefined && (unit.type!=='brood' || typeof unit.parentId!=='string') ||
+    unit.quarryId!=null && (unit.type!=='hunter' || typeof unit.quarryId!=='string')))return false
+  if(data.enemies.some(unit=>unit.type==='cantor' && (!Number.isFinite(unit.riteTimer) || unit.riteTimer<0 || unit.riteTimer>4.5 || unit.chanting!==undefined && typeof unit.chanting!=='boolean')))return false
   if (!Number.isFinite(data.bossTimer)) return false
   if (!Array.isArray(data.schedule) || data.schedule.length > 40 || !data.schedule.every(item => Number.isFinite(item.at) && item.at >= 0 && Object.hasOwn(HOSTILE, item.type))) return false
   if (data.waveTimeout != null) {
     const { count, damage, boss, bossName } = data.waveTimeout
-    if (!['shop', 'won', 'lost'].includes(data.phase) || data.waveTime !== WAVES[data.wave - 1].duration ||
+    if (!['shop', 'won', 'lost','retired'].includes(data.phase) || data.waveTime !== waveInfo(data).duration ||
         !Number.isSafeInteger(count) || count < 1 || count > MAX_ENEMIES + data.schedule.length ||
         !Number.isFinite(damage) || damage < 0 || damage > data.maxBaseHp || typeof boss !== 'boolean' ||
         (boss && data.phase !== 'lost') || (bossName !== undefined && (!boss || !['无冕之王','缀命皇后'].includes(bossName)))) return false
@@ -255,7 +262,7 @@ function validWave(data) {
         mark.radius <= 0 || mark.radius > 1000 || mark.remaining <= 0 || mark.duration <= 0 || mark.duration > 8 || mark.remaining > mark.duration ||
         !Object.values(BOSS_SKILLS).some(skill => skill.name === mark.name) ||
         (mark.mode !== undefined && !Object.values(BOSS_SKILLS).some(skill => skill.name === mark.name && skill.mode === mark.mode)) ||
-        (mark.mode === 'pulse' && (!Number.isFinite(mark.startHp) || mark.startHp <= 0 || mark.startHp > 100000)) ||
+        (mark.mode === 'pulse' && (!Number.isFinite(mark.startHp) || mark.startHp <= 0 || data.mode!=='endless' && mark.startHp > 100000)) ||
         data.phase !== 'battle' || !data.enemies.some(unit => isBoss(unit.type))) return false
   }
   if (Object.keys(data).some(key => RESERVED.has(key))) return false
@@ -337,7 +344,7 @@ function validProgress(data) {
       if (v !== undefined && (!Number.isInteger(v) || v < min || v > max)) return false
     }
   }
-  if (data.rewardChosen === 'enlist' && !['shop','won'].includes(data.phase)) return false
+  if (data.rewardChosen === 'enlist' && !['shop','won','retired'].includes(data.phase)) return false
   return true
 }
 
@@ -346,7 +353,7 @@ function validRewardEconomy(data) {
   if(data.economyVersion!==ECONOMY_VERSION || !Number.isSafeInteger(data.crystals) || data.crystals<0 ||
     !Number.isSafeInteger(data.stats.crystalsEarned) || data.stats.crystalsEarned<0 ||
     !Number.isInteger(data.crystalIncomeWave) || data.crystalIncomeWave<0 || data.crystalIncomeWave>data.wave ||
-    typeof data.finalWaveCleared!=='boolean' || data.finalWaveCleared && data.wave!==WAVES.length)return false
+    typeof data.finalWaveCleared!=='boolean' || data.finalWaveCleared && (data.mode==='endless' || data.wave!==WAVES.length))return false
   const keys=Object.keys(emptyWaveBonuses())
   for(const phase of ['next','active']){
     const b=data.waveBonuses?.[phase]
@@ -407,7 +414,7 @@ function migrateExpedition(data) {
     pristine.crystalIncomeWave=['shop','won'].includes(pristine.phase)?pristine.wave:Math.max(0,pristine.wave-1)
     pristine.waveBonuses={next:emptyWaveBonuses(),active:emptyWaveBonuses()}
     pristine.printsBudget=PRINTS_PER_WAVE
-    pristine.finalWaveCleared=pristine.wave===WAVES.length && ['shop','won'].includes(pristine.phase)
+    pristine.finalWaveCleared=pristine.mode!=='endless' && pristine.wave===WAVES.length && ['shop','won'].includes(pristine.phase)
     pristine.lastSettlement=null
     if(pristine.phase==='shop'){
       if(pristine.rewardChosen){pristine.rewards=[];pristine.rewardState={wave:pristine.wave,claimedId:pristine.rewardChosen,legacy:true}}

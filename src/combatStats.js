@@ -10,7 +10,7 @@ import {BUILD_PASSIVE_BY_ID,validBuildPassiveEvent} from './buildPassives.js'
 
 const copy = value => JSON.parse(JSON.stringify(value))
 const tally = () => ({damage:0, healed:0, taken:0, absorbed:0, kills:0, deaths:0})
-const fallbackRunId = g => JSON.stringify([g.seed,g.doctrine,g.difficulty || 'standard'])
+const fallbackRunId = g => JSON.stringify([g.seed,g.doctrine,g.difficulty || 'standard',...(g.mode==='endless'?['endless']:[])])
 const identity = (g,runId) => JSON.stringify([runId,g.battleId,g.wave])
 const safe = n => Number.isFinite(n) && n >= 0 && n <= 1e12
 const text = s => typeof s === 'string' && s.length <= 500
@@ -20,7 +20,7 @@ export function initializeCombatStats(game, {runId, partial = false} = {}) {
   const id = runId || game.combatLedger?.runId || fallbackRunId(game)
   game.combatLedger = {
     version:1, runId:id, waveId:identity(game,id), seed:String(game.seed), doctrine:game.doctrine,
-    difficulty:game.difficulty || 'standard', wave:game.wave, battleId:game.battleId,
+    mode:game.mode || 'standard',enemyEvents:[],difficulty:game.difficulty || 'standard', wave:game.wave, battleId:game.battleId,
     partial, started:game.phase==='battle', ended:false, result:null, fromWaveTime:game.waveTime || 0,
     duration:0, gate:{start:game.baseHp,battleStart:game.phase==='battle'?game.baseHp:null,end:game.baseHp,damage:0,repaired:0,untracked:0,
       preparationDamage:0,preparationRepaired:0,battleDamage:0,battleRepaired:0,sources:{bell:0,breach:0,timeout:0,unknown:0}},
@@ -206,7 +206,7 @@ function reportOf(game, ledger) {
   current.lifeEvents=copy(game.lifeEvents || [])
   if(ledger.lifeVersion===1){current.lifeVersion=1;current.lifeStart=ledger.lifeStart;current.lifeEnd=game.baseHp;current.lifeMaxStart=ledger.lifeMaxStart;current.lifeMaxEnd=game.maxBaseHp}
   current.regimentReport=copy(game.waveReport)
-  const status=!ledger.ended?'ongoing':ledger.result==='lost'?'defeat':game.wave===(game.campaignLength || WAVES.length)?'victory':'wave-cleared'
+  const status=!ledger.ended?'ongoing':ledger.result==='lost'?'defeat':game.mode!=='endless' && game.wave===(game.campaignLength || WAVES.length)?'victory':'wave-cleared'
   current.runOutcome={status,wave:game.wave,clearedWaves:game.stats.wavesCleared,
     terminal:['defeat','victory'].includes(status),finalWave:['defeat','victory'].includes(status)?game.wave:null}
   current.units.forEach(row=> {if(row.participated) row.alive=game.allies.some(u=>u.id===row.unitId && u.hp>0)})
@@ -262,7 +262,7 @@ export function migrateCombatStats(game, original) {
   if (original.combatLedger) return
   initializeCombatStats(game,{partial:true})
   if(game.phase==='battle') beginCombatStats(game)
-  if(['shop','won','lost'].includes(game.phase)) finishCombatStats(game,game.phase==='lost'?'lost':'cleared')
+  if(['shop','won','lost','retired'].includes(game.phase)) finishCombatStats(game,game.phase==='lost'?'lost':'cleared')
 }
 
 function validRow(row, system=false) {
@@ -327,7 +327,28 @@ export function discardInvalidScoreMetadata(container) {
 const validLifeEvent=row=>row&&text(row.id)&&text(row.source)&&text(row.sourceId)&&
   ['loss','heal','max','failure','end','bell-summon','bell-blocked','bell-kill','bell-breach','bell-timeout'].includes(row.kind)&&
   ['before','after','amount','maxBefore','maxAfter','at'].every(key=>safe(row[key]))&&Number.isSafeInteger(row.wave)&&row.wave>=1
+function validEnemyEvent(e) {
+  if(!e || !safe(e.at) || !text(e.actor) || !['banner','hunter','splitter','brood','cantor'].includes(e.type))return false
+  switch(e.kind) {
+    case 'guard': return e.type==='banner' && text(e.target) && safe(e.amount)
+    case 'hunt': return e.type==='hunter' && text(e.target) && text(e.name)
+    case 'bonus': return e.type==='hunter' && text(e.target) && safe(e.amount)
+    case 'split': return e.type==='splitter' && Array.isArray(e.children) && e.children.length<=2 &&
+      new Set(e.children).size===e.children.length && e.children.every(text) && e.amount===e.children.length
+    case 'heal': return e.type==='cantor' && text(e.target) && safe(e.amount) && e.amount>0
+    case 'no-target': return e.type==='cantor' && e.amount===0
+    case 'windup': case 'interrupt': return e.type==='cantor'
+    case 'strike': return ['splitter','brood'].includes(e.type) && text(e.target) && safe(e.amount) && safe(e.absorbed) &&
+      typeof e.killed==='boolean' && (e.parent===undefined || e.type==='brood' && text(e.parent))
+    case 'hit': return text(e.source) && safe(e.amount)
+    case 'kill': return e.parent===undefined || e.type==='brood' && text(e.parent)
+    default: return false
+  }
+}
+
 export function validCombatRecord(value, ledger=false) {
+  if(value?.mode!==undefined && !['endless','standard'].includes(value.mode))return false
+  if(value?.enemyEvents!==undefined && (!Array.isArray(value.enemyEvents) || !value.enemyEvents.every(validEnemyEvent)))return false
   if(value?.passiveEvents!==undefined&&(!Array.isArray(value.passiveEvents)||!value.passiveEvents.every(validBuildPassiveEvent)))return false
   if(value?.lifeVersion!==undefined&&(value.lifeVersion!==1||!safe(value.lifeStart)||!safe(value.lifeMaxStart)||value.lifeStart>value.lifeMaxStart ||
       !ledger&&(!safe(value.lifeEnd)||!safe(value.lifeMaxEnd)||value.lifeEnd>value.lifeMaxEnd)))return false
@@ -339,7 +360,7 @@ export function validCombatRecord(value, ledger=false) {
       !post.lifeEvents.every(row=>validLifeEvent(row)&&row.wave===post.wave))return false
   }
   if(!value || value.version!==1 || ![value.runId,value.waveId,value.seed,value.doctrine,value.difficulty].every(text) ||
-    !Number.isSafeInteger(value.wave) || value.wave<1 || value.wave>WAVES.length || !Number.isSafeInteger(value.battleId) || value.battleId<1 ||
+    !Number.isSafeInteger(value.wave) || value.wave<1 || value.mode!=='endless' && value.wave>WAVES.length || !Number.isSafeInteger(value.battleId) || value.battleId<1 ||
     value.waveId!==identity({battleId:value.battleId,wave:value.wave},value.runId) ||
     !['partial','started','ended'].every(k=>typeof value[k]==='boolean') || ![null,'cleared','lost'].includes(value.result) ||
     value.ended!==(value.result!==null) ||
@@ -375,9 +396,9 @@ export function validCombatRecord(value, ledger=false) {
       validItemActual(event) && event.index===index && safe(event.at) && ['ready','battle'].includes(event.phase) &&
       (event.orderId===null || text(event.orderId)) && (event.orderOrdinal===null || Number.isSafeInteger(event.orderOrdinal) && event.orderOrdinal>=0) &&
       Array.isArray(event.targetIds) && event.targetIds.length<=100 && event.targetIds.every(text)))) ||
-    (value.runOutcome!==undefined && (!value.runOutcome || !['ongoing','defeat','victory','wave-cleared'].includes(value.runOutcome.status) ||
+    (value.runOutcome!==undefined && (!value.runOutcome || !['ongoing','defeat','victory','retired','wave-cleared'].includes(value.runOutcome.status) ||
       value.runOutcome.wave!==value.wave || !Number.isSafeInteger(value.runOutcome.clearedWaves) || value.runOutcome.clearedWaves<0 || value.runOutcome.clearedWaves>value.wave ||
-      value.runOutcome.terminal!==['defeat','victory'].includes(value.runOutcome.status) ||
+      value.runOutcome.terminal!==['defeat','victory','retired'].includes(value.runOutcome.status) ||
       value.runOutcome.finalWave!==(value.runOutcome.terminal?value.wave:null)))) return false
   if(ledger) return Array.isArray(value.pendingKills) && value.pendingKills.length<=100 &&
     value.pendingKills.every(k=>k && text(k.targetId) && (k.unitId===null || text(k.unitId)) && (k.systemId===null || text(k.systemId)) &&
@@ -396,9 +417,9 @@ export function validCombatStats(game) {
   if(game.combatLedger==null && game.lastCombatReport==null) return true
   const ledger=game.combatLedger
   return validCombatRecord(ledger,true) && ledger.wave===game.wave && ledger.battleId===game.battleId &&
-    ledger.seed===String(game.seed) && ledger.doctrine===game.doctrine && ledger.difficulty===(game.difficulty || 'standard') &&
+    (ledger.mode || 'standard')===(game.mode || 'standard') && ledger.seed===String(game.seed) && ledger.doctrine===game.doctrine && ledger.difficulty===(game.difficulty || 'standard') &&
     ledger.fromWaveTime<=game.waveTime &&
     (ledger.ended ? !!game.lastCombatReport && validCombatRecord(game.lastCombatReport) &&
-      game.lastCombatReport.waveId===ledger.waveId && ['shop','won','lost'].includes(game.phase) &&
+      (game.lastCombatReport.mode || 'standard')===(ledger.mode || 'standard') && game.lastCombatReport.waveId===ledger.waveId && ['shop','won','lost','retired'].includes(game.phase) &&
       ledger.result===(game.phase==='lost'?'lost':'cleared') : game.lastCombatReport==null)
 }

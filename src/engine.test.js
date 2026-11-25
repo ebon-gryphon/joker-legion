@@ -1,3 +1,4 @@
+import {MAX_ENEMIES} from './campaignRules.js'
 import { workshopPairs } from './forge.js'
 import { fixtureCompany } from './armyFixtures.js'
 import { resetBuildWave } from './buildPassives.js'
@@ -53,7 +54,7 @@ function playRun(seed, doctrine = 'iron') {
         assert.equal(game.spawnIndex,game.schedule.length)
       }
       tick(game, 0.25)
-      assert.ok(game.allies.length <= FIELD_LIMIT && game.enemies.length <= game.schedule.length)
+      assert.ok(game.allies.length <= FIELD_LIMIT && game.enemies.length <= MAX_ENEMIES)
       assert.ok(game.effects.length <= 110)
       assert.ok(Number.isFinite(game.energy) && game.energy >= 0 && game.energy <= game.maxEnergy)
       assert.equal(new Set(game.hand.map(card => card.id)).size, 8)

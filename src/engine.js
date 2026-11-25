@@ -1,3 +1,4 @@
+export {retireEndless} from './campaign.js'
 // Public simulation API used by the game and its headless clients.
 export {
   SUITS, JOKERS, DOCTRINES, WAVES, FIELD_LIMIT, HANDS_PER_WAVE, STEP, PRINTS_PER_WAVE

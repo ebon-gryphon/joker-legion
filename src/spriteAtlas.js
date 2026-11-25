@@ -4,12 +4,12 @@ import { soldierFrame, QUALITY_OUTFITS, UNIFORM_ROLES } from './outfits.js'
 import { assembleUniforms } from './uniformArt.js'
 import { CARD_RANKS as RANKS } from './cardCatalog.js'
 import { drawArticulatedUniform, drawArticulatedEnemy } from './articulatedSprites.js'
-import { enemyFrame } from './enemyCatalog.js'
+import { enemyFrame, ENEMY_CATALOG } from './enemyCatalog.js'
 import { HIGH_TIER_ATLAS, HIGH_TIER_FUSION_ATLAS } from './highTierArt.js'
 
 const SUITS = { '♠': 'spades', '♥': 'hearts', '♣': 'clubs', '♦': 'diamonds' }
 const TYPE_ATLAS = { knight: 'spades', tank: 'spades', healer: 'hearts', ranger: 'clubs', mage: 'diamonds', arcanist: 'diamonds' }
-const SHEETS = { [HIGH_TIER_ATLAS]:[4,32], [HIGH_TIER_FUSION_ATLAS]:[2,4], 'queen-motion':[4,8], regalia: [4,8], armory: [4,8], spades: [7, 13], hearts: [7, 13], clubs: [7, 13], diamonds: [7, 13], fusions: [3, 6], enemies: [4, 8] }
+const SHEETS = { 'hostile-company':[2,4], [HIGH_TIER_ATLAS]:[4,32], [HIGH_TIER_FUSION_ATLAS]:[2,4], 'queen-motion':[4,8], regalia: [4,8], armory: [4,8], spades: [7, 13], hearts: [7, 13], clubs: [7, 13], diamonds: [7, 13], fusions: [3, 6], enemies: [4, 8] }
 export const isUnitAtlas = name => name === 'uniforms' || Object.hasOwn(SHEETS, name)
 const records = new Map(), listeners = new Set()
 let motionSheet
@@ -19,6 +19,10 @@ export function pixelAssetUrl(name, extension = 'png') {
   return globalThis.window?.__LEGION_ASSETS__?.[`pixel-${name}`] || `${base}legion-pixel/${name}.${extension}`
 }
 export function getSpriteFrame(cardOrUnit = {}) {
+  if(cardOrUnit.atlas==='hostile-company' || ENEMY_CATALOG[cardOrUnit.type]?.atlas==='hostile-company'){
+    const frame=cardOrUnit.frame ?? ENEMY_CATALOG[cardOrUnit.type].frame
+    return {atlas:'hostile-company',frame,column:frame%2,row:Math.floor(frame/2)}
+  }
   if (cardOrUnit.type === 'finalBoss' || cardOrUnit.atlas === 'queen-motion') {
     const frame=cardOrUnit.frame || 0
     return {atlas:'queen-motion',frame,column:frame%4,row:Math.floor(frame/4)}
@@ -172,7 +176,7 @@ export function drawCardSprite(ctx, cardOrUnit, x, y, width, height, options = {
   const frame = getSpriteFrame(cardOrUnit), record = records.get(frame.atlas)
   if (frame.atlas==='uniforms' && drawArticulatedUniform(ctx,records,frame,x,y,width,height,options)) return true
   if (frame.atlas==='queen-motion' && record?.ready) return drawQueenClip(ctx,record,x,y,width,height,options)
-  if (frame.atlas==='enemies' && options.combat && drawArticulatedEnemy(ctx,record,frame,x,y,width,height,options)) return true
+  if (['enemies','hostile-company'].includes(frame.atlas) && options.combat && drawArticulatedEnemy(ctx,record,frame,x,y,width,height,options)) return true
   if (options.combat && ['spades','hearts','clubs','diamonds','fusions'].includes(frame.atlas) && drawArticulatedEnemy(ctx,record,frame,x,y,width,height,options)) return true
   if (drawCombatClip(ctx, frame, x, y, width, height, options)) return true
   if (!record?.ready) return false

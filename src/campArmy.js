@@ -1,3 +1,5 @@
+import {ENEMY_RULES} from './enemyBehavior.js'
+import {endlessScale} from './endless.js'
 import { waveChange } from './standingArmy.js'
 import { getCardDesign } from './cardCatalog.js'
 import { FIELD_LIMIT, MAX_ENEMIES, ALLIED, RECRUIT_STRENGTH } from './campaignRules.js'
@@ -114,7 +116,7 @@ export function addUnit(game, type, side, level = 1, { identity, reserve = false
   if (!reserve && team.length >= (side === 'ally' ? FIELD_LIMIT : MAX_ENEMIES)) return null
   const definition = side === 'ally' ? ALLIED[type] : HOSTILE[type]
   if (!definition) return null
-  const strength = side === 'ally' ? (1 + (level - 1) * 0.34) * (1 + game.upgrades.power + (game.wave - 1) * .26) : isBoss(type) ? 1 : 1 + (game.wave - 1) * 0.22
+  const strength = side === 'ally' ? (1 + (level - 1) * 0.34) * (1 + game.upgrades.power + (game.wave - 1) * .26) : (isBoss(type) ? 1 : 1 + (Math.min(12,game.wave) - 1) * 0.22) * endlessScale(game)
   const maxHp = Math.round(definition.hp * strength * (side === 'ally' && type === 'mage' && owns(game, 'diamond-bank') ? 1.2 : 1))
   const lane = Math.floor(random(game) * 3)
   const unit = {
@@ -127,6 +129,7 @@ export function addUnit(game, type, side, level = 1, { identity, reserve = false
     cooldown: random(game) * 0.4, level, attacks: 0, shield: 0,
     attackTimer: 0, hitTimer: 0, breach: definition.breach || 0,
   }
+  if(type==='cantor') unit.riteTimer=ENEMY_RULES.interval
   if (type === 'bellkeeper') unit.bellTimer = BELL_WINDUP
   team.push(unit)
   if (side === 'ally') {

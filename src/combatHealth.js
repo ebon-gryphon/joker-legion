@@ -1,3 +1,5 @@
+import {addUnit} from './campArmy.js'
+import {protector,specialEnemy,recordEnemy,ENEMY_RULES} from './enemyBehavior.js'
 import { effect, owns, trigger, clamp, log, distance, copies } from './gameState.js'
 import { restedSoldier } from './standingArmy.js'
 import { applyFallenItems } from './itemEffects.js'
@@ -47,13 +49,36 @@ export function healUnit(game, unit, amount, delay = 0, source = null) {
 export function damageUnit(game, unit, amount, delay = 0, source = null) {
   if (unit.hp <= 0) return 0
   if (unit.side === 'enemy' && isBoss(unit.type)) amount *= 1 + copies(game,'boss-hunter') * .03
-  if (unit.side === 'ally') amount -= Math.min(amount * .3,copies(game,'iron-rivets'))
+  const flag=protector(game,unit)
+  if(flag){
+    const hpAndShield=unit.hp+(unit.shield || 0)
+    const protectedAmount=amount*(1-ENEMY_RULES.guard)
+    const prevented=Math.min(hpAndShield,amount)-Math.min(hpAndShield,protectedAmount)
+    recordEnemy(game,'guard',flag,{target:unit.id,name:unit.name,amount:prevented})
+    amount=protectedAmount
+  }
+  const hunted=source?.type==='hunter' && unit.side==='ally' && unit.type!=='knight'
+  const armor=unit.side==='ally'?copies(game,'iron-rivets'):0
+  const afterArmor=value=>value-Math.min(value*.3,armor)
+  const baseHit=afterArmor(amount)
+  amount=afterArmor(hunted?amount*(1+ENEMY_RULES.hunt):amount)
   const blocked = Math.min(unit.shield || 0, amount)
   unit.shield = Math.max(0, (unit.shield || 0) - blocked)
   const ward = unit.royalWard && amount > blocked && unit.hp - amount + blocked <= unit.maxHp*.3
   const rescue = unit.side === 'ally' && unit.lifeline && amount - blocked >= unit.hp
   const dealt = Math.min(rescue || ward ? Math.max(0,unit.hp-1) : unit.hp, amount - blocked)
+  if(hunted){
+    const effectiveCap=unit.hp-(ward || rescue?1:0)+(unit.shield || 0)+blocked
+    recordEnemy(game,'bonus',source,{target:unit.id,name:unit.name,amount:Math.max(0,dealt+blocked-Math.min(effectiveCap,baseHit))})
+  }
   unit.hp = Math.max(0, unit.hp - dealt)
+  if(specialEnemy(unit.type)){
+    recordEnemy(game,'hit',unit,{amount:dealt,source:source?.id || source?.system || 'system'})
+    if(unit.hp===0)unit.killedInCombat=true
+  }
+  if(unit.side==='ally' && (source?.type==='splitter' || source?.type==='brood')){
+    recordEnemy(game,'strike',source,{target:unit.id,name:unit.name,amount:dealt,absorbed:blocked,parent:source.parentId,killed:unit.hp<=0})
+  }
   recordDamage(game,unit,dealt,blocked,source)
   unit.hitTimer = .2 + delay
   unit.impactAt = game.time + delay
@@ -107,6 +132,24 @@ export function settleDeaths(game) {
             pattern:unit.pattern, jobId:unit.jobId, grade:unit.grade, fusion:unit.fusion, hp:unit.hp, maxHp:unit.maxHp, level:unit.level },
         })
         if (side === 'enemies') {
+          if(unit.killedInCombat && !unit.breached){
+            recordEnemy(game,'kill',unit,{parent:unit.parentId})
+            if(unit.type==='cantor' && unit.chanting)recordEnemy(game,'interrupt',unit)
+            if(unit.type==='splitter'){
+              const children=[]
+              for(const offset of [-1,1]){
+                const child=addUnit(game,'brood','enemy',unit.level)
+                if(!child)break
+                child.parentId=unit.id
+                child.x=clamp(unit.x+offset*8,57,1000);child.y=clamp(unit.y+offset*6,150,350)
+                child.hp=child.maxHp=Math.max(1,Math.round(unit.maxHp*ENEMY_RULES.brood))
+                child.atk=Math.max(1,Math.round(unit.atk*ENEMY_RULES.brood))
+                children.push(child.id);game.waveSpawned++
+              }
+              recordEnemy(game,'split',unit,{children,amount:children.length})
+              effect(game,'burst',unit.x,unit.y-18,'分裂 ×'+children.length,unit.color)
+            }
+          }
           if(unit.summonedBy==='bellkeeper' && !unit.breached && !unit.timedOut)recordBellEvent(game,'bell-kill',unit)
           if (!unit.breached) { game.waveKills++; game.stats.kills++ }
           if (isBoss(unit.type)) {
