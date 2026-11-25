@@ -2,16 +2,17 @@ import { waveChange } from './standingArmy.js'
 import { planHand } from './handPlan.js'
 import { selectedCards, playedFace, replenish } from './deck.js'
 import { ORDER_BOOK, REGIMENTS, describeBonus } from './orders.js'
-import { log, effect, uid, owns, spendCharge, trigger, restoreBase, gainGold } from './gameState.js'
+import { log, effect, uid, owns, spendCharge, trigger, gainGold } from './gameState.js'
 import { addUnit, arrangeCamp } from './campArmy.js'
 import { grantExperience } from './training.js'
 import { QUALITIES } from './quality.js'
 import { settleDeaths, healUnit } from './combatHealth.js'
 import { ROYAL_MARCHES } from './jobs.js'
-import { applyRecruitItems } from './itemEffects.js'
+import { applyRecruitItems,applyLifeRecruitItems } from './itemEffects.js'
 import { recordOrder, recruitmentOutcome } from './combatStats.js'
 import { resolveScoreTrace } from './scoreBreakdown.js'
 import { displayName } from './soldierIdentity.js'
+import {commitBuildPassives,hasBuildPassive,scaleBuildOrder,recordBuildPassiveEvent,withBuildStatMutation,BUILD_PASSIVE_BY_ID} from './buildPassives.js'
 
 export function deploy(game) {
   return issueOrder(game, null)
@@ -24,6 +25,7 @@ export function echoOrderBonus(bonus) {
 export function issueOrder(game, secondary) {
   const preview = planHand(game,game.selected,true)
   if (!preview.canDeploy) return false
+  const passiveCursor=game.buildPassives?.events.length || 0
   const cards = selectedCards(game, game.selected).map(card => playedFace(game, card))
   const actualItems=new Map((preview.scoreTrace?.items || []).map(item=>[item.id,{id:item.id,triggered:false,effective:false,reason:item.reason,effects:{}}]))
   const itemCursor=game.combatLedger?.itemEvents?.length || 0
@@ -62,11 +64,13 @@ export function issueOrder(game, secondary) {
     const gained=trainer.trainingXp-trainingBefore
     effect(game,'burst',trainer.x,trainer.y, gained?'+'+gained+'经验':'经验已满','#efce81')
   }
+  commitBuildPassives(game,preview,{trainer,trainingBefore,trainingAfter:trainer?.trainingXp || 0})
   if (preview.march) applyRoyalMarch(game, preview.marchSuit)
   const echo = secondary && echoOrderBonus(preview.bonus)
   applyRegimentOrder(game, preview, joined, secondary, echo)
   applyRecruitRelics(game, preview, cards, joined[0] || trainer,actualItems)
-  applyRecruitItems(game,joined[0] || (preview.waiting ? game.reserves.at(-1) : trainer))
+  const itemRecipient=joined[0] || (preview.waiting ? game.reserves.at(-1) : trainer)
+  if(itemRecipient)withBuildStatMutation(game,itemRecipient,()=>applyRecruitItems(game,itemRecipient))
   const ids = new Set(game.selected)
   if (ids.has(game.palmedCard?.id)) game.palmedCard = null
   game.hand = game.hand.filter(card => !ids.has(card.id))
@@ -82,6 +86,8 @@ export function issueOrder(game, secondary) {
     leadFace: (preview.recruits[0] || preview.reserve[0])?.appearanceId ?? null,
     score: preview.score.total, power: preview.power, chain: game.chain, time: game.time }
   const recruitResult=recruitmentOutcome(preview,{joined,reserve:reserveUnit,trainer,xpGain:(trainer?.trainingXp || 0)-trainingBefore})
+  const passiveEvents=(game.buildPassives?.events || []).slice(passiveCursor)
+  for(const event of passiveEvents)event.orderId=game.lastDeploy.id
   const source=preview.recruits[0] || preview.reserve[0]
   const third=actualItems.get('third-act')
   if(third?.triggered) {
@@ -107,7 +113,7 @@ export function issueOrder(game, secondary) {
   }
   game.lastDeploy.scoreTrace=resolveScoreTrace(preview.scoreTrace,{recruit:{actualCount:joined.length,reserve:!!reserveUnit,overflow:joined.length===0,
     xp:recruitResult.xpGain,plannedXp:preview.trainingXp,receiver:trainer?{id:trainer.id,name:displayName(trainer)}:null,
-    summary:joined.length?preview.profession+' ×'+joined.length+' 实际入阵，征召属性 +'+preview.statBonus+'%。':reserveUnit?'上阵已满，传说领队已进入候补，保留身份、品质与星级。':'上阵已满，本手实际提供 '+recruitResult.xpGain+' 经验给'+(trainer?displayName(trainer):'接收者')+'。'},items:[...actualItems.values()]})
+    summary:joined.length?preview.profession+' ×'+joined.length+' 实际入阵，征召属性 +'+preview.statBonus+'%。':reserveUnit?'上阵已满，传说领队已进入候补，保留身份、品质与星级。':'上阵已满，本手实际提供 '+recruitResult.xpGain+' 经验给'+(trainer?displayName(trainer):'接收者')+'。'},items:[...actualItems.values()],passiveEvents})
   recordOrder(game,preview,secondary,{recruit:recruitResult,scoreTrace:game.lastDeploy.scoreTrace,items:[...actualItems.values()]})
   game.stats.maxChain = Math.max(game.stats.maxChain, game.chain)
   if (preview.captainGrade>preview.grade || preview.captainGrade===4) {
@@ -152,9 +158,13 @@ function applyRegimentOrder(game, preview, joined, secondary, echo) {
   const crownId = preview.crownId || joined[preview.crownRecruit]?.id
   game.orderTarget = preview.target
   for (const unit of game.allies) {
-    const bonus = unit.type === preview.target ? preview.bonus : unit.type === secondary && echo
+    const baseBonus = unit.type === preview.target ? preview.bonus : unit.type === secondary && echo
+    const captain=unit.id===game.champion?.unitId&&hasBuildPassive(game,'captain-orders')
+    const captainPercent=BUILD_PASSIVE_BY_ID['captain-orders'].effect.percent
+    const bonus=baseBonus && captain?scaleBuildOrder(baseBonus,1+captainPercent):baseBonus
     if (!bonus || unit.hp <= 0) continue
     waveChange(unit, () => {
+      const periodBefore=unit.period
       unit.shield = (unit.shield || 0) + (bonus.shield || 0)
       unit.atk += bonus.force || 0
       if (unit.type === 'healer') unit.heal += bonus.force || 0
@@ -164,6 +174,13 @@ function applyRegimentOrder(game, preview, joined, secondary, echo) {
         const previous = unit.period
         unit.period = Math.max(.35, unit.period * (1 - bonus.haste / 100))
         unit.cooldown *= unit.period / previous
+      }
+      if(captain){
+        const attackGain=(bonus.force || 0)-(baseBonus.force || 0),healGain=unit.type==='healer'?attackGain:0,
+          shield=(bonus.shield || 0)-(baseBonus.shield || 0),healthGain=(bonus.vitality || 0)-(baseBonus.vitality || 0),
+          periodReduction=Math.max(0,Math.max(.35,periodBefore*(1-(baseBonus.haste || 0)/100))-unit.period)
+        recordBuildPassiveEvent(game,'captain-orders',{effective:attackGain>0||healGain>0||shield>0||healthGain>0||periodReduction>0,unitId:unit.id,targetIds:[unit.id],
+          reason:'仅主将收到本次战令的额外'+captainPercent*100+'%；行动间隔收益按实际下限截断，不归因其他加冕。',effects:{attackGain,healGain,shield,healthGain,periodReduction}})
       }
       if (unit.id === crownId) {
         unit.crowned = true
@@ -196,7 +213,7 @@ function applyRecruitRelics(game, preview, cards, leader,actualItems) {
   if (owns(game, 'red-echo')) {
     const hearts = scoring.filter(card => card.suit === '♥').length
     if (hearts) {
-      let healed=0;const targets=new Set(),beforeGate=game.baseHp
+      let healed=0;const targets=new Set()
       trigger(game, 'red-echo', `${hearts} 次即时治疗`)
       for (let i = 0; i < hearts; i++) {
         const weakest = game.allies.slice().sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0]
@@ -205,11 +222,8 @@ function applyRecruitRelics(game, preview, cards, leader,actualItems) {
           healed+=gain;if(gain>0) targets.add(weakest.id)
         }
       }
-      if (hearts >= 2) restoreBase(game, 3)
-      const gateRepaired=game.baseHp-beforeGate
-      actualItems.set('red-echo',{id:'red-echo',triggered:true,effective:healed>0 || gateRepaired>0,
-        reason:healed>0 || gateRepaired>0?'计分红心生效，按友军实际缺血和城门缺损结算。':hearts>=2?'计分红心满足条件，但友军与城门均已满。':'计分红心满足治疗条件，但友军满血；不足两张红心，不修复城门。',
-        effects:{healed,gateRepaired,targets:targets.size}})
+      actualItems.set('red-echo',{id:'red-echo',triggered:true,effective:healed>0,
+        reason:healed>0?'计分红心按友军实际缺血结算。':'计分红心满足治疗条件，但友军满血。',effects:{healed,targets:targets.size}})
     }
   }
   if (owns(game, 'diamond-bank')) {
@@ -220,7 +234,9 @@ function applyRecruitRelics(game, preview, cards, leader,actualItems) {
     trigger(game,'royal-command','三星领队应召')
   }
   if (owns(game, 'flush-crown') && preview.containsFlush) {
-    trigger(game, 'flush-crown', '战令强化 · 城堡恢复')
-    restoreBase(game, 8)
+    trigger(game, 'flush-crown', '战令强化 · 本波生命恢复按首次机会结算')
   }
+  const life=applyLifeRecruitItems(game,{scoring,containsFlush:preview.containsFlush})
+  const red=actualItems.get('red-echo')
+  if(red && life.redEchoLife){red.effects.lifeHealed=life.redEchoLife.restored;red.effective ||= life.redEchoLife.restored>0;red.reason+=' '+life.redEchoLife.reason}
 }

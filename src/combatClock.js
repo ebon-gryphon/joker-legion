@@ -1,5 +1,5 @@
 import { CAMP_AREA } from './formation.js'
-import { breachDamage, bossStep, unitStep } from './combatActions.js'
+import { bossStep, unitStep } from './combatActions.js'
 import { log, effect, clamp } from './gameState.js'
 import { spawnEnemies } from './waveSchedule.js'
 import { settleDeaths } from './combatHealth.js'
@@ -8,20 +8,30 @@ import { resolvePreparedTactics, settleFeint } from './battlePlans.js'
 import { endWave, regroupArmy } from './campaign.js'
 import { isBoss } from './bossRules.js'
 import { recordGateDamage, finishCombatStats } from './combatStats.js'
+import { losePlayerLife, failPlayerLife, recordBellEvent } from './playerLife.js'
 
-export function describeWaveTimeout({ count, damage, boss, bossName }) {
-  return boss ? `时间到，${bossName || '无冕之王'}突破城门` : `时间到，${count} 名残敌突围，城门耐久 −${damage}`
+export function describeWaveTimeout({count,damage,boss,bossName,failed=false,queuedWithdrawn=0}) {
+  if(boss)return `时间到，${bossName || '无冕之王'}未被击败，本局失败`
+  return `时间到，${count} 名存活敌军突围，${damage>0?'生命 −'+damage:'生命已为 0'}`+
+    (failed?'；0 生命时再次漏敌，本局失败':'')+(queuedWithdrawn?`；${queuedWithdrawn} 名未入场敌军撤走，不扣生命`:'')
 }
 
 function resolveTimeout(game) {
-  // The field cap can leave reinforcements queued behind the front line.
-  const remaining = game.enemies.concat(game.schedule.slice(game.spawnIndex))
-  if (!remaining.length) return
+  // Only real surviving units escape. Unspawned schedule entries withdraw.
+  const remaining=game.enemies.filter(unit=>unit.hp>0),queuedWithdrawn=game.schedule.length-game.spawnIndex
+  if(!remaining.length){game.enemies=[];game.spawnIndex=game.schedule.length;return}
   const before = game.baseHp
-  for (const unit of remaining) game.baseHp -= breachDamage(unit.type, game.baseHp)
+  const boss=remaining.find(unit=>isBoss(unit.type))
+  let processed=0
+  if(boss){failPlayerLife(game,{source:'boss-timeout',unit:boss});processed=1}
+  for(const unit of remaining) {
+    const event=!boss && !game.lifeFailed?losePlayerLife(game,{source:'timeout',unit}):null
+    if(event)processed++
+    if(unit.summonedBy==='bellkeeper')recordBellEvent(game,'bell-timeout',unit,{lifeLost:event?.amount || 0,failed:game.lifeFailed})
+  }
   recordGateDamage(game,before-game.baseHp,'timeout')
-  game.waveTimeout = { count: remaining.length, damage: before - game.baseHp, boss: remaining.some(unit => isBoss(unit.type)),
-    ...(remaining.some(unit => unit.type === 'finalBoss') ? {bossName:'缀命皇后'} : {}) }
+  game.waveTimeout = {count:remaining.length,damage:before-game.baseHp,boss:!!boss,processed,queuedWithdrawn,failed:game.lifeFailed,
+    ...(boss?{bossName:boss.name}:{}),unitIds:remaining.map(unit=>unit.id)}
   game.enemies = []
   game.spawnIndex = game.schedule.length
   log(game, describeWaveTimeout(game.waveTimeout), 'danger')
@@ -38,7 +48,7 @@ function advanceCombat(game, dt, onAction) {
   }
   bossStep(game, dt, onAction)
   for (const unit of game.allies) unitStep(game, unit, dt, onAction)
-  for (const unit of game.enemies) unitStep(game, unit, dt, onAction)
+  for (const unit of game.enemies) {if(game.lifeFailed)break;unitStep(game,unit,dt,onAction)}
   settleDeaths(game)
   // Gentle separation keeps the battlefield readable without changing targeting rules.
   for (const team of [game.allies, game.enemies]) {
@@ -72,9 +82,9 @@ function simulationStep(game, dt, onAction) {
   }
   if (deadline - game.waveTime < 1e-8) {
     game.waveTime = deadline
-    if (game.baseHp > 0) resolveTimeout(game)
+    if (!game.lifeFailed) resolveTimeout(game)
   }
-  if (game.baseHp <= 0) {
+  if (game.lifeFailed) {
     settleFeint(game)
     game.baseHp = 0
     finishCombatStats(game,'lost')
@@ -82,7 +92,7 @@ function simulationStep(game, dt, onAction) {
     game.phase = 'lost'
     game.selected = []
     game.bossTelegraph = null
-    log(game, '城堡防线失守。带着这次的构筑经验，再演一幕。', 'danger')
+    log(game, '生命挑战失败。带着这次的构筑经验，再演一幕。', 'danger')
   } else if (game.spawnIndex >= game.schedule.length && !game.enemies.length && game.waveTime > 3) {
     settleFeint(game)
     endWave(game)

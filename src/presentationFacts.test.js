@@ -65,7 +65,7 @@ test('enabled, disabled, skip and 2x presentation modes preserve every engine sn
       assert.deepEqual(snapshotGame(after),unchanged);assert.equal(after.rng,unchanged.rng)
     },onTick:game=>{controller.sample(game);if(mode==='skip')controller.skip()}})
     assert.deepEqual(snapshotGame(game),run.finalSnapshot)
-    assert.deepEqual([game.phase,game.wave,game.baseHp],['won',12,100])
+    assert.deepEqual([game.phase,game.wave,game.baseHp],['won',12,run.finalSnapshot.baseHp])
   }
 })
 

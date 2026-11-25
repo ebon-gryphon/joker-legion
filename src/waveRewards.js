@@ -3,6 +3,8 @@ import { ORDER_BOOK, MAX_ORDER_LEVEL } from './orders.js'
 import { random, gainGold, restoreBase, log } from './gameState.js'
 import { gainCrystals } from './economy.js'
 import { armyRewardAvailable, applyArmyReward } from './rewardModifiers.js'
+import {LIFE_RULES,lifeMaxCap,expandLifeMax} from './playerLife.js'
+import {BUILD_PASSIVES,hasBuildPassive,acquireBuildPassive} from './buildPassives.js'
 
 function freezeData(value) {
   if(value && typeof value==='object'){Object.values(value).forEach(freezeData);Object.freeze(value)}
@@ -10,7 +12,7 @@ function freezeData(value) {
 }
 
 const reward=(id,name,icon,category,weight,durationKey,effect,condition,description)=>({
-  id,name,icon,category,direction:['power','enlist','army'].includes(effect.kind)?'army':['maxDiscards','supply','next','handLevel'].includes(effect.kind)?'poker':'resource',
+  id,name,icon,category,direction:effect.kind==='buildPassive'?(['fusion-code','captain-orders','reserve-instructor','elite-pact'].includes(effect.passiveId)?'army':'poker'):['power','enlist','army'].includes(effect.kind)?'army':['maxDiscards','supply','next','handLevel'].includes(effect.kind)?'poker':'resource',
   weight,durationKey,duration:{instant:'立即',permanent:'永久',next:'下一波',mixed:'立即 / 下一波'}[durationKey],
   effect,condition,description,
 })
@@ -18,7 +20,7 @@ const reward=(id,name,icon,category,weight,durationKey,effect,condition,descript
 // Definitions contain every amount and cap. Offers retain their concrete target
 // so claiming never rolls another card-book key, item, recruit, or random number.
 export const WAVE_REWARDS = Object.freeze([
-  reward('repair','修复城堡','♡','castle',10,'instant',{kind:'repair',amount:20},'damaged-gate','城门恢复至多 {amount} 点耐久。'),
+  reward('repair','恢复生命','♥','life',10,'instant',{kind:'repair',amount:LIFE_RULES.expansion},'missing-life','恢复至多 {amount} 点生命。'),
   reward('power','淬炼军团','♠','recruit',8,'permanent',{kind:'power',amount:.08,cap:1},'recruit-power-room','之后征募的士兵基础属性永久提高 {percent}%。'),
   reward('supply','战地补给','◇','supply',10,'mixed',{kind:'supply',gold:6,discards:1,cap:6},'always','获得 {gold} 金币；下一波额外免费换牌 +{discards}。'),
   reward('enlist','收编枪兵','♠','recruit',7,'next',{kind:'enlist',pattern:'twoPair',cap:5},'enlist-room','下一波收编一名枪兵；满编时按征募规则转为集训经验。'),
@@ -30,7 +32,7 @@ export const WAVE_REWARDS = Object.freeze([
   reward('army-experience','全军集训','⚑','army',8,'permanent',{kind:'army',army:{experience:2,xpCap:999}},'formal-army-room','现有正式军团全体经验 +{experience}（含候补）。'),
   reward('army-attack','磨砺锋芒','⚔','army',7,'permanent',{kind:'army',army:{attackPercent:.06,attackCap:1}},'formal-army-room','现有正式军团攻击与治疗永久提高 {percent}%（含候补）。'),
   reward('army-health','强健军阵','♥','army',7,'permanent',{kind:'army',army:{healthPercent:.08,healthCap:2}},'formal-army-room','现有正式军团生命上限永久提高 {percent}%，保留当前生命比例（含候补）。'),
-  reward('gate-masonry','增筑城垣','♜','castle',5,'permanent',{kind:'gateMax',amount:10,repair:10,cap:200},'gate-capacity-room','城门耐久上限永久 +{amount}，并恢复至多 {repair} 点耐久。'),
+  reward('gate-masonry','生命上限提升','♥','life',5,'permanent',{kind:'gateMax',amount:LIFE_RULES.expansion,repair:LIFE_RULES.expansion,capMultiplier:LIFE_RULES.maxMultiplier},'life-capacity-room','生命上限永久 +{amount}，并恢复至多 {repair} 点生命。'),
   reward('crystal-purse','蓝水晶补给','◆','currency',10,'instant',{kind:'currency',crystals:4},'always','获得 {crystals} 蓝水晶。'),
   reward('item-cache','军需遗珍','▣','item',7,'instant',{kind:'item',quantity:1},'available-item','获得 {itemName} ×{quantity}。{itemDescription}'),
   reward('gold-purse','零用军饷','●','currency',12,'instant',{kind:'currency',gold:3},'always','获得 {gold} 金币。'),
@@ -42,6 +44,7 @@ export const WAVE_REWARDS = Object.freeze([
   reward('extra-hands-greater','紧急动员','✚','next-wave',4,'next',{kind:'next',bonus:'hands',amount:2,cap:3},'next-room','下一波额外出牌次数 +{amount}。'),
   reward('next-discards','斥候情报','↺','next-wave',7,'next',{kind:'next',bonus:'discards',amount:2,cap:6},'next-room','下一波额外免费换牌次数 +{amount}。'),
   reward('next-prints','备用印模','▥','next-wave',6,'next',{kind:'next',bonus:'prints',amount:2,cap:8},'next-room','下一波额外改印次数 +{amount}。'),
+  ...BUILD_PASSIVES.map(passive=>reward(passive.id,passive.name,passive.icon,'build',passive.weight,'permanent',{kind:'buildPassive',passiveId:passive.id},'unowned-build',passive.description)),
 ].map(freezeData))
 
 export const WAVE_REWARD_BY_ID = Object.freeze(Object.fromEntries(WAVE_REWARDS.map(definition=>[definition.id,definition])))
@@ -61,10 +64,11 @@ const plain=value=>value && typeof value==='object' && !Array.isArray(value)
 function definitionAvailability(game,definition,payload) {
   const effect=definition.effect
   if(game.finalWaveCleared && ['next','enlist','supply'].includes(effect.kind))return {available:false,reason:'终幕已守住，没有下一波可使用此补给。'}
-  if(effect.kind==='repair' && game.baseHp>=game.maxBaseHp)return {available:false,reason:'城门耐久已满，无需修复。请选择其他补给。'}
+  if(effect.kind==='repair' && game.baseHp>=game.maxBaseHp)return {available:false,reason:'生命已满，无需恢复。请选择其他补给。'}
   if(effect.kind==='power' && room(effect.cap,game.upgrades?.power)<=0)return {available:false,reason:'征募强化已达上限。'}
   if(['maxDiscards','maxEnergy'].includes(effect.kind) && room(effect.cap,game[effect.kind])<=0)return {available:false,reason:'此项永久提升已达上限。'}
-  if(effect.kind==='gateMax' && room(effect.cap,game.maxBaseHp)<=0)return {available:false,reason:'城门耐久上限已满。'}
+  if(effect.kind==='gateMax' && room(lifeMaxCap(game),game.maxBaseHp)<=0)return {available:false,reason:'生命上限已满。'}
+  if(effect.kind==='buildPassive' && hasBuildPassive(game,effect.passiveId))return {available:false,reason:'本局已拥有此构筑奖励。'}
   if(effect.kind==='next' && room(effect.cap,nextBonuses(game)[effect.bonus])<=0)return {available:false,reason:'下一波此项补给已达上限。'}
   if(effect.kind==='enlist' && (nextBonuses(game).enlistPatterns?.length || 0)>=effect.cap)return {available:false,reason:'下一波收编名额已满。'}
   if(effect.kind==='army' && !armyRewardAvailable(game,effect.army))return {available:false,reason:'当前没有可获益的正式军团成员，或已达强化上限。'}
@@ -85,7 +89,8 @@ function makePayload(game,definition) {
   if(effect.kind==='repair')return {amount:effect.amount}
   if(effect.kind==='power')return {amount:Math.min(effect.amount,room(effect.cap,game.upgrades?.power)),cap:effect.cap}
   if(['maxDiscards','maxEnergy'].includes(effect.kind))return {amount:Math.min(effect.amount,room(effect.cap,game[effect.kind])),cap:effect.cap}
-  if(effect.kind==='gateMax')return {amount:Math.min(effect.amount,room(effect.cap,game.maxBaseHp)),repair:effect.repair,cap:effect.cap}
+  if(effect.kind==='gateMax')return {amount:Math.min(effect.amount,room(lifeMaxCap(game),game.maxBaseHp)),repair:effect.repair,cap:lifeMaxCap(game)}
+  if(effect.kind==='buildPassive')return {passiveId:effect.passiveId}
   if(effect.kind==='supply')return {gold:effect.gold,discards:Math.min(effect.discards,room(effect.cap,nextBonuses(game).discards)),cap:effect.cap}
   if(effect.kind==='enlist')return {pattern:effect.pattern}
   if(effect.kind==='next')return {bonus:effect.bonus,amount:Math.min(effect.amount,room(effect.cap,nextBonuses(game)[effect.bonus])),cap:effect.cap}
@@ -141,7 +146,8 @@ function payloadValid(definition,payload) {
   const effect=definition.effect,keys=Object.keys(payload).sort().join(','),amount=Number.isFinite(payload.amount) && payload.amount>0 && payload.amount<=effect.amount
   if(effect.kind==='repair')return keys==='amount' && payload.amount===effect.amount
   if(['power','maxDiscards','maxEnergy'].includes(effect.kind))return keys==='amount,cap' && amount && payload.cap===effect.cap && (effect.kind==='power' || Number.isInteger(payload.amount))
-  if(effect.kind==='gateMax')return keys==='amount,cap,repair' && amount && Number.isInteger(payload.amount) && payload.cap===effect.cap && payload.repair===effect.repair
+  if(effect.kind==='gateMax')return keys==='amount,cap,repair' && amount && Number.isInteger(payload.amount) && [lifeMaxCap('standard'),lifeMaxCap('veteran')].includes(payload.cap) && payload.repair===effect.repair
+  if(effect.kind==='buildPassive')return keys==='passiveId' && payload.passiveId===effect.passiveId
   if(effect.kind==='supply')return keys==='cap,discards,gold' && payload.gold===effect.gold && payload.cap===effect.cap && Number.isInteger(payload.discards) && payload.discards>=0 && payload.discards<=effect.discards
   if(effect.kind==='enlist')return keys==='pattern' && payload.pattern===effect.pattern
   if(effect.kind==='next')return keys==='amount,bonus,cap' && payload.bonus===effect.bonus && payload.cap===effect.cap && amount && (effect.bonus==='firstScorePercent' || Number.isInteger(payload.amount))
@@ -160,6 +166,14 @@ export function isRewardOffer(offer) {
     offer.duration===definition.duration && offer.durationKey===definition.durationKey && offer.description===describe(definition,offer.payload))
 }
 
+/** Convert old saved facts without rerolling their book/item target. */
+export function migrateRewardOffer(game,offer) {
+  const definition=WAVE_REWARD_BY_ID[offer?.id]
+  if(!definition)return null
+  if(['repair','gateMax'].includes(definition.effect.kind) || !offer.payload)return createRewardOffer(game,offer.id,{allowUnavailable:true})
+  return payloadValid(definition,offer.payload)?offerFromPayload(definition,JSON.parse(JSON.stringify(offer.payload))):null
+}
+
 export function rewardAvailability(game,id) {
   if(game.phase!=='shop' || game.rewardChosen || game.rewardState?.claimedId || game.rewardState && game.rewardState.wave!==game.wave)
     return {available:false,reason:'本波补给已领取或尚未开放。'}
@@ -172,13 +186,13 @@ export function rewardAvailability(game,id) {
 export function chooseWaveReward(game,id) {
   if(!rewardAvailability(game,id).available)return false
   const offer=game.rewards.find(reward=>reward.id===id),payload=offer.payload,effect=WAVE_REWARD_BY_ID[id].effect
-  if(effect.kind==='repair')restoreBase(game,payload.amount)
+  if(effect.kind==='repair')restoreBase(game,payload.amount,{source:'reward',sourceId:id})
   else if(effect.kind==='power')game.upgrades.power=Math.min(payload.cap,cleanNumber(game.upgrades.power+payload.amount))
   else if(effect.kind==='maxDiscards')game.maxDiscards=Math.min(payload.cap,game.maxDiscards+payload.amount)
   else if(effect.kind==='maxEnergy') {
     const gain=Math.min(payload.amount,room(payload.cap,game.maxEnergy));game.maxEnergy+=gain;game.energy=Math.min(game.maxEnergy,game.energy+gain)
   } else if(effect.kind==='gateMax') {
-    game.maxBaseHp=Math.min(payload.cap,game.maxBaseHp+payload.amount);restoreBase(game,payload.repair)
+    expandLifeMax(game,payload.amount,{source:'reward',sourceId:id,heal:payload.repair})
   } else if(effect.kind==='supply' || effect.kind==='next' || effect.kind==='enlist') {
     game.waveBonuses ??= {next:{},active:{}};game.waveBonuses.next ??= {}
     const next=game.waveBonuses.next
@@ -194,6 +208,7 @@ export function chooseWaveReward(game,id) {
     // that slot so ownership, purchase gating and persisted stock agree.
     if(!JOKER_BY_ID[payload.itemId].stackable && game.shop.includes(payload.itemId) && !game.soldShop.includes(payload.itemId))game.soldShop.push(payload.itemId)
   } else if(effect.kind==='army') {if(!applyArmyReward(game,payload))return false}
+  else if(effect.kind==='buildPassive'){if(!acquireBuildPassive(game,payload.passiveId))return false}
   else if(effect.kind==='currency') {
     if(payload.gold)gainGold(game,payload.gold)
     if(payload.crystals && gainCrystals(game,payload.crystals)!==payload.crystals)return false

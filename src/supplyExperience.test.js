@@ -14,14 +14,15 @@ function supplies() {
 test('full-health repair explains why it is unavailable and cannot consume the free supply',()=>{
   const game=supplies(),before=snapshotGame(game)
   assert.equal(game.baseHp,game.maxBaseHp)
-  assert.deepEqual(rewardAvailability(game,'repair'),{available:false,reason:'城门耐久已满，无需修复。请选择其他补给。'})
+  assert.equal(rewardAvailability(game,'repair').available,false)
+  assert.match(rewardAvailability(game,'repair').reason,/生命.*满/)
   assert.equal(chooseReward(game,'repair'),false)
   assert.deepEqual(snapshotGame(game),before)
   assert.ok(claimTestReward(game,'supply'))
 })
 
-test('repair restores only missing gate health, is awarded once, and old full-health supply saves stay usable',()=>{
-  const game=supplies();game.baseHp-=7
+test('recovery restores only missing player life, is awarded once, and full-life supply saves stay usable',()=>{
+  const game=supplies();game.baseHp-=1
   assert.ok(rewardAvailability(game,'repair').available)
   assert.ok(claimTestReward(game,'repair'));assert.equal(game.baseHp,game.maxBaseHp)
   const after=snapshotGame(game);assert.equal(chooseReward(game,'power'),false);assert.deepEqual(snapshotGame(game),after)

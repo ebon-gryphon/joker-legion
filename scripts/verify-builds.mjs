@@ -18,7 +18,7 @@ const root=fileURLToPath(new URL('../',import.meta.url))
 const clone=value=>value===undefined?undefined:JSON.parse(JSON.stringify(value))
 const face=card=>card.suit+card.rank
 const cardFact=card=>({id:card.id,face:face(card),slot:card.baseFace || face(card)})
-const budget=g=>({gold:g.gold,crystals:g.crystals,energy:g.energy,hands:g.handsLeft,prints:g.printsLeft})
+const budget=g=>({gold:g.gold,crystals:g.crystals,life:g.baseHp,maxLife:g.maxBaseHp,lifeFailed:!!g.lifeFailed,energy:g.energy,hands:g.handsLeft,prints:g.printsLeft})
 const sumSystem=(report,id,key)=>report?.systems?.find(row=>row.id===id)?.[key] || 0
 const selectedFaces=g=>g.selected.map(id=>cardFact(g.hand.find(card=>card.id===id)))
 const rankGroups=cards=>{
@@ -28,7 +28,7 @@ const rankGroups=cards=>{
 }
 
 export function runBuildStrategy(route,{fixtures=true}={}) {
-  const game=E.createGame({seed:route.seed,doctrine:route.doctrine})
+  const game=E.createGame({seed:route.seed,doctrine:route.doctrine,difficulty:route.difficulty || 'standard'})
   const log={id:route.id,name:route.name,seed:route.seed,doctrine:route.doctrine,difficulty:game.difficulty,economyVersion:game.economyVersion,
     actions:[],turns:[],waves:[],fixtures:[],milestones:{},result:null}
   let capturedCConversion=false,checkpoint=0
@@ -142,7 +142,7 @@ export function runBuildStrategy(route,{fixtures=true}={}) {
   }
   function shop() {
     const offered=game.rewards.filter(item=>E.rewardAvailability(game,item.id).available)
-    const reward=(offered.find(item=>game.baseHp<65 && item.id==='repair') || offered.find(item=>item.id==='supply') || offered[0])?.id
+    const reward=(offered.find(item=>game.baseHp<=3 && item.id==='repair') || offered.find(item=>item.effect?.kind==='buildPassive') || offered.find(item=>item.id==='supply') || offered[0])?.id
     assert.ok(reward,'A genuine random offer must be available')
     act('reward',{id:reward,offers:game.rewards.map(item=>item.id)},()=>E.chooseReward(game,reward))
     const wants=route.id==='a'?['score-chalk','pair-ink']:route.id==='c'?['red-echo','healer-brooch']:['iron-banner']
@@ -183,7 +183,7 @@ export function runBuildStrategy(route,{fixtures=true}={}) {
       assert.ok(ticks<1000,'Battle must reach an actual engine ending')
       log.actions.push({n:log.actions.length+1,wave,phase:'battle',type:'tick',params:{count:ticks,dt:.25},before,after:budget(game)})
       const report=clone(game.lastCombatReport)
-      log.waves.push({afterAction:log.actions.length,wave,phase:game.phase,hp:game.baseHp,report,itemEvents:clone(report?.itemEvents || []),
+      log.waves.push({afterAction:log.actions.length,wave,phase:game.phase,hp:game.baseHp,life:game.baseHp,maxLife:game.maxBaseHp,report,itemEvents:clone(report?.itemEvents || []),
         heartEngineDamage:sumSystem(report,'heart-engine','damage'),redEchoHealing:sumSystem(report,'red-echo','healed')})
       checkpoint++
     }
@@ -191,6 +191,7 @@ export function runBuildStrategy(route,{fixtures=true}={}) {
   }
   assert.ok(['won','lost'].includes(game.phase),'Route must play until an actual win or loss')
   log.result={phase:game.phase,wave:game.wave,wavesCleared:game.stats.wavesCleared,gate:game.baseHp,kills:game.stats.kills,gold:game.gold,crystals:game.crystals,
+    life:game.baseHp,maxLife:game.maxBaseHp,lifeFailed:!!game.lifeFailed,buildPassives:clone(game.buildPassives),
     heartEngineDamage:log.waves.reduce((sum,wave)=>sum+wave.heartEngineDamage,0),redEchoHealing:log.waves.reduce((sum,wave)=>sum+wave.redEchoHealing,0),wavesRecorded:checkpoint}
   log.finalSnapshot=E.snapshotGame(game)
   return log

@@ -1,5 +1,6 @@
 import { SUITS, RANKS, ALLIED } from './campaignRules.js'
 import { recordGateRepair } from './combatStats.js'
+import { healPlayerLife } from './playerLife.js'
 
 export function seedNumber(seed) {
   if (/^\d+$/.test(String(seed)) && Number.isSafeInteger(Number(seed))) return Number(seed) >>> 0
@@ -81,9 +82,10 @@ export const deckFaces = Object.keys(SUITS).flatMap(suit => RANKS.map(rank => su
 
 export function gainGold(game, amount) { game.gold += amount; game.stats.goldEarned += amount }
 
-export function restoreBase(game, amount) {
-  const healed = Math.min(amount, game.maxBaseHp - game.baseHp)
-  if (healed > 0) { game.baseHp += healed; recordGateRepair(game,healed); effect(game, 'heal', 62, 190, `城堡 +${Math.round(healed)}`, '#80d9b0') }
+export function restoreBase(game, amount, source={}) {
+  const healed=healPlayerLife(game,amount,source)
+  if (healed > 0) {recordGateRepair(game,healed);effect(game,'heal',62,190,`生命 +${healed}`,'#80d9b0')}
+  return healed
 }
 
 export function emptyTacticsReport() {

@@ -4,6 +4,8 @@ import { createGame } from './campaign.js'
 import { addUnit } from './campArmy.js'
 import { JOKERS } from './campaignRules.js'
 import { ORDER_BOOK } from './orders.js'
+import {BUILD_PASSIVES,resetBuildWave} from './buildPassives.js'
+import {snapshotGame,restoreGame} from './gameSave.js'
 import {
   WAVE_REWARDS, WAVE_REWARD_BY_ID, CURRENCY_REWARD_IDS, createRewardOffer,
   createRewardShelf, rewardAvailability, chooseWaveReward, chooseReward, isRewardOffer,
@@ -11,16 +13,16 @@ import {
 
 const copy=value=>JSON.parse(JSON.stringify(value))
 function game(seed='REWARD-TEST') {
-  const g=createGame({seed});g.phase='shop';g.baseHp=55;g.rewardChosen=false;g.rewardState={wave:g.wave,claimedId:null}
+  const g=createGame({seed});g.phase='shop';g.baseHp=5;g.rewardChosen=false;g.rewardState={wave:g.wave,claimedId:null}
   addUnit(g,'knight','ally',1);return g
 }
 function offerOnly(g,id) {
   const offer=createRewardOffer(g,id);assert.ok(offer,id);g.rewards=[offer];return offer
 }
 
-test('the independent pool has 24 complete data-driven rewards, the four ordinary IDs and three unrestricted resource directions',()=>{
-  assert.equal(WAVE_REWARDS.length,24)
-  assert.equal(new Set(WAVE_REWARDS.map(row=>row.id)).size,24)
+test('the independent pool has 36 complete rewards including twelve unique build rules and the four ordinary IDs',()=>{
+  assert.equal(WAVE_REWARDS.length,36)
+  assert.equal(new Set(WAVE_REWARDS.map(row=>row.id)).size,36)
   for(const id of ['repair','power','supply','enlist'])assert.ok(WAVE_REWARD_BY_ID[id])
   assert.ok(CURRENCY_REWARD_IDS.length>=3)
   for(const definition of WAVE_REWARDS) {
@@ -50,7 +52,8 @@ test('three weighted draws are deterministic and without replacement across the 
 })
 
 test('full gate, reached caps, maxed books and unobtainable items are excluded, leaving at least three distinct currency fallbacks',()=>{
-  const g=game();g.finalWaveCleared=true;g.baseHp=g.maxBaseHp=200;g.maxEnergy=30;g.maxDiscards=12;g.upgrades.power=1
+  const g=game();g.finalWaveCleared=true;g.baseHp=g.maxBaseHp=24;g.maxEnergy=30;g.maxDiscards=12;g.upgrades.power=1
+  g.buildPassives.ids=BUILD_PASSIVES.map(row=>row.id)
   g.handLevels=Object.fromEntries(Object.keys(ORDER_BOOK).map(key=>[key,3]));g.discoveredHands=Object.keys(ORDER_BOOK)
   g.jokers=JOKERS.map(item=>({...item,quantity:item.stackable?Number.MAX_SAFE_INTEGER:1,triggers:0,flash:0}))
   for(const unit of g.allies){unit.trainingXp=999;unit.rewardModifiers={attackPercent:1,healthPercent:2}}
@@ -77,6 +80,19 @@ test('ordinary enlist is eligible at every wave and final-wave filtering follows
   assert.equal(createRewardOffer(g,'supply'),null)
 })
 
+test('all twelve build rewards share the shelf, are unique for the run and stay owned after save and wave reset',()=>{
+  for(const definition of BUILD_PASSIVES){
+    const g=game('unique-build-pool-'+definition.id)
+    g.rewards=[createRewardOffer(g,definition.id),createRewardOffer(g,'gold-purse'),createRewardOffer(g,'crystal-purse')]
+    assert.ok(chooseWaveReward(g,definition.id));assert.ok(g.buildPassives.ids.includes(definition.id))
+    const before=copy(g);assert.equal(chooseWaveReward(g,definition.id),false);assert.deepEqual(g,before)
+    const loaded=restoreGame(snapshotGame(g));assert.ok(loaded);assert.deepEqual(loaded.buildPassives,g.buildPassives)
+    g.wave++;resetBuildWave(g);g.rewardChosen=false;g.rewardState={wave:g.wave,claimedId:null}
+    assert.equal(createRewardOffer(g,definition.id),null)
+    assert.ok(createRewardShelf(g).every(row=>!g.buildPassives.ids.includes(row.id)))
+  }
+})
+
 test('concrete book and item targets survive serialization and claiming uses no RNG or replacement target',()=>{
   for(const id of ['order-notes','item-cache']) {
     const g=game('fixed '+id),offer=offerOnly(g,id),saved=copy(g),rng=g.rng
@@ -101,7 +117,7 @@ test('concrete book and item targets survive serialization and claiming uses no 
 
 test('the eleven requested base effects and every stronger variant change the intended real state once',()=>{
   const cases={
-    repair:g=>assert.equal(g.baseHp,75),power:g=>assert.equal(g.upgrades.power,.08),
+    repair:g=>assert.equal(g.baseHp,7),power:g=>assert.equal(g.upgrades.power,.08),
     supply:g=>{assert.equal(g.gold,14);assert.equal(g.waveBonuses.next.discards,1)},
     enlist:g=>assert.deepEqual(g.waveBonuses.next.enlistPatterns,['twoPair']),
     'discard-training':g=>assert.equal(g.maxDiscards,4),
@@ -111,7 +127,7 @@ test('the eleven requested base effects and every stronger variant change the in
     'opening-score':g=>assert.equal(g.waveBonuses.next.firstScorePercent,.25),
     'next-discards':g=>assert.equal(g.waveBonuses.next.discards,2),
     'next-prints':g=>assert.equal(g.waveBonuses.next.prints,2),
-    'gate-masonry':g=>{assert.equal(g.maxBaseHp,110);assert.equal(g.baseHp,65)},
+    'gate-masonry':g=>{assert.equal(g.maxBaseHp,14);assert.equal(g.baseHp,7)},
     'crystal-purse':g=>{assert.equal(g.crystals,4);assert.equal(g.stats.crystalsEarned,4)},
     'crystal-chest':g=>assert.equal(g.crystals,8),
     'gold-purse':g=>assert.equal(g.gold,11),'gold-chest':g=>assert.equal(g.gold,20),
@@ -138,7 +154,7 @@ test('partial room is described honestly, and a full-health repair cannot consum
   assert.equal(chooseWaveReward(g,energy.id),true);assert.equal(g.maxEnergy,30);assert.equal(g.energy,13)
   const repair=game();repair.baseHp=repair.maxBaseHp
   repair.rewards=[createRewardOffer(repair,'repair',{allowUnavailable:true}),createRewardOffer(repair,'gold-purse')]
-  assert.deepEqual(rewardAvailability(repair,'repair'),{available:false,reason:'城门耐久已满，无需修复。请选择其他补给。'})
+  assert.deepEqual(rewardAvailability(repair,'repair'),{available:false,reason:'生命已满，无需恢复。请选择其他补给。'})
   assert.equal(chooseWaveReward(repair,'repair'),false);assert.equal(repair.rewardChosen,false)
   assert.equal(chooseWaveReward(repair,'gold-purse'),true)
 })

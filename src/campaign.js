@@ -16,12 +16,16 @@ import { initializeCombatStats, beginCombatStats, finishCombatStats } from './co
 import {ECONOMY_VERSION,ECONOMY_CONFIG,gainCrystals,waveCrystalIncome} from './economy.js'
 import {createRewardShelf} from './waveRewards.js'
 import {emptyWaveBonuses,advanceRewardBonuses} from './rewardModifiers.js'
+import {LIFE_RULES,initialLifeMax,recordLifeEvent} from './playerLife.js'
+import {createBuildState,resetBuildWave} from './buildPassives.js'
 
 export function createGame({ seed = 'JOKER-LEGION', doctrine = 'iron', difficulty = 'standard' } = {}) {
   const selected = DOCTRINES.find(item => item.id === doctrine) || DOCTRINES[0]
   const mode = Object.hasOwn(DIFFICULTIES, difficulty) ? difficulty : 'standard'
-  const castle = DIFFICULTIES[mode].castle
+  const castle = initialLifeMax(mode)
   const game = {
+    lifeVersion:LIFE_RULES.version,lifeFailed:false,lifeEvents:[],lifeItemState:{redEchoUsed:false,flushCrownUsed:false},
+    buildPassives:createBuildState(1),legacyLifeHistory:null,
     economyVersion:ECONOMY_VERSION,crystals:0,crystalIncomeWave:0,lastSettlement:null,finalWaveCleared:false,
     rewardState:{wave:0,claimedId:null},waveBonuses:{next:emptyWaveBonuses(),active:emptyWaveBonuses()},printsBudget:PRINTS_PER_WAVE,
     version: 1, campaignLength:WAVES.length, reserves: [], casualties: [], victorySeen: false, lastField: [], squadRules: 1, champion: null, royalMarch: false, orderRules: 3, discoveredHands: [], cardEdits: {}, printsLeft: PRINTS_PER_WAVE, orderTarget: null, trainedHere: false,
@@ -80,17 +84,23 @@ export function endWave(game) {
 
   game.allies = game.allies.filter(unit => unit.echoUntil == null)
   const repair = copies(game,'gate-rivet')
-  if (repair && game.baseHp < game.maxBaseHp) { restoreBase(game,repair); trigger(game,'gate-rivet','修复城门') }
+  if (repair) { const healed=restoreBase(game,repair,{source:'gate-rivet',sourceId:'gate-rivet'});trigger(game,'gate-rivet','实际恢复 '+healed+' 生命') }
   game.stats.wavesCleared = game.wave
+  recordLifeEvent(game,{kind:'end',source:'wave-clear',sourceId:'wave-'+game.wave})
   finishCombatStats(game,'cleared')
   game.finalWaveCleared=game.wave===WAVES.length
+  if(game.finalWaveCleared){
+    regroupArmy(game);game.phase='won';game.selected=[];game.bossTelegraph=null
+    game.rewards=[];game.shop=[];game.soldShop=[];game.rewardChosen=false;game.rewardState={wave:game.wave,claimedId:null};game.lastSettlement=null
+    log(game,'终幕落定。军团凯旋，剩余生命 '+game.baseHp+'。','epic');effect(game,'burst',500,180,'军团凯旋','#e5c995');return
+  }
   game.phase = 'shop'
   game.selected = []
   game.bossTelegraph = null
   const reward = game.finalWaveCleared?0:8 + game.wave * 2
   if (!game.finalWaveCleared && game.schedule.some(spawn => spawn.type === 'bellkeeper') && game.tacticsReport.tolls === 0) {
     game.tacticsReport.bounty = SILENT_BOUNTY
-    log(game, `止钟赏金 +${SILENT_BOUNTY} · 城门未受钟击`, 'epic')
+    log(game, `止钟赏金 +${SILENT_BOUNTY} · 鸣钟援军未出现`, 'epic')
   }
   const wages = game.finalWaveCleared?0:copies(game,'field-pay')
   gainGold(game, reward + game.tacticsReport.bounty + wages)
@@ -125,8 +135,7 @@ export function regroupArmy(game) {
 }
 
 export function nextWave(game) {
-  if (game.phase !== 'shop' || !game.rewardChosen || game.wave > WAVES.length) return false
-  if(game.wave===WAVES.length){game.phase='won';game.selected=[];game.bossTelegraph=null;log(game,'终幕落定。你的军团守住了这座城。','epic');effect(game,'burst',500,180,'军团凯旋','#e5c995');return true}
+  if (game.phase !== 'shop' || !game.rewardChosen || game.wave >= WAVES.length) return false
   advanceRewardBonuses(game)
   game.reserveUsed = false
   game.preparedScore = 0
@@ -136,6 +145,7 @@ export function nextWave(game) {
   game.paidHandsLeft = 0
   game.legacyFieldSize = game.allies.length > FIELD_LIMIT ? game.allies.length : 0
   game.wave++
+  game.lifeEvents=[];game.lifeItemState={redEchoUsed:false,flushCrownUsed:false};resetBuildWave(game)
   game.royalMarch = false
   game.lastField = []
   game.victorySeen = false

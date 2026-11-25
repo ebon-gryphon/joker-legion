@@ -9,7 +9,7 @@ export const ONBOARDING_STEPS = [
   {id:'w1-shield',wave:1,title:'把列盾发给前排',body:'打出对子时，把受令部队选为铁卫，让前排获得护盾。招来的牧师和受令的部队可以不同。',target:'orders',actionLabel:'查看战令'},
   {id:'w2-trick',wave:2,title:'试一次你的小丑戏法',body:'每位小丑每波有一次专属戏法，施放时机和目标各不相同。',target:'trick',actionLabel:'查看角色戏法'},
   {id:'w3-formation',wave:3,title:'按来敌调整阵型或站位',body:'这一波有鸣钟使。查看军情，用猎手阵优先打击后排，或拖动士兵，让近战在前、治疗与远程在后。',target:'brief',actionLabel:'查看军情与阵型'},
-  {id:'w3-bell',wave:3,title:'战前备好止钟令',body:'出战前打出对子或更高牌型，可让军团自动打断第一次钟击。开战后不能再补发战令。',target:'orders',actionLabel:'准备止钟令'},
+  {id:'w3-bell',wave:3,title:'战前备好止钟令',body:'鸣钟使会召唤流寇援军。出战前打出对子或更高牌型，可自动打断第一次召唤。开战后不能再补发战令。',target:'orders',actionLabel:'准备止钟令'},
 ]
 const stepIds = ONBOARDING_STEPS.map(step=>step.id)
 const statuses = ['active','skipped','complete']

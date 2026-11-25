@@ -4,20 +4,25 @@ import * as E from './engine.js'
 import {endWave,regroupArmy} from './campaign.js'
 import {applyArmyReward,emptyWaveBonuses} from './rewardModifiers.js'
 import {WAVE_REWARDS} from './waveRewards.js'
+import {resetBuildWave} from './buildPassives.js'
+import {JOKER_BY_ID} from './campaignRules.js'
 
 const oldSnapshot=game=>{
   const s=E.snapshotGame(game)
   for(const key of ['economyVersion','crystals','crystalIncomeWave','lastSettlement','finalWaveCleared','rewardState','waveBonuses','printsBudget'])delete s[key]
   delete s.stats.crystalsEarned
+  for(const key of ['lifeVersion','lifeFailed','lifeEvents','lifeItemState','buildPassives','legacyLifeHistory'])delete s[key]
+  s.baseHp=s.maxBaseHp=100
   return s
 }
 const cleared=(wave=1)=>{
-  const g=E.createGame({seed:'reward-integration-'+wave});g.wave=wave
+  const g=E.createGame({seed:'reward-integration-'+wave});g.wave=wave;resetBuildWave(g)
   E.addUnit(g,'knight','ally',2);E.beginBattle(g);endWave(g);return g
 }
-test('every clear pays configured separate crystals exactly once, including the terminal reward shelf',()=>{
+test('nonterminal clears pay once and the final clear directly wins without a reward shelf',()=>{
   for(const wave of [1,5,6,10,12]){
     const g=cleared(wave),income=wave%5===0?10:5
+    if(wave===12){assert.equal(g.phase,'won');assert.equal(g.crystals,0);assert.deepEqual(g.rewards,[]);assert.deepEqual(g.shop,[]);assert.equal(E.nextWave(g),false);continue}
     assert.equal(g.crystals,income);assert.equal(g.stats.crystalsEarned,income)
     assert.equal(g.lastSettlement.crystals.total,income);assert.equal(g.lastCombatReport.economy.crystals.total,income)
     assert.equal(g.lastSettlement.crystals.bonus,wave%5===0?5:0)
@@ -86,9 +91,15 @@ test('legacy ready and claimed/unclaimed shops migrate once with five crystals a
   }
 })
 test('a free unique item also offered by the merchant closes its slot and remains resumable',()=>{
-  const g=E.createGame({seed:69});E.addUnit(g,'knight','ally',1);E.beginBattle(g);endWave(g)
+  let g
+  for(let seed=0;seed<500;seed++){
+    const candidate=E.createGame({seed});E.addUnit(candidate,'knight','ally',1);E.beginBattle(candidate);endWave(candidate)
+    const gift=candidate.rewards.find(row=>row.id==='item-cache')
+    if(gift && !JOKER_BY_ID[gift.payload.itemId].stackable && candidate.shop.includes(gift.payload.itemId)){g=candidate;break}
+  }
+  assert.ok(g,'a deterministic overlapping free-item shelf exists')
   const gift=g.rewards.find(row=>row.id==='item-cache')
-  assert.equal(gift.payload.itemId,'royal-command');assert.ok(g.shop.includes(gift.payload.itemId))
+  assert.ok(g.shop.includes(gift.payload.itemId))
   const gold=g.gold,crystals=g.crystals;assert.ok(E.chooseReward(g,gift.id))
   assert.equal(g.gold,gold);assert.equal(g.crystals,crystals);assert.ok(g.soldShop.includes(gift.payload.itemId))
   assert.equal(E.buyJoker(g,gift.payload.itemId),false)

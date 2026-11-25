@@ -11,6 +11,7 @@ import { campSlots, inCampArea } from './formation.js'
 import { mergePreview, mergeWarning, materialIdentity, FUSION_COST, FUSION_BY_ID } from './forge.js'
 import { professionId, professionName, fusionProfessionNames } from './professionFusion.js'
 import { isBoss } from './bossRules.js'
+import {syncBuildUnitStats} from './buildPassives.js'
 
 export function recruitIdentity(card, level, source = 'card') {
   const design = getCardDesign(card)
@@ -161,6 +162,7 @@ export function addUnit(game, type, side, level = 1, { identity, reserve = false
       grantExperience(game,unit,game.champion.xp)
     }
     game.stats.summoned++
+    syncBuildUnitStats(game,unit,{reason:'新兵按已拥有的构筑被动结算永久攻疗'})
   }
   return unit
 }
@@ -222,6 +224,7 @@ export function forgeUnit(game, leaderId, donorId, kind) {
   if (!result || game.gold < cost) return false
   const leader = [...game.allies, ...game.reserves].find(unit => unit.id === leaderId)
   const donor = [...game.allies, ...game.reserves].find(unit => unit.id === donorId)
+  const previousBuildStats=leader.buildPassiveStats
   game.gold -= cost
   Object.assign(leader, result)
   if (game.champion?.unitId === donorId) game.champion = null
@@ -256,6 +259,7 @@ export function forgeUnit(game, leaderId, donorId, kind) {
     game.fusions++
     log(game, `${leader.name}转职${recipe.name} · 习得${recipe.skill}`, 'epic')
   }
+  syncBuildUnitStats(game,leader,{previous:previousBuildStats,reason:'正式融合或升星后同步永久加成；未重复继承副兵加成'})
   if (game.phase === 'ready') arrangeCamp(game)
   return true
 }

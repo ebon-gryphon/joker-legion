@@ -5,6 +5,7 @@ import { createGame, setFormation, waveSchedule, deploy, previewHand, beginBattl
 import { scoutWave, nextChime, tollDamage, BELL_INTERVAL, BELL_WINDUP, SILENT_BOUNTY, HOSTILE } from './tactics.js'
 import { ENEMY_CATALOG, enemyFrame } from './enemyCatalog.js'
 import { getSpriteFrame } from './spriteAtlas.js'
+import { resetBuildWave } from './buildPassives.js'
 
 test('every enemy matches its field guide portrait and the king changes pose exactly at half health', () => {
   assert.deepEqual(Object.keys(ENEMY_CATALOG), Object.keys(HOSTILE))
@@ -36,6 +37,7 @@ function practice(formation, enemies, prepare = () => {}) {
   fixtureCompany(game, 'knight'); fixtureCompany(game, 'ranger')
   game.allies = ['knight','ranger','healer'].map(type => game.allies.find(u => u.type === type))
   game.wave = 3
+  resetBuildWave(game)
   prepare(game)
   game.schedule = enemies.map(type => ({ at: 0, type })); assert.ok(beginBattle(game))
   tick(game, 1 / 30)
@@ -47,7 +49,7 @@ function practice(formation, enemies, prepare = () => {}) {
 test('shop scouting is deterministic before purchases and matches the next actual schedule in both difficulties', () => {
   for (const difficulty of ['standard', 'veteran']) {
     const game = createGame({ seed: 'route', difficulty })
-    assert.equal(game.maxBaseHp, difficulty === 'standard' ? 100 : 75)
+    assert.equal(game.maxBaseHp, difficulty === 'standard' ? 12 : 8)
     game.wave = 2; game.phase = 'shop'; game.gold = 40; game.rewardChosen = 'power'
     const forecast = waveSchedule(game.seed, 3, difficulty)
     const snapshot = snapshotGame(game)
@@ -135,7 +137,7 @@ test('a legal pair interrupts the earliest active bell once and a mid-cast save 
   assert.deepEqual(snapshotGame(game), snapshotGame(restored))
 })
 
-test('an unaffordable pair cannot interrupt, high card deploys without interrupting, and a toll can end a run', () => {
+test('an unaffordable pair cannot interrupt, high card cannot prepare one, and a toll summons a real raider without direct life loss', () => {
   const game=practice('guard',['bellkeeper'],camp=>{
     takeCards(camp,['♥J','♣J']);camp.energy=1
     assert.equal(deploy(camp),false);assert.equal(camp.bellReady,false)
@@ -146,10 +148,13 @@ test('an unaffordable pair cannot interrupt, high card deploys without interrupt
   assert.equal(game.tacticsReport.interrupts,0)
   game.baseHp = 7; game.enemies[0].bellTimer = .01
   tick(game, 1/30)
-  assert.equal(game.tacticsReport.gateDamage, 7)
-  assert.ok(7 < tollDamage(3))
+  assert.equal(game.tacticsReport.gateDamage,0)
+  assert.equal(tollDamage(3),0)
   assert.equal(game.tacticsReport.tolls, 1)
-  assert.equal(game.phase, 'lost')
+  assert.equal(game.baseHp,7);assert.equal(game.phase,'battle')
+  const reinforcement=game.enemies.find(unit=>unit.summonedBy==='bellkeeper')
+  assert.ok(reinforcement);assert.equal(reinforcement.type,'raider')
+  assert.equal(reinforcement.bellSourceId,game.enemies.find(unit=>unit.type==='bellkeeper').id)
   assert.ok(restoreGame(snapshotGame(game)))
 })
 
@@ -160,6 +165,8 @@ test('killing a casting bell cancels its attack and pays a silent bounty once, o
     const caster = game.enemies[0]
     caster.bellTimer = silent ? BELL_WINDUP : .01
     if (!silent) tick(game,1/30)
+    const reinforcement=game.enemies.find(unit=>unit.summonedBy==='bellkeeper')
+    if(!silent){assert.ok(reinforcement);reinforcement.hp=0}
     const gold = game.gold, hp = game.baseHp
     caster.hp = 0
     tick(game,1/30)

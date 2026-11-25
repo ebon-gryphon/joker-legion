@@ -1,6 +1,22 @@
-import { copies, owns, spendCharge, trigger, effect } from './gameState.js'
+import { copies, owns, spendCharge, trigger, effect, restoreBase } from './gameState.js'
 import { waveChange } from './standingArmy.js'
 import { scoreContributionRows } from './itemTrace.js'
+import { lifeItemPreview, LIFE_RULES } from './playerLife.js'
+export { lifeItemPreview } from './playerLife.js'
+
+export function applyLifeRecruitItems(game,hand) {
+  game.lifeItemState ??= {redEchoUsed:false,flushCrownUsed:false}
+  const result={}
+  for(const key of ['redEchoLife','flushCrownLife']) {
+    const preview=lifeItemPreview(game,hand)[key]
+    if(!preview.available){result[key]={...preview,consumed:false};continue}
+    game.lifeItemState[preview.stateKey]=true
+    const restored=restoreBase(game,LIFE_RULES.itemHeal,{source:preview.id,sourceId:preview.id})
+    result[key]={...preview,restored,consumed:true,
+      reason:restored>0?'首次满足条件，实际恢复 '+restored+' 点生命。':'首次满足条件，但生命已满；本波恢复机会已消耗，实际恢复 0。'}
+  }
+  return result
+}
 
 export function scoreItemChips(game, scoring, key, containsPair) {
   return scoreContributionRows(game,scoring,key,containsPair).reduce((sum,row)=>sum+row.delta,0)

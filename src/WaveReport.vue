@@ -2,6 +2,8 @@
 import { computed } from 'vue'
 import KeyMark from './KeyMark.vue'
 import EconomySummary from './EconomySummary.vue'
+import LifeReport from './LifeReport.vue'
+import {BUILD_PASSIVE_BY_ID} from './buildPassives.js'
 import { FUSION_BY_ID } from './forge.js'
 import { REGIMENTS } from './orders.js'
 import { FORMATION_BY_ID } from './tactics.js'
@@ -13,15 +15,17 @@ const rounded=n=>Math.round(n || 0)
 const regiment=type=>REGIMENTS[type]?.name || type
 const itemGroups=computed(()=>itemEventGroups(props.combat))
 const itemEventCount=computed(()=>itemGroups.value.reduce((count,group)=>count+group.events.length,0))
-const gateSources=computed(()=>gateSourceRows(props.combat))
-const outcomeText=computed(()=>props.finalSettlement==='claim'?'末波已守住，请先免费领取一项补给，再进入商店。':props.finalSettlement==='finish'?'末波已守住，补给已领取，可在商店完成远征。':runOutcomeText(props.combat))
+const gateSources=computed(()=>gateSourceRows(props.combat?.legacyGate?{gate:props.combat.legacyGate}:props.combat))
+const outcomeText=computed(()=>runOutcomeText(props.combat))
+const modernLife=computed(()=>props.combat?.lifeVersion===1)
+const noFinalIncome=computed(()=>modernLife.value && props.combat?.runOutcome?.status==='victory')
 const highlights=computed(()=>deriveReportHighlights(props.combat,{liveEvents:props.liveEvents}))
 const shownFormation=computed(()=>props.combat ? FORMATION_BY_ID[props.combat.formation]?.name || '阵型未记录' : props.formation)
 const shownTactics=computed(()=>props.combat ? props.combat.tacticsReport || {} : props.tactics)
 const shownUses=computed(()=>props.combat ? props.combat.fusionUses || {} : props.uses)
 const legacyReport=computed(()=>props.combat ? Object.entries(props.combat.regimentReport || {}).map(([type,row])=>({type,label:regiment(type),damage:rounded(row.damage),healed:rounded(row.healed)})) : props.report)
 const gateView=computed(()=> {
-  const gate=props.combat?.gate
+  const gate=props.combat?.legacyGate || (props.combat?.lifeVersion!==1?props.combat?.gate:null)
   if(!gate) return null
   const battle=gate.battleStart!==null
   return {start:battle?gate.battleStart:gate.start,end:gate.end,battle,
@@ -35,17 +39,19 @@ const gateView=computed(()=> {
   <details :open="expanded" v-if="expanded || combat || report.length || Object.keys(shownUses).length || shownTactics.tolls || shownTactics.interrupts" class="field-report">
     <summary class="key-disclosure"><KeyMark name="order"/>本波战报 · {{ combat?'士兵贡献':'各兵种贡献' }}</summary>
     <template v-if="combat">
-      <p class="report-overview"><b>{{ combat.result==='lost'?'城门失守':combat.ended?'本波守住':'本波记录' }}</b><span>{{ combat.battleDuration===undefined?'已记录交战':'交战总时长' }} {{ (combat.battleDuration ?? combat.duration).toFixed(1) }} 秒<template v-if="combat.battleDuration===undefined">（旧口径）</template></span><span>剩余军令 {{ rounded(combat.energyLeft) }}</span></p>
-      <p class="report-gate">{{ gateView.battle ? (combat.partial?'续档后城门':'交战城门') : '备战城门' }} {{ rounded(gateView.start) }} → {{ rounded(gateView.end) }}<span><template v-if="gateView.partitioned">交战损伤 {{ rounded(gateView.damage) }} · 交战修复 {{ rounded(gateView.repaired) }} · </template>{{ gateView.netLoss<0?'净恢复':'净损失' }} {{ rounded(Math.abs(gateView.netLoss)) }}</span><span v-if="gateView.battle && (combat.gate.start!==combat.gate.battleStart || combat.gate.preparationRepaired)">备战城门 {{ rounded(combat.gate.start) }} → {{ rounded(combat.gate.battleStart) }}<template v-if="combat.gate.preparationRepaired!==undefined"> · 备战修复 {{ rounded(combat.gate.preparationRepaired) }}</template><template v-else> · 净变化 {{ rounded(combat.gate.battleStart-combat.gate.start) }}</template></span><span v-if="gateView.battle && !gateView.partitioned">旧记录整波损伤 {{ rounded(combat.gate.damage) }} · 修复 {{ rounded(combat.gate.repaired) }}（含备战）</span></p>
+      <p class="report-overview"><b>{{ combat.result==='lost'?'远征失守':combat.ended?'本波守住':'本波记录' }}</b><span>{{ combat.battleDuration===undefined?'已记录交战':'交战总时长' }} {{ (combat.battleDuration ?? combat.duration).toFixed(1) }} 秒<template v-if="combat.battleDuration===undefined">（旧口径）</template></span><span>剩余军令 {{ rounded(combat.energyLeft) }}</span></p>
+      <LifeReport v-if="modernLife" :combat="combat"/>
+      <p v-if="gateView" class="report-gate"><b>旧制防线记录（不换算、不重复计入红心生命）</b><span>旧制数值 {{ rounded(gateView.start) }} → {{ rounded(gateView.end) }}</span><span v-if="gateView.partitioned">旧制损失 {{ rounded(gateView.damage) }} · 旧制恢复 {{ rounded(gateView.repaired) }}</span><span v-if="!gateView.partitioned">旧制整波损失 {{ rounded((combat.legacyGate || combat.gate).damage) }} · 恢复 {{ rounded((combat.legacyGate || combat.gate).repaired) }}（含备战）</span></p>
       <p v-if="combat.partial" class="report-caveat">其中记录了 {{ combat.duration.toFixed(1) }} 秒的贡献，早先数据没有分配给个人。</p>
-      <p v-if="Math.abs(combat.gate.untracked)>.01" class="report-caveat">城门另有 {{ rounded(Math.abs(combat.gate.untracked)) }} 点未分类变化。</p>
+      <p v-if="!modernLife && Math.abs(combat.gate?.untracked || 0)>.01" class="report-caveat">旧制另有 {{ rounded(Math.abs(combat.gate.untracked)) }} 点未分类变化，不计入新生命事件。</p>
       <p v-if="outcomeText" class="report-run-outcome">{{ outcomeText }}</p>
-      <EconomySummary v-if="combat.ended" :settlement="combat.economy"/>
+      <EconomySummary v-if="combat.ended" :settlement="noFinalIncome?null:combat.economy" :empty-text="noFinalIncome?'终幕直接胜利，不再发放波后收入。':combat.result==='lost'?'本波未守住，没有波后结算收入。':undefined"/>
       <details v-if="highlights.length" class="report-payoffs"><summary class="key-disclosure">关键兑现 · 只读实际记录</summary>
         <p v-for="item in highlights" :key="item.id"><strong>{{ item.label }}</strong><span>{{ item.detail }}</span></p>
         <small>只作归纳，不另加分、不重复计伤害，也不把战团总收益归给单独一手。</small>
       </details>
-      <details class="report-gate-sources"><summary class="key-disclosure">城门损伤来源</summary><p v-if="gateSources===null" class="report-caveat">这份旧记录没有保存损伤来源分类。</p><p v-else-if="!gateSources.length">本波没有已记录的城门损伤。</p><p v-for="source in gateSources || []" :key="source.id">{{ source.label }} <b>{{ rounded(source.amount) }}</b></p><small>按实际损伤分类，修复量在上方另列。</small></details>
+      <details v-if="gateView" class="report-gate-sources"><summary class="key-disclosure">旧制损失来源</summary><p v-if="gateSources===null" class="report-caveat">这份旧记录没有保存来源分类。</p><p v-else-if="!gateSources.length">旧制没有已记录的损失。</p><p v-for="source in gateSources || []" :key="source.id">{{ source.label }} <b>{{ rounded(source.amount) }}</b></p><small>仅回看旧制事实，不再扣除或恢复当前红心生命。</small></details>
+      <details v-if="combat.passiveEvents?.length" class="report-passive-events"><summary class="key-disclosure">构筑被动实际触发 · {{ combat.passiveEvents.length }} 条</summary><ol><li v-for="(event,index) in combat.passiveEvents" :key="event.eventId || index" :data-passive-event="event.id"><strong>{{ Number(event.at || 0).toFixed(1) }} 秒 · {{ BUILD_PASSIVE_BY_ID[event.id]?.name || event.id }} · {{ event.triggered?(event.effective?'已生效':'触发但无收益'):'未触发' }}</strong><p>{{ event.reason }}</p><small>{{ actualEffectText(event.effects) }}</small></li></ol><small>读取原触发记录；最终分与战令的合计结果不重复相加。</small></details>
       <table class="personal-report">
         <caption>个人贡献 · 伤害与承伤按生命损失计，治疗不计溢出</caption>
         <thead><tr><th scope="col">士兵</th><th scope="col">伤害</th><th scope="col">治疗</th><th scope="col">承伤</th><th scope="col">击杀</th></tr></thead>
@@ -60,7 +66,7 @@ const gateView=computed(()=> {
       <div v-if="combat.majorOrders.length" class="order-report"><strong>主要战令</strong><p v-for="order in combat.majorOrders" :key="order.key+'/'+order.target+'/'+order.secondary">{{ order.name }} → {{ regiment(order.target) }}<template v-if="order.secondary"> / {{ regiment(order.secondary) }}</template><span>×{{ order.count }} · 消耗 {{ order.cost }} 军令</span></p><small>含战前出牌；免费加购的出牌按实际军令消耗计。</small></div>
       <details class="report-item-events"><summary class="key-disclosure">本波计分与搭档事件 <small v-if="itemGroups.length">· {{ itemEventCount }} 条</small></summary><p v-if="!combat.itemEvents" class="report-caveat">这份旧记录没有保存道具事件。</p><p v-else-if="!itemGroups.length">本波尚无道具事件记录。</p><div v-for="group in itemGroups" :key="group.id" class="report-item-group" :data-item-history="group.id"><strong>{{ group.name }}</strong><span>触发 {{ group.triggers }} 次 · 产生收益 {{ group.effective }} 次</span><p>{{ actualEffectText(group.effects) }}</p><details class="report-item-timeline"><summary class="key-disclosure">查看 {{ group.events.length }} 条条件与实际结果</summary><ol><li v-for="event in group.events" :key="event.index"><b>{{ event.phase==='ready'?(event.orderOrdinal===null?'战前':'本局第 '+event.orderOrdinal+' 手（战前）'):event.at.toFixed(1)+' 秒' }} · {{ event.triggered?(event.effective?'生效':'触发但无收益'):'未触发' }}</b><p>{{ event.reason }}</p><small>{{ actualEffectText(event.effects) }}</small></li></ol></details></div><small v-if="itemGroups.length">这里的伤害与治疗已包含在上方贡献统计中。</small></details>
     </template>
-    <p class="report-skills"><strong>{{ shownFormation }}</strong><span v-if="shownTactics.prevented">减免 {{ Math.round(shownTactics.prevented) }} 伤害</span><span v-if="shownTactics.extraDamage">集火追加 {{ Math.round(shownTactics.extraDamage) }} 伤害</span><span v-if="shownTactics.interrupts">战令止钟 {{ shownTactics.interrupts }} 次</span><span v-if="shownTactics.tolls">城门受钟击 {{ shownTactics.tolls }} 次，损失 {{ shownTactics.gateDamage }} 耐久</span></p>
+    <p class="report-skills"><strong>{{ shownFormation }}</strong><span v-if="shownTactics.prevented">减免 {{ Math.round(shownTactics.prevented) }} 伤害</span><span v-if="shownTactics.extraDamage">集火追加 {{ Math.round(shownTactics.extraDamage) }} 伤害</span><span v-if="shownTactics.interrupts">战令止钟 {{ shownTactics.interrupts }} 次</span><span v-if="shownTactics.tolls">{{ modernLife?'鸣钟召唤记录':'旧制钟击记录' }} {{ shownTactics.tolls }} 次<template v-if="!modernLife"> · 旧制损失 {{ shownTactics.gateDamage }}</template></span></p>
     <table v-if="!combat">
       <thead><tr><th>兵种</th><th>直接伤害</th><th>有效治疗</th></tr></thead>
       <tbody><tr v-for="row in legacyReport" :key="row.type"><th>{{ row.label }}</th><td>{{ row.damage }}</td><td>{{ row.healed }}</td></tr></tbody>

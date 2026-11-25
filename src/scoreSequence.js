@@ -1,6 +1,6 @@
 /** Read-only timing for an already accepted score trace. Nothing here awards a score. */
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,v))
-const weights={base:1,card:.65,item:.85,multiply:1.25,scoreBonus:.85,outcome:.85,order:.85,relic:.9,hand:1.1,final:2}
+const weights={base:1,card:.65,item:.85,passive:.9,multiply:1.25,scoreBonus:.85,outcome:.85,order:.85,relic:.9,hand:1.1,final:2}
 const highHands=new Set(['fullHouse','four','straightFlush','five','flushHouse','flushFive'])
 const unique=values=>[...new Set(values)]
 function cinematicWeight(step){

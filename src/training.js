@@ -1,6 +1,7 @@
 import { lastingStat } from './standingArmy.js'
 import { log } from './gameState.js'
 import { gradeOf } from './quality.js'
+import {withBuildStatMutation} from './buildPassives.js'
 export const VETERAN_MARKS = [0, 3, 8, 15, 25, 40, 60]
 export const veteranLevel = xp => VETERAN_MARKS.filter(mark => (xp || 0) >= mark).length
 export function trainingProgress(xp = 0) {
@@ -50,6 +51,9 @@ export function earnedTraining(unit, wave) {
 
 export function grantExperience(game, unit, amount, announce = true) {
   if (!amount || !unit) return
+  return withBuildStatMutation(game,unit,()=>grantExperienceBase(game,unit,amount,announce))
+}
+function grantExperienceBase(game, unit, amount, announce) {
   const xp = unit.trainingXp || 0
   const next = Math.min(999, xp + amount)
   const before = trainingBonus(xp, game.wave), after = trainingBonus(next, game.wave)
@@ -81,6 +85,9 @@ export function advanceChampion(game, unit) {
   captain.marks = Math.min(5,captain.marks + 1)
   const level = captain.marks >= 5 ? 3 : captain.marks >= 2 ? 2 : 1
   if (level <= captain.level) return
+  return withBuildStatMutation(game,unit,()=>advanceChampionStats(game,unit,captain,level))
+}
+function advanceChampionStats(game,unit,captain,level) {
   const factor = (1 + (level - 1) * .34) / (1 + (unit.level - 1) * .34)
   for (const key of ['maxHp','atk','heal']) {
     const base = lastingStat(unit,key)

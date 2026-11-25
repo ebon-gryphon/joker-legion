@@ -12,7 +12,7 @@ import {
 import { deckFaces, slotOf, faceOf, emptyTacticsReport, log } from './gameState.js'
 import { REGIMENTS, ORDER_BOOK, MAX_ORDER_LEVEL } from './orders.js'
 import { shiftedRank, extraHandPrice } from './deck.js'
-import { HOSTILE, FORMATION_BY_ID, SILENT_BOUNTY, BELL_INTERVAL } from './tactics.js'
+import { HOSTILE, FORMATION_BY_ID, SILENT_BOUNTY, BELL_INTERVAL,DIFFICULTIES } from './tactics.js'
 import { QUALITIES } from './quality.js'
 import { FUSION_BY_ID } from './forge.js'
 import { validFusionJobs } from './professionFusion.js'
@@ -25,8 +25,10 @@ import { BOSS_SKILLS, isBoss } from './bossRules.js'
 import { validCombatStats, migrateCombatStats, discardInvalidScoreMetadata } from './combatStats.js'
 import { validOnboarding, migrateOnboarding } from './onboarding.js'
 import {ECONOMY_VERSION,ECONOMY_CONFIG} from './economy.js'
-import {isRewardOffer,createRewardShelf,WAVE_REWARDS} from './waveRewards.js'
+import {isRewardOffer,createRewardShelf,createRewardOffer,migrateRewardOffer,WAVE_REWARDS} from './waveRewards.js'
 import {emptyWaveBonuses} from './rewardModifiers.js'
+import {LIFE_RULES,initialLifeMax,lifeMaxCap} from './playerLife.js'
+import {createBuildState,validBuildState,validBuildUnitStats,buildUnitPercent} from './buildPassives.js'
 
 const RESERVED = new Set(['__proto__', 'constructor', 'prototype'])
 
@@ -45,9 +47,10 @@ export function restoreGame(snapshot) {
   // Never merge persisted data into live objects; whitelist and validate a full snapshot.
   try {
     const data = typeof snapshot === 'string' ? JSON.parse(snapshot) : JSON.parse(JSON.stringify(snapshot))
+    if(data?.lifeVersion===undefined && !prepareLegacyLife(data))return null
     discardInvalidScoreMetadata(data)
     if (!validExpedition(data) || !validDeck(data) || !validHandAndTricks(data) ||
-        !validArmies(data) || !validWave(data) || !validResources(data) || !validProgress(data) || !validRewardEconomy(data)) return null
+        !validArmies(data) || !validWave(data) || !validResources(data) || !validProgress(data) || !validRewardEconomy(data) || !validLifeBuild(data)) return null
     return migrateExpedition(data)
   } catch { return null }
 }
@@ -60,8 +63,74 @@ function validExpedition(data) {
   for (const key of ['baseHp', 'maxBaseHp', 'energy', 'maxEnergy', 'gold', 'time', 'waveTime', 'rng', 'sequence', 'accumulator', 'deployCooldown', 'discardCooldown', 'discards', 'waveKills', 'waveSpawned', 'spawnIndex', 'energyRegen']) {
     if (!Number.isFinite(data[key]) || data[key] < 0) return false
   }
-  if (data.baseHp > data.maxBaseHp || data.maxBaseHp > 200 || data.energy > data.maxEnergy || data.maxEnergy > 30 || data.gold > Number.MAX_SAFE_INTEGER || data.sequence > 1e9 || data.energyRegen > 10 || data.accumulator >= STEP + 1e-6 || data.spawnIndex > data.schedule?.length) return false
+  if (data.baseHp > data.maxBaseHp || data.maxBaseHp > lifeMaxCap(data) || data.energy > data.maxEnergy || data.maxEnergy > 30 || data.gold > Number.MAX_SAFE_INTEGER || data.sequence > 1e9 || data.energyRegen > 10 || data.accumulator >= STEP + 1e-6 || data.spawnIndex > data.schedule?.length) return false
   return true
+}
+
+function prepareLegacyLife(data) {
+  if(!data || !Number.isFinite(data.baseHp) || !Number.isFinite(data.maxBaseHp) || data.maxBaseHp<=0 || data.maxBaseHp>200 || data.baseHp<0 || data.baseHp>data.maxBaseHp)return false
+  const oldHp=data.baseHp,oldMax=data.maxBaseHp,oldBase=data.difficulty==='veteran'?75:100
+  const increments=Math.max(0,Math.floor((oldMax-oldBase)/10))
+  const nextMax=Math.min(lifeMaxCap(data),initialLifeMax(data.difficulty)+increments*LIFE_RULES.expansion)
+  const active=['ready','battle','shop'].includes(data.phase)
+  const mapped=Math.min(oldHp<oldMax?nextMax-1:nextMax,Math.ceil(oldHp/oldMax*nextMax))
+  data.baseHp=Math.min(nextMax,Math.max(active?1:0,mapped))
+  data.maxBaseHp=nextMax;data.lifeVersion=LIFE_RULES.version;data.lifeFailed=data.phase==='lost'
+  if(data.lifeFailed)data.baseHp=0
+  const oldOrders=data.combatLedger?.orders || []
+  const scoring=order=>order.scoreTrace?.scoringCards || []
+  data.lifeItemState={redEchoUsed:oldOrders.some(order=>scoring(order).filter(c=>c.suit==='♥').length>=2),
+    flushCrownUsed:oldOrders.some(order=>scoring(order).length===5 && scoring(order).every(c=>c.suit===scoring(order)[0].suit))}
+  data.lifeEvents=[];data.buildPassives=createBuildState(data.wave)
+  data.legacyLifeHistory={version:0,oldHp,oldMax,mappedLife:data.baseHp,mappedMax:nextMax,
+    gate:JSON.parse(JSON.stringify(data.combatLedger?.gate || data.lastCombatReport?.gate || null)),timeout:data.waveTimeout || null,
+    tactics:JSON.parse(JSON.stringify(data.tacticsReport || null)),
+    logs:(data.logs || []).filter(row=>/城门|城堡|耐久|钟击/.test(row.text || ''))}
+  data.logs=(data.logs || []).map(row=>/城门|城堡|耐久|钟击/.test(row.text || '')?{...row,text:'旧制记录 · '+row.text.replace(/城门耐久|城门|城堡|耐久/g,'原防线')}:row)
+  data.waveTimeout=null
+  for(const container of [data.combatLedger,data.lastCombatReport])for(const order of container?.orders || [])if(order.scoreTrace)order.scoreTrace.legacyLife=true
+  if(data.lastDeploy?.scoreTrace)data.lastDeploy.scoreTrace.legacyLife=true
+  if(data.combatLedger && !data.combatLedger.ended){
+    const ledger=data.combatLedger;ledger.legacyGate=JSON.parse(JSON.stringify(ledger.gate))
+    ledger.lifeVersion=1;ledger.lifeStart=data.baseHp;ledger.lifeMaxStart=data.maxBaseHp;ledger.lifeEvents=[];ledger.passiveEvents=[]
+    ledger.gate={start:data.baseHp,battleStart:ledger.started?data.baseHp:null,end:data.baseHp,damage:0,repaired:0,untracked:0,
+      preparationDamage:0,preparationRepaired:0,battleDamage:0,battleRepaired:0,sources:{bell:0,breach:0,timeout:0,unknown:0}}
+    if(data.tacticsReport)data.tacticsReport.gateDamage=0
+  }
+  if(data.phase==='shop' && data.wave===WAVES.length && data.stats?.wavesCleared===WAVES.length){
+    data.legacyLifeHistory.rewards=data.rewards;data.phase='won';data.finalWaveCleared=true
+    data.rewards=[];data.shop=[];data.soldShop=[];data.rewardChosen=false;data.rewardState={wave:data.wave,claimedId:null}
+  }else if(data.economyVersion!==undefined && Array.isArray(data.rewards)){
+    data.rewards=data.rewards.map(row=>migrateRewardOffer(data,row))
+    if(data.rewards.some(row=>!row))return false
+    // Existing targets remain fixed. A newly capped life option is replaced by
+    // a deterministic unused resource fallback, never a reroll of the shelf.
+    if(data.phase==='shop' && !data.rewardChosen){
+      const seen=new Set(data.rewards.map(row=>row.id))
+      data.rewards=data.rewards.map(row=>{
+        if(!['repair','gate-masonry'].includes(row.id) || (row.id==='repair'?data.baseHp<data.maxBaseHp:data.maxBaseHp<lifeMaxCap(data)))return row
+        const id=['gold-purse','crystal-purse','gold-chest','crystal-chest'].find(id=>!seen.has(id));seen.add(id)
+        return createRewardOffer(data,id)
+      })
+    }
+  }
+  return true
+}
+
+function validLifeBuild(data) {
+  if(data.phase==='shop' && data.wave===WAVES.length)return false
+  if(data.lifeVersion!==LIFE_RULES.version || typeof data.lifeFailed!=='boolean' || data.lifeFailed && data.baseHp!==0 ||
+    !Number.isSafeInteger(data.baseHp) || !Number.isSafeInteger(data.maxBaseHp) || data.maxBaseHp<initialLifeMax(data.difficulty) ||
+    !data.lifeItemState || !['redEchoUsed','flushCrownUsed'].every(key=>typeof data.lifeItemState[key]==='boolean') ||
+    !validBuildState(data.buildPassives) || data.buildPassives.wave.number!==data.wave)return false
+  if(!Array.isArray(data.lifeEvents) || data.lifeEvents.length>10000)return false
+  const kinds=['loss','heal','max','failure','end','bell-summon','bell-blocked','bell-kill','bell-breach','bell-timeout']
+  return data.lifeEvents.every(row=>row && kinds.includes(row.kind) && ['id','source','sourceId'].every(key=>typeof row[key]==='string'&&row[key].length<=500) &&
+    row.wave===data.wave && Number.isFinite(row.at)&&row.at>=0 && ['before','after','amount','maxBefore','maxAfter'].every(key=>Number.isSafeInteger(row[key])&&row[key]>=0) &&
+    row.before<=row.maxBefore && row.after<=row.maxAfter && row.maxAfter<=lifeMaxCap(data) &&
+    (row.kind!=='loss' || row.before-row.after===row.amount && row.amount<=LIFE_RULES.breachLoss) &&
+    (row.kind!=='heal' || row.after-row.before===row.amount) &&
+    (row.kind!=='max' || row.maxAfter-row.maxBefore===row.amount))
 }
 
 function validDeck(data) {
@@ -114,6 +183,8 @@ function validArmies(data) {
     if (!units.every(unit => unit && Object.hasOwn(definition, unit.type) && unit.side === side && ['x', 'y', 'hp', 'maxHp', 'atk', 'range', 'cooldown', 'level', 'speed', 'period'].every(key => Number.isFinite(unit[key])) && unit.hp > 0 && unit.hp <= unit.maxHp && unit.x >= 0 && unit.x <= 1100 && unit.y >= 150 && unit.y <= 350 && unit.level >= 1 && unit.level <= 3 && unit.maxHp <= 100000 && unit.atk >= 0 && unit.atk <= 20000 && unit.period > 0 && unit.speed >= 0)) return false
     if (new Set(units.map(unit => unit.id)).size !== units.length) return false
     if (side === 'ally') for (const unit of units) {
+      const buildPercent=buildUnitPercent(data,unit)
+      if(!validBuildUnitStats(unit) || unit.echoUntil==null && (buildPercent>0&&!unit.buildPassiveStats || unit.buildPassiveStats&&Math.abs(unit.buildPassiveStats.percent-buildPercent)>1e-9))return false
       if(unit.rewardModifiers && (!['attackPercent','healthPercent'].every(key=>Number.isFinite(unit.rewardModifiers[key]) && unit.rewardModifiers[key]>=0 && unit.rewardModifiers[key]<=10) || Object.keys(unit.rewardModifiers).length!==2))return false
       if (unit.waveBonus && (!Object.entries(unit.waveBonus).every(([k,v]) => ['maxHp','atk','heal','period'].includes(k) && Number.isFinite(v)) ||
           lastingStat(unit,'maxHp') < 1 || lastingStat(unit,'maxHp') > 100000 || lastingStat(unit,'atk') > 20000 || lastingStat(unit,'period') <= 0 || lastingStat(unit,'atk') < 0 || lastingStat(unit,'heal') < 0)) return false
@@ -165,7 +236,7 @@ function validWave(data) {
     const { count, damage, boss, bossName } = data.waveTimeout
     if (!['shop', 'won', 'lost'].includes(data.phase) || data.waveTime !== WAVES[data.wave - 1].duration ||
         !Number.isSafeInteger(count) || count < 1 || count > MAX_ENEMIES + data.schedule.length ||
-        !Number.isFinite(damage) || damage <= 0 || damage > data.maxBaseHp || typeof boss !== 'boolean' ||
+        !Number.isFinite(damage) || damage < 0 || damage > data.maxBaseHp || typeof boss !== 'boolean' ||
         (boss && data.phase !== 'lost') || (bossName !== undefined && (!boss || !['无冕之王','缀命皇后'].includes(bossName)))) return false
   }
   if (!Array.isArray(data.shop) || data.shop.length > 3 || new Set(data.shop).size !== data.shop.length || !data.shop.every(id => Object.hasOwn(JOKER_BY_ID, id))) return false
@@ -223,7 +294,7 @@ function validResources(data) {
       data.handsLeft - data.paidHandsLeft > HANDS_PER_WAVE+(data.waveBonuses?.active?.hands || 0)) return false
   if (data.legacyFieldSize !== undefined && (!Number.isInteger(data.legacyFieldSize) || data.legacyFieldSize < 0 || data.legacyFieldSize > OLD_FIELD_LIMIT)) return false
   if (data.reserveUsed !== undefined && typeof data.reserveUsed !== 'boolean') return false
-  if (data.difficulty !== undefined && !['standard', 'veteran'].includes(data.difficulty)) return false
+  if (data.difficulty !== undefined && !Object.hasOwn(DIFFICULTIES,data.difficulty)) return false
   if (data.formation !== undefined && !Object.hasOwn(FORMATION_BY_ID, data.formation)) return false
   if (data.tacticsReport !== undefined && !Object.keys(emptyTacticsReport()).every(key =>
     Number.isFinite(data.tacticsReport?.[key]) && data.tacticsReport[key] >= 0)) return false

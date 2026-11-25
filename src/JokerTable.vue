@@ -4,6 +4,7 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import { PERFORMERS, performerOf } from './performers.js'
 import { pixelAssetUrl } from './spriteAtlas.js'
 import { DIFFICULTIES } from './tactics.js'
+import {initialLifeMax} from './playerLife.js'
 import PixelSprite from './PixelSprite.vue'
 import DealKey from './DealKey.vue'
 import TitleCourt from './TitleCourt.vue'
@@ -83,12 +84,12 @@ onMounted(() => table.value?.querySelector('.cover-start')?.focus({preventScroll
         </div>
         <div class="deal-options"><b>难度</b>
           <button class="key-tab" v-for="(mode,id) in DIFFICULTIES" :key="id" :aria-pressed="difficulty===id" @click="emit('difficulty',id)">{{ mode.name }}</button>
-          <small>{{ DIFFICULTIES[difficulty].castle }} 城门耐久</small>
+          <small>♥ {{ initialLifeMax(difficulty) }} 生命</small>
         </div>
         <label class="deal-seed">固定种子 <input class="key-input" aria-label="固定种子" :value="seed" maxlength="64" placeholder="留空随机开局" autocomplete="off" spellcheck="false" @input="emit('seed',$event.target.value)"/><small>每日同局仍使用当天种子</small></label>
         <div class="deal-actions intro-buttons">
           <DealKey :actor="selected" class="intro-start" @click="emit('start')">以{{ selected.name }}开局</DealKey>
-          <button class="daily-deal key-ink" @click="emit('daily')"><KeyMark name="cards"/><span>每日同局<small>{{ dailyBest ? '本机最佳 · '+dailyBest.waves+' 波 / '+dailyBest.kills+' 击退' : '每日同一开局 · 可重复挑战' }}</small></span></button>
+          <button class="daily-deal key-ink" @click="emit('daily')"><KeyMark name="cards"/><span>每日同局<small>{{ dailyBest ? (dailyBest.lifeVersion===1?'本机最佳':'旧制记录')+' · '+dailyBest.waves+' 波 / '+dailyBest.kills+' 击退' : '每日同一开局 · 可重复挑战' }}</small></span></button>
         </div>
       </div>
     </section>

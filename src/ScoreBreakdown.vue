@@ -1,6 +1,7 @@
 <script setup>
 import {computed,ref} from 'vue'
 import {QUALITIES} from './quality.js'
+import {actualEffectText} from './reportTelemetry.js'
 const props=defineProps({trace:{type:Object,default:null},expanded:{type:Boolean,default:false},detailsOnly:{type:Boolean,default:false}})
 const details=ref(props.expanded)
 const points=computed(()=>props.trace?.scoringCards.reduce((n,card)=>n+card.points,0) || 0)
@@ -12,15 +13,18 @@ const odds=computed(()=>props.trace?.quality.odds.filter(row=>row.grade!==props.
 const nonChipItems=computed(()=>props.trace?.items.filter(item=>item.phase!=='chips' && item.quantity>0) || [])
 const absentDemoItems=computed(()=>props.trace?.items.filter(item=>!item.quantity) || [])
 const finalBonus=computed(()=>Number.isFinite(props.trace?.finalBonus?.amount) && props.trace.finalBonus.amount>0?props.trace.finalBonus:null)
+const finalSources=computed(()=>finalBonus.value?.sources || [])
+const passives=computed(()=>props.trace?.passives || [])
 const displayNumber=n=>Number.isInteger(n)?n:Number(n.toFixed(1))
 function effects(item){
   if(!item.actual)return null
-  const rows=[['chips','筹码'],['shield','护盾'],['healed','有效治疗'],['gateRepaired','城门修复'],['starGain','升星'],['damage','实际伤害'],['chargeGain','圣杯蓄能'],['xpGain','集训经验'],['shieldDamage','护盾伤害'],['targets','命中目标']]
+  const rows=[['chips','筹码'],['shield','护盾'],['healed','友军有效治疗'],['lifeHealed','生命恢复'],['gateRepaired','旧制修复'],['starGain','升星'],['damage','实际伤害'],['chargeGain','圣杯蓄能'],['xpGain','集训经验'],['shieldDamage','护盾伤害'],['targets','命中目标']]
   return rows.filter(([key])=>Number.isFinite(item.actual.effects?.[key])).map(([key,label])=>label+' '+displayNumber(item.actual.effects[key])).join(' · ')
 }
 </script>
 <template>
   <section v-if="trace" class="hand-score-panel" aria-label="本手计分与实际收益" :style="{'--quality-ink':quality.color}" :data-hand="trace.hand.key">
+    <p v-if="trace.legacyLife" class="score-legacy-life">旧制生命记录，不按新规则重复触发。</p>
     <template v-if="!detailsOnly">
     <header class="score-heading"><strong>{{ trace.hand.name }} <small>Lv.{{ trace.hand.level }}</small></strong>
       <button type="button" class="score-detail-toggle key-link" :aria-expanded="details" @click="details=!details">{{ details?'收起明细':'计分明细' }} <span aria-hidden="true">{{ details?'⌃':'⌄' }}</span></button></header>
@@ -30,6 +34,7 @@ function effects(item){
       <span class="score-total"><b>{{ trace.finalScore }}</b><small>分</small></span>
     </div>
     <p class="score-source-summary">基础 {{ trace.hand.baseChips }}<template v-if="trace.hand.levelChips"> ＋研习 {{ trace.hand.levelChips }}</template> ＋牌点 {{ points }}<template v-if="extra"> ＋道具 {{ extra }}</template>；全部筹码合计后乘倍率。<template v-if="finalBonus">{{ finalBonus.source }}另加 {{ displayNumber(finalBonus.percent*100) }}%（{{ finalBonus.amount }} 分）。</template></p>
+    <p v-if="passives.length" class="score-build-summary">本手持有 {{ passives.length }} 项构筑被动，可展开查看条件与实际触发。</p>
     <div class="score-quality"><b>{{ quality.name }}保底</b><span v-if="trace.mode==='resolved' && trace.quality.rolled!==undefined">本手 {{ trace.quality.rolledName }}</span><span v-else-if="odds.length">升格机会：{{ odds.map(row=>row.name+' '+row.chance+'%').join(' · ') }}</span><span v-else>品质已确定</span></div>
     <p class="score-realized" :class="{overflow:outcome.overflow}" data-score-outcome>{{ outcome.summary }}</p>
     <p v-if="outcome.legendaryAlternative" class="score-conditional">{{ outcome.legendaryAlternative }}</p>
@@ -47,10 +52,11 @@ function effects(item){
       </div>
       <p v-if="!trace.chipBonuses.length" class="score-miss">本手没有计分道具加成。</p>
       <div class="score-ledger-row score-mult-ledger"><span>牌谱倍率 <small>基础 {{ trace.hand.baseMult }}<template v-if="trace.hand.levelMult"> ＋研习 {{ trace.hand.levelMult }}</template></small></span><b>×{{ trace.mult }}</b></div>
-      <div v-if="finalBonus" class="score-ledger-row score-final-bonus" data-score-final-bonus><span>{{ finalBonus.source }}<small>计分后额外 {{ displayNumber(finalBonus.percent*100) }}%，独立于牌谱倍率</small></span><b>＋{{ finalBonus.amount }} 分</b></div>
+      <div v-if="finalBonus" class="score-ledger-row score-final-bonus" data-score-final-bonus><span>{{ finalBonus.source }}<small v-if="finalSources.length">{{ finalSources.map(row=>row.label+' '+displayNumber(row.percent*100)+'%').join(' ＋ ') }}</small><small>计分后额外合计 {{ displayNumber(finalBonus.percent*100) }}%，合并后统一取整，独立于牌谱倍率</small></span><b>＋{{ finalBonus.amount }} 分</b></div>
       <p class="score-final-ledger">{{ trace.chipsBeforeMult }} 筹码 × {{ trace.mult }} 倍率<template v-if="finalBonus"> ＋ {{ finalBonus.amount }} 奖励分</template> ＝ <b>{{ trace.finalScore }} 分</b></p>
       <p v-if="trace.recruit.statBonusSource" class="score-stat-source">{{ trace.recruit.statBonusSource }}</p>
       <p class="score-order-source">这 {{ trace.order.sourceScore }} 分也决定本手战令强度：{{ trace.order.label }}。</p>
+      <template v-if="passives.length"><h4>构筑被动</h4><div v-for="row in passives" :key="row.id" class="score-item-row score-passive-row" :class="{inactive:!(row.actual?.triggered ?? row.applied)}" :data-score-passive="row.id"><div><strong>{{ row.label }}</strong><b>{{ row.actual?(row.actual.triggered?(row.actual.effective?'实际生效':'触发无收益'):'未触发'):(row.applied?'符合条件':'条件未满足') }}</b></div><p>{{ row.actual?.reason || row.reason }}</p><p v-if="row.actual" class="score-actual-effects">{{ actualEffectText(row.actual.effects) }}</p></div></template>
       <template v-if="nonChipItems.length"><h4>搭档连锁</h4>
         <div v-for="item in nonChipItems" :key="item.id" class="score-item-row non-score-item" :class="{inactive:!item.applied}" :data-score-item="item.id">
           <div><strong>{{ item.label }}</strong><b>{{ item.actual ? (item.actual.triggered?'已触发':'未触发') : item.applied?'符合条件':'待满足条件' }}</b></div>

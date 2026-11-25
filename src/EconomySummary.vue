@@ -1,6 +1,6 @@
 <script setup>
 import {computed} from 'vue'
-const props=defineProps({settlement:{type:Object,default:null},compact:Boolean})
+const props=defineProps({settlement:{type:Object,default:null},compact:Boolean,emptyText:{type:String,default:'这份记录未保存结算收支。'}})
 const recorded=computed(()=>props.settlement && props.settlement.gold && props.settlement.crystals)
 const number=n=>Number.isFinite(n)?Number(n.toFixed(1)):'未记录'
 </script>
@@ -10,7 +10,7 @@ const number=n=>Number.isFinite(n)?Number(n.toFixed(1)):'未记录'
    <p class="economy-gold"><strong>金币 +{{ number(settlement.gold.total) }}</strong><span>基础 +{{ number(settlement.gold.base) }}<template v-if="settlement.gold.bounty"> · 止钟赏金 +{{ number(settlement.gold.bounty) }}</template><template v-if="settlement.gold.wages"> · 搭档分红 +{{ number(settlement.gold.wages) }}</template></span><small>结算时余额 {{ number(settlement.gold.balance) }}</small></p>
    <p class="economy-crystals"><strong>蓝水晶 +{{ number(settlement.crystals.total) }}</strong><span data-income-source="crystals-base">守住本波 +{{ number(settlement.crystals.base) }}</span><span v-if="settlement.crystals.bonus" data-income-source="crystals-bonus">第 {{ settlement.wave }} 波额外 +{{ number(settlement.crystals.bonus) }}</span><small>结算时余额 {{ number(settlement.crystals.balance) }}</small></p>
    <small class="economy-boundary">以上为结算入账，补给与商店收支另算。</small>
-  </template><p v-else class="economy-missing">这份记录未保存结算收支。</p>
+  </template><p v-else class="economy-missing">{{ emptyText }}</p>
  </section>
 </template>
 <style scoped>

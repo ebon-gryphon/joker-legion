@@ -104,20 +104,20 @@ test('basic attacks, splash, inherited weapons, star volleys and charged fusion 
   assert.equal(g.fusionUses.warden,1)
 })
 
-test('pre-battle orders, gross gate damage, repairs, net loss, duration and remaining energy survive wave completion',()=>{
+test('pre-battle orders, actual life loss, healing, net loss, duration and remaining energy survive wave completion',()=>{
   const g=createGame({seed:'orders-and-gate'})
   g.selected=[g.hand[0].id];assert.ok(deploy(g))
   const energy=g.energy
-  g.schedule=[{at:0,type:'bellkeeper'}];assert.ok(beginBattle(g))
-  g.enemies[0].bellTimer=.01;g.enemies[0].cooldown=100;g.enemies[0].speed=0
-  unitStep(g,g.enemies[0],1/30)
-  restoreBase(g,5)
+  g.schedule=[...Array.from({length:5},()=>({at:0,type:'raider'})),{at:0,type:'bellkeeper'}];assert.ok(beginBattle(g))
+  for(const raider of g.enemies.filter(unit=>unit.type==='raider')){Object.assign(raider,{x:50,speed:0,range:0,cooldown:100});unitStep(g,raider,1/30)}
+  const bell=g.enemies.find(unit=>unit.type==='bellkeeper');bell.bellTimer=.01;bell.cooldown=100;bell.speed=0;unitStep(g,bell,1/30)
+  restoreBase(g,2,{source:'test-heal',sourceId:'test-heal'})
   g.jokers.push({id:'gate-rivet',quantity:2,triggers:0,flash:0})
   g.waveTime=8.5;g.enemies=[];g.spawnIndex=g.schedule.length
   endWave(g)
   const report=combatSummary(g)
   assert.equal(report.result,'cleared');assert.equal(report.duration,8.5)
-  assert.deepEqual([report.gate.start,report.gate.damage,report.gate.repaired,report.gate.end,report.gate.netLoss,report.gate.untracked],[100,11,7,96,4,0])
+  assert.deepEqual([report.gate.start,report.gate.damage,report.gate.repaired,report.gate.end,report.gate.netLoss,report.gate.untracked],[12,5,4,11,1,0])
   assert.equal(report.orders.length,1);assert.equal(report.orders[0].phase,'ready')
   assert.equal(report.orders[0].cost,16-energy);assert.equal(report.energyLeft,energy)
   assert.equal(report.majorOrders[0].count,1)
@@ -151,21 +151,20 @@ test('historical tactics, formation, fusion skills and regiment totals are immut
   assert.equal(loadCombatHistory(store)[0].formation,undefined)
 })
 
-test('gate summaries distinguish preparation repairs from combat damage and combat repairs even when the whole wave gains health',()=>{
+test('life summaries distinguish preparation recovery from combat losses and recovery even when the wave gains life',()=>{
   const g=createGame({seed:'prepared-gate'})
-  g.baseHp=80;initializeCombatStats(g)
+  g.baseHp=8;initializeCombatStats(g)
   addUnit(g,'knight','ally',1,{identity:{suit:'♠',rank:'2'}})
-  restoreBase(g,20)
-  g.schedule=[{at:0,type:'bellkeeper'}];assert.ok(beginBattle(g))
-  g.enemies[0].bellTimer=.01;g.enemies[0].cooldown=100;g.enemies[0].speed=0
-  unitStep(g,g.enemies[0],1/30)
-  restoreBase(g,3)
+  restoreBase(g,3,{source:'test-preparation',sourceId:'test-preparation'})
+  g.schedule=[{at:0,type:'raider'},{at:0,type:'raider'}];assert.ok(beginBattle(g))
+  for(const raider of g.enemies){Object.assign(raider,{x:50,speed:0,range:0,cooldown:100});unitStep(g,raider,1/30)}
+  restoreBase(g,1,{source:'test-combat',sourceId:'test-combat'})
   g.waveTime=4;g.enemies=[];g.spawnIndex=g.schedule.length;endWave(g)
   const gate=combatSummary(g).gate
-  assert.deepEqual([gate.start,gate.battleStart,gate.end],[80,100,92])
-  assert.deepEqual([gate.preparationRepaired,gate.battleDamage,gate.battleRepaired],[20,11,3])
-  assert.equal(gate.netLoss,-12)
-  assert.equal(gate.combatNetLoss,8)
+  assert.deepEqual([gate.start,gate.battleStart,gate.end],[8,11,10])
+  assert.deepEqual([gate.preparationRepaired,gate.battleDamage,gate.battleRepaired],[3,2,1])
+  assert.equal(gate.netLoss,-2)
+  assert.equal(gate.combatNetLoss,1)
   assert.equal(gate.untracked,0)
 })
 
@@ -183,24 +182,24 @@ test('older gate ledgers resume without fabricating unavailable preparation-vers
 
 test('failure records timeout gate damage once and completing a report twice is idempotent',()=>{
   const g=practice({enemies:['boss']})
-  g.baseHp=20;initializeCombatStats(g,{runId:'loss'})
+  g.baseHp=8;initializeCombatStats(g,{runId:'loss'})
   g.waveTime=37.99;tick(g,1/30)
   assert.equal(g.phase,'lost')
   const report=combatSummary(g)
-  assert.equal(report.result,'lost');assert.equal(report.gate.damage,20);assert.equal(report.gate.netLoss,20)
+  assert.equal(report.result,'lost');assert.equal(report.gate.damage,8);assert.equal(report.gate.netLoss,8)
   assert.deepEqual(finishCombatStats(g,'lost'),report)
   assert.equal(tick(g,1),false)
   assert.deepEqual(combatSummary(g),report)
   assert.deepEqual(report.runOutcome,{status:'defeat',wave:1,clearedWaves:0,terminal:true,finalWave:1})
 })
 
-test('gate damage preserves exact bell, breach and timeout sources, with old unclassified damage kept separate',()=>{
+test('life damage preserves real breach and timeout sources, bell summons do not inflict damage, and old sources remain separate',()=>{
   const g=practice({enemies:['bellkeeper','raider']})
   g.enemies[0].bellTimer=.01;unitStep(g,g.enemies[0],1/30)
   g.enemies[1].x=50;unitStep(g,g.enemies[1],1/30);settleDeaths(g)
   g.waveTime=37.99;tick(g,1/30)
-  assert.deepEqual(combatSummary(g).gate.sources,{bell:11,breach:6,timeout:8,unknown:0})
-  assert.equal(combatSummary(g).gate.damage,25)
+  assert.deepEqual(combatSummary(g).gate.sources,{bell:0,breach:1,timeout:2,unknown:0})
+  assert.equal(combatSummary(g).gate.damage,3)
   const old=practice();old.baseHp-=5;recordGateDamage(old,5,'bell')
   const saved=snapshotGame(old);delete saved.combatLedger.gate.sources
   const resumed=restoreGame(saved);assert.ok(resumed)

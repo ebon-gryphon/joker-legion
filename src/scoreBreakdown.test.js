@@ -86,7 +86,7 @@ test('six demonstration facts distinguish trigger conditions, global third-play 
   assert.equal(rows.find(row=>row.id==='heart-engine').counter.threshold,70)
   deal(g,['♠A','♥2']);const high=previewHand(g)
   const noHeart=high.scoreTrace.items.find(row=>row.id==='red-echo');assert.equal(noHeart.eligible,false)
-  assert.match(noHeart.reason,/没有红桃参与计分/)
+  assert.match(noHeart.reason,/没有红心参与计分/)
 })
 
 test('resolved traces preserve authoritative score and attach measured zero benefits rather than advertised healing',()=>{
@@ -97,7 +97,7 @@ test('resolved traces preserve authoritative score and attach measured zero bene
   assert.equal(result.items.find(row=>row.id==='red-echo').actual.effective,false)
   assert.ok(Object.isFrozen(result.items));assert.equal(trace.items.find(row=>row.id==='red-echo').actual,null)
   const redStep=result.steps.find(step=>step.itemId==='red-echo')
-  assert.equal(redStep.kind,'relic');assert.match(redStep.label,/有效治疗 0/);assert.match(redStep.label,/实际修城 0/)
+  assert.equal(redStep.kind,'relic');assert.match(redStep.label,/有效治疗 0/);assert.match(redStep.label,/旧制恢复记录 0/)
   assert.equal(redStep.delta,undefined);assert.equal(redStep.total,undefined)
   assert.ok(result.steps.findIndex(step=>step.id==='order')<result.steps.indexOf(redStep))
   assert.ok(restoreGame(snapshotGame(g)))

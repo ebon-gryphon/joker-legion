@@ -4,7 +4,7 @@ import { computed, ref } from 'vue'
 import EnemyPortrait from './EnemyPortrait.vue'
 import EnemyGuide from './EnemyGuide.vue'
 import { ENEMY_CATALOG } from './enemyCatalog.js'
-import { FORMATIONS, FORMATION_BY_ID, HOSTILE, SILENT_BOUNTY, BELL_WINDUP, tollDamage } from './tactics.js'
+import { FORMATIONS, FORMATION_BY_ID, HOSTILE, SILENT_BOUNTY, BELL_WINDUP } from './tactics.js'
 
 const props = defineProps({
   wave: { type: Object, required: true }, intel: { type: Object, required: true }, schedule: { type: Array, required: true },
@@ -48,8 +48,8 @@ function choose(id) {
         </li>
       </ul>
       <p class="brief-warning"><b>整队出击</b> 开战时 {{ intel.total }} 名敌军同时入场。</p>
-      <p class="brief-warning"><b>限时 {{ wave.duration }} 秒</b> 时间到，残敌按各自的突破伤害扣除城门耐久。<template v-if="wave.boss">首领仍在场会直接攻破城门。</template></p>
-      <p v-if="intel.bells.length" class="brief-warning"><b>鸣钟使</b> {{ intel.bells.map(seconds).join(' / ') }} 秒入场，首次蓄力 {{ BELL_WINDUP }} 秒。每次钟击损失 {{ tollDamage(wave.id) }} 城门耐久。</p>
+      <p class="brief-warning"><b>限时 {{ wave.duration }} 秒</b> 时间到，普通残敌逐名按突破结算，每名损失 1 生命。生命降到 0 仍可继续，但不能再放入任何敌人。<template v-if="wave.boss">首领突破或超时仍存活会直接结束远征。</template></p>
+      <p v-if="intel.bells.length" class="brief-warning"><b>鸣钟使</b> {{ intel.bells.map(seconds).join(' / ') }} 秒入场，首次蓄力 {{ BELL_WINDUP }} 秒。鸣钟会从右侧召唤流寇援军；援军可被击退，也会真实突破或在超时时结算。</p>
       <p v-if="intel.bossAt !== null" class="brief-warning"><b>{{ wave.id === 12 ? '缀命皇后' : '无冕之王' }}</b> {{ seconds(intel.bossAt) }} 秒入场。{{ wave.id === 12 ? '裁决锁定最强者；震荡蓄力时集中输出可打断，带盾可减伤。' : '半血后改为轰击后排，并延缓被击中者的行动。' }}</p>
     </section>
     <section class="brief-orders">
@@ -64,7 +64,7 @@ function choose(id) {
       <p v-if="!inShop" class="brief-warning formation-placement-note">切换阵型会清除手动站位，并按新阵型重新布阵；请在换阵后再调整士兵位置。</p>
     </section>
   </div>
-  <footer v-if="!guideOpen" class="brief-footer"><p v-if="intel.bells.length">战前打过对子或更高牌型，可自动打断本波首次鸣钟。守住此波且全程无钟击，额外获得 {{ SILENT_BOUNTY }} 金币。</p>
+  <footer v-if="!guideOpen" class="brief-footer"><p v-if="intel.bells.length">战前打过对子或更高牌型，可自动打断本波首次鸣钟召唤。守住此波且全程未成功鸣钟，额外获得 {{ SILENT_BOUNTY }} 金币。</p>
     <p v-else>{{ inShop ? '可先按敌军构成购买小丑、研习牌谱。' : '战前可自由换阵。开战后锁定阵型。' }}</p>
     <button v-if="!embedded" class="gold-button key-command" @click="emit('close')"><KeyMark name="return"/>{{ inShop ? '返回补给' : '返回营地' }} ↗</button></footer>
 </template>

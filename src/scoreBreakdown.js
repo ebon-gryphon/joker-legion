@@ -36,7 +36,9 @@ export function buildScoreTrace(game,plan,{cards,scoring,mode='preview'}={}) {
   // The trace explains the accepted plan; it never rolls a grade or awards a score.
   if(chips!==plan.score.chips || chips*plan.score.mult+(plan.score.rewardBonus || 0)!==plan.score.total) throw new Error('Score trace disagrees with the authoritative hand score')
   steps.push({kind:'multiply',id:'multiply',label:'牌谱倍率',chips,mult:plan.score.mult,total:plan.score.baseTotal ?? plan.score.total})
-  const finalBonus=plan.score.rewardPercent?{percent:plan.score.rewardPercent,amount:plan.score.rewardBonus,source:'波后奖励·下波首手'}:null
+  const finalBonus=plan.score.rewardPercent?{percent:plan.score.rewardPercent,amount:plan.score.rewardBonus,
+    sources:copy(plan.score.bonusSources || [{id:'wave-first-score',label:'波后奖励·下波首手',percent:plan.score.rewardPercent}]),
+    source:(plan.score.bonusSources || [{label:'波后奖励·下波首手'}]).map(row=>row.label).join(' + ')}:null
   if(finalBonus)steps.push({kind:'scoreBonus',id:'wave-first-score',label:finalBonus.source+' +'+Math.round(finalBonus.percent*100)+'%（+'+finalBonus.amount+'分）',total:plan.score.total})
   const floor=plan.grade,rolled=mode==='resolved'?plan.captainGrade:undefined
   const quality={floor,name:QUALITIES[floor].name,odds:qualityOdds(floor),...(rolled===undefined?{}:{rolled,rolledName:QUALITIES[rolled].name})}
@@ -56,11 +58,12 @@ export function buildScoreTrace(game,plan,{cards,scoring,mode='preview'}={}) {
     selectedCards:cards.map(card=>({id:card.id,suit:card.suit,rank:card.rank,scoring:plan.scoringIds.includes(card.id)})),scoringCards,
     nonScoringCards:cards.filter(card=>!plan.scoringIds.includes(card.id)).map(card=>({id:card.id,suit:card.suit,rank:card.rank,reason:'不属于本手最高牌型，不贡献点数或按计分牌触发的道具。'})),
     chipBonuses,chipsBeforeMult:chips,mult:plan.score.mult,finalScore:plan.score.total,...(finalBonus?{finalBonus}:{}),quality,recruit,
-    order:{sourceScore:plan.score.total,crownMultiplier:plan.containsFlush && game.jokers.some(item=>item.id==='flush-crown')?1.25:1,bonus:{...plan.bonus},label:plan.description},
-    items:itemTrace(game,plan,{scoring}),steps})
+    order:{sourceScore:plan.score.total,crownMultiplier:plan.containsFlush && game.jokers.some(item=>item.id==='flush-crown')?1.25:1,bonus:{...plan.bonus},label:plan.description,
+      ...(plan.captainBonus?{captainBonus:copy(plan.captainBonus)}:{}),buildMultiplier:plan.buildPlan?.orderFactor || 1},
+    items:itemTrace(game,plan,{scoring}),passives:copy(plan.buildPlan?.rows || []),steps})
 }
 
-export function resolveScoreTrace(trace,{recruit,items=[]}={}) {
+export function resolveScoreTrace(trace,{recruit,items=[],passiveEvents=[]}={}) {
   if(!trace || trace.version!==1) return null
   const result=copy(trace);result.mode='resolved'
   if(recruit) result.recruit={...result.recruit,...copy(recruit),legendaryAlternative:null}
@@ -70,10 +73,17 @@ export function resolveScoreTrace(trace,{recruit,items=[]}={}) {
     if(item.phase==='chips' && item.quantity>0) return {...item,actual:{id:item.id,triggered:item.applied,effective:item.potential?.chips>0,reason:item.reason,effects:{chips:item.potential?.chips || 0}}}
     return item
   })
+  result.passives=(result.passives || []).map(row=>{
+    const events=passiveEvents.filter(event=>event.id===row.id),effects={}
+    const additive=new Set(['energyRefund','shield','xpGain','attackGain','healGain','healthGain','periodReduction','healed','extraHealing','damage','shieldDamage','arrows'])
+    for(const event of events)for(const [key,value] of Object.entries(event.effects || {}))effects[key]=additive.has(key)?(effects[key] || 0)+value:value
+    return {...row,actual:{triggered:events.some(event=>event.triggered),effective:events.some(event=>event.effective),
+      reason:events.length?[...new Set(events.map(event=>event.reason))].join(' '):row.reason,effects}}
+  })
   const muster=result.steps.find(step=>step.id==='muster') || {kind:'outcome',id:'muster',total:result.finalScore}
   muster.label=result.recruit.summary
   // Outcome steps carry measured effects, never chip deltas or a second score.
-  result.steps=result.steps.filter(step=>step.id!=='muster' && !['order','relic'].includes(step.kind))
+  result.steps=result.steps.filter(step=>step.id!=='muster' && !['order','relic','passive'].includes(step.kind))
   const relic=id=>{
     const item=result.items.find(item=>item.id===id)
     if(!item?.actual?.triggered)return null
@@ -82,7 +92,9 @@ export function resolveScoreTrace(trace,{recruit,items=[]}={}) {
     if(effects.xpGain>0)parts.push('额外经验 +'+effects.xpGain)
     if(effects.shield>0)parts.push('护盾 +'+effects.shield)
     if(Object.hasOwn(effects,'healed'))parts.push('有效治疗 '+Number(effects.healed.toFixed(1)))
-    if(Object.hasOwn(effects,'gateRepaired'))parts.push('实际修城 '+Number(effects.gateRepaired.toFixed(1)))
+    if(Object.hasOwn(effects,'lifeHealed'))parts.push('实际恢复生命 '+Number(effects.lifeHealed.toFixed(1)))
+    if(Object.hasOwn(effects,'gateRepaired'))parts.push('旧制恢复记录 '+Number(effects.gateRepaired.toFixed(1)))
+    if(Object.hasOwn(effects,'lifeHealed'))parts.push('实际恢复生命 '+effects.lifeHealed)
     if(Object.hasOwn(effects,'damage'))parts.push('实际生命伤害 '+Number(effects.damage.toFixed(1)))
     if(effects.shieldDamage>0)parts.push('破盾 '+Number(effects.shieldDamage.toFixed(1)))
     return {kind:'relic',id:'relic-'+id,itemId:id,label:item.label+' · '+(parts.length?parts.join(' · '):actual.reason),
@@ -91,5 +103,10 @@ export function resolveScoreTrace(trace,{recruit,items=[]}={}) {
   const third=relic('third-act');if(third)result.steps.push(third)
   result.steps.push(muster,{kind:'order',id:'order',label:result.order.label,sourceScore:result.finalScore,bonus:copy(result.order.bonus)})
   for(const id of ['iron-banner','red-echo','heart-engine']) {const step=relic(id);if(step)result.steps.push(step)}
+  for(const row of result.passives.filter(row=>row.actual.triggered&&!['same-hand','varied-hand'].includes(row.id))){
+    const e=row.actual.effects,parts=[]
+    for(const [key,label] of Object.entries({energyRefund:'实返军令',shield:'实得护盾',xpGain:'实际额外经验',attackGain:'额外攻击',healGain:'额外治疗力',extraHealing:'额外有效治疗',damage:'实际生命伤害'}))if(Object.hasOwn(e,key))parts.push(label+' '+Number(e[key].toFixed(2)))
+    result.steps.push({kind:'passive',id:'passive-'+row.id,passiveId:row.id,label:row.label+' · '+(parts.length?parts.join(' · '):row.actual.reason),effective:row.actual.effective,reason:row.actual.reason,effects:copy(e)})
+  }
   return freeze(result)
 }

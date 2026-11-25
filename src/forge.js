@@ -5,6 +5,7 @@ import { earnedTraining, trainingBonus, soldierValue, inheritLessons, LESSONS } 
 import { professionId, combinedProfessionJobs, professionJobs } from './professionFusion.js'
 import { getCardDesign } from './cardCatalog.js'
 import { JOBS } from './jobs.js'
+import {unmodifiedBuildStat,previewBuildUnitStats} from './buildPassives.js'
 export const FUSION_COST = 5
 export const ROLE_NAMES = { knight: '铁卫', healer: '牧师', ranger: '游侠', mage: '术士' }
 
@@ -71,7 +72,7 @@ export function mergePreview(game, leaderId, donorId, kind) {
   const gainHp = after.hp-before.hp, gainAtk=after.atk-before.atk
   const maxHp = leader.maxHp + gainHp + Math.round((lastingStat(donor,'maxHp') - trained.hp) * share)
   const skills=[...new Set([leader.fusion,donor.fusion,...(leader.fusionSkills || []),...(donor.fusionSkills || [])].filter(Boolean))]
-  return {
+  const result={
     ...combinedRewardModifiers(leader,donor),
     ...(ascending ? {grade:leader.grade + 1} : {}),
     ...(profession || leader.fusionJobs || donor.fusionJobs ? {fusionJobs:combinedProfessionJobs(leader,donor)} : {}),
@@ -79,8 +80,11 @@ export function mergePreview(game, leaderId, donorId, kind) {
     ...(profession ? {range:Math.max(leader.range,donor.range), speed:Math.max(leader.speed,donor.speed), period:Math.min(leader.period,lastingStat(donor,'period'))} : {}),
     lessons:inheritLessons(leader, donor),
     trainingXp:xp, trainingGrowth:{hp:retained.hp + gainHp, atk:retained.atk + gainAtk}, level: ascending ? Math.max(leader.level, donor.level) : profession ? leader.level : leader.level + 1, maxHp, hp: Math.min(maxHp, leader.hp + gainHp + Math.round(Math.max(0,donor.hp-trained.hp) * share)),
-    atk: leader.atk + gainAtk + Math.round((lastingStat(donor,'atk')-trained.atk) * share), heal: leader.heal + (leader.type === 'healer' || profession && (leader.heal>0 || donor.heal>0) ? gainAtk : 0) + Math.round(Math.max(0,lastingStat(donor,'heal')-trained.atk) * share),
+    atk: leader.atk-(leader.buildPassiveStats?.atk || 0) + gainAtk + Math.round((unmodifiedBuildStat(donor,'atk')-trained.atk) * share),
+    heal: leader.heal-(leader.buildPassiveStats?.heal || 0) + (leader.type === 'healer' || profession && (leader.heal>0 || donor.heal>0) ? gainAtk : 0) + Math.round(Math.max(0,unmodifiedBuildStat(donor,'heal')-trained.atk) * share),
   }
+  Object.assign(result,previewBuildUnitStats(game,{...leader,...result,...(FUSION_BY_ID[kind]?{fusion:kind}:{})},{clean:true}))
+  return result
 }
 
 export function materialIdentity(unit) {

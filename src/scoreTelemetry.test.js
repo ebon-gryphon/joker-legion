@@ -64,15 +64,16 @@ test('condition matches distinguish zero effective healing, real shield gain and
   assert.equal(g.healedCharge,0)
   deal(g,['♠3','♦3','♥A']);assert.ok(deploy(g))
   assert.equal(actual(g,'red-echo').triggered,false)
-  assert.match(actual(g,'red-echo').reason,/没有红桃参与计分/)
+  assert.match(actual(g,'red-echo').reason,/没有红心参与计分/)
 })
 
-test('wounded allies and missing gate health report actual red-echo benefits, while a reserved legend receives no banner shield',()=>{
+test('wounded allies and missing player life report actual red-echo benefits, while a reserved legend receives no banner shield',()=>{
   const g=createGame({seed:'healing-real'}),a=add(g)
-  own(g,'red-echo');a.hp-=30;g.baseHp=90
+  own(g,'red-echo');a.hp-=30;g.baseHp=g.maxBaseHp-2;const life=g.baseHp
   deal(g,['♥2','♥3','♥4','♥5','♥6']);assert.ok(deploy(g))
   assert.equal(actual(g,'red-echo').effects.healed,30)
-  assert.equal(actual(g,'red-echo').effects.gateRepaired,3)
+  assert.equal(actual(g,'red-echo').effects.lifeHealed,1);assert.equal(actual(g,'red-echo').effects.gateRepaired,undefined)
+  assert.equal(g.baseHp,life+1);assert.ok(g.lifeEvents.some(row=>row.kind==='heal'&&row.source==='red-echo'&&row.amount===1))
   const full=createGame({seed:'reserve-benefits'})
   for(let i=0;i<5;i++) add(full,'knight',String(i+2))
   own(full,'score-chalk',400);deal(full,['♠2','♦2']);assert.ok(deploy(full))
@@ -101,6 +102,21 @@ test('the global third play records real stars or capped overflow XP rather than
   assert.deepEqual(actual(full,'third-act').effects,{starGain:0,xpGain:0})
   assert.equal(full.lastDeploy.scoreTrace.recruit.actualCount,0)
   assert.equal(full.lastDeploy.scoreTrace.recruit.xp,0)
+})
+
+test('real Red Echo orders spend only the first qualifying two-scoring-heart life heal while retaining later friendly healing',()=>{
+  const g=createGame({seed:'life-echo-orders'}),ally=add(g)
+  own(g,'red-echo');g.baseHp=g.maxBaseHp-2;const before=g.baseHp
+  ally.hp-=30;deal(g,['♥2','♥3','♠4','♣5','♦6']);assert.ok(deploy(g))
+  assert.equal(actual(g,'red-echo').effects.lifeHealed,1);assert.equal(g.baseHp,before+1)
+  assert.equal(actual(g,'red-echo').effects.healed,30)
+  ally.hp-=10;deal(g,['♥7','♥8','♠9','♣10','♦J']);assert.ok(deploy(g))
+  assert.equal(actual(g,'red-echo').effects.lifeHealed,0);assert.equal(g.baseHp,before+1)
+  assert.equal(actual(g,'red-echo').effects.healed,10)
+  const unscored=createGame({seed:'only-scored-hearts'});own(unscored,'red-echo');unscored.baseHp--
+  deal(unscored,['♥2','♥3']);assert.ok(deploy(unscored))
+  assert.equal(unscored.lastDeploy.scoreTrace.scoringCards.length,1);assert.equal(actual(unscored,'red-echo').effects.lifeHealed,0)
+  assert.equal(unscored.lifeItemState.redEchoUsed,false)
 })
 
 test('Holy Grail combat procs retain actual hit losses and phase, without being attached to an unrelated order',()=>{

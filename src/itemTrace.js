@@ -1,5 +1,6 @@
 import { copies } from './gameState.js'
 import { JOKER_BY_ID } from './campaignRules.js'
+import { lifeItemPreview } from './playerLife.js'
 
 export const DEMO_ITEM_IDS=['score-chalk','pair-ink','third-act','iron-banner','red-echo','heart-engine']
 const countSuit=(cards,suits)=>cards.filter(card=>suits.includes(card.suit)).length
@@ -29,6 +30,7 @@ export function itemTrace(game,plan,{scoring=[]}={}) {
   const chipRows=scoreContributionRows(game,scoring,plan.key,plan.containsPair)
   const ordinal=(game.stats?.deploys || 0)+1
   const hearts=countSuit(scoring,['♥']),army=(game.allies || []).filter(unit=>unit.hp>0)
+  const life=lifeItemPreview(game,{scoring,containsFlush:plan.containsFlush})
   return DEMO_ITEM_IDS.map(id=>{
     const quantity=copies(game,id),label=JOKER_BY_ID[id].name
     let row={id,label,quantity,phase:'afterOrder',eligible:false,applied:false,reason:'尚未持有这件道具。',condition:'',potential:{}}
@@ -46,8 +48,10 @@ export function itemTrace(game,plan,{scoring=[]}={}) {
       row={...row,condition:'最高牌型含同点数组合',eligible,potential:{shield:eligible&&(plan.actualUnits>0 || plan.trainingXp>0)?24:0,healed:eligible?front.length*18:0},
         reason:!eligible?'本手没有同点数组合，旗手不触发。':plan.waiting?'领队进入候补，没有阵上的领队护盾接收者；仍会尝试治疗在场铁卫。':!front.length?'领队或转训接收者可获盾；没有在场铁卫时，治疗没有目标。':front.every(unit=>unit.hp>=unit.maxHp)?'符合触发条件；在场铁卫满血时，有效治疗为 0。':'领队或转训接收者获盾，在场受伤铁卫实际恢复生命。'}
     } else if (id==='red-echo') {
-      row={...row,condition:'只有参与计分的红桃触发',eligible:hearts>0,potential:{healed:hearts*16,gateRepaired:hearts>=2?Math.min(3,Math.max(0,game.maxBaseHp-game.baseHp)):0},
-        reason:!hearts?'没有红桃参与计分；附带但未计分的红桃不触发。':army.every(unit=>unit.hp>=unit.maxHp)?'红桃符合条件，但全员满血时有效治疗为 0；城门满耐久时修复也为 0。':'每张计分红桃尝试治疗最虚弱友军；以实际缺血量为准。'}
+      row={...row,condition:'每张计分红心治疗友军；每波首次至少两张计分红心恢复 1 点生命',eligible:hearts>0,
+        potential:{healed:hearts*16,lifeHealed:life.redEchoLife.restored},life:life.redEchoLife,
+        reason:!hearts?'没有红心参与计分；附带但未计分的红心不触发。':
+          (army.every(unit=>unit.hp>=unit.maxHp)?'红心符合条件，但全员满血时有效治疗为 0。':'每张计分红心尝试治疗最虚弱友军；以实际缺血量为准。')+' '+life.redEchoLife.reason}
     } else if (id==='heart-engine') {
       const charge=game.healedCharge || 0
       row={...row,phase:'combat',condition:'累计每 70 点有效治疗，向所有在场敌人造成 15 点伤害',eligible:false,

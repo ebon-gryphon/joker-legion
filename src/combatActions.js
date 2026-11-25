@@ -3,13 +3,16 @@ import { distance, clamp, effect, owns, trigger, log } from './gameState.js'
 import { damageUnit, healUnit, nearest } from './combatHealth.js'
 import { performanceOf, bombardmentOf } from './performance.js'
 import { veteranLevel, LESSONS } from './training.js'
-import { isBackline, tollDamage, BELL_INTERVAL, HOSTILE } from './tactics.js'
+import { isBackline, BELL_INTERVAL, BELL_SUMMON } from './tactics.js'
 import { FUSION_BY_ID } from './forge.js'
 import { LURE_REVEAL, LURE_TRAVEL } from './performers.js'
 import { FEINT } from './battlePlans.js'
 import { isBoss, bossSkill, BOSS_SKILLS } from './bossRules.js'
 import { professionJobs, inheritedProfessionJobs } from './professionFusion.js'
 import { recordGateDamage } from './combatStats.js'
+import { addUnit } from './campArmy.js'
+import { losePlayerLife, recordBellEvent } from './playerLife.js'
+import { applyBuildPassiveAttack } from './buildPassives.js'
 
 function moveUnit(unit, target, dt, direction) {
   if (target) {
@@ -211,6 +214,7 @@ function attack(game, unit, target, onAction) {
   }
   if (unit.side === 'enemy') formationDamage(game, target, direct, false, flight, unit)
   else damageUnit(game, target, direct, flight, unit)
+  if(unit.side==='ally')applyBuildPassiveAttack(game,unit,target,{damageUnit,launchMissile})
   if (unit.side === 'ally' && unit.type === 'mage') {
     const extras = game.enemies.filter(enemy => enemy.id !== target.id && enemy.hp > 0 && distance(enemy, target) < 85).slice(0, 2)
     for (const enemy of extras) damageUnit(game, enemy, unit.atk * 0.55, flight, unit)
@@ -293,7 +297,7 @@ function activateFusion(game, unit, onAction, fusionId) {
 
 export function unitStep(game, unit, dt, onAction) {
   if (unit.aim) unit.aim = null
-  if (unit.hp <= 0) return
+  if (unit.hp <= 0 || game.lifeFailed) return
   if (unit.lure) {
     const grip = unit.lure
     const t = clamp((game.time-grip.at-LURE_REVEAL)/LURE_TRAVEL, 0, 1)
@@ -303,18 +307,25 @@ export function unitStep(game, unit, dt, onAction) {
     if (t >= 1) delete unit.lure
     return
   }
-  if (unit.type === 'bellkeeper' && game.baseHp > 0) {
+  if (unit.type === 'bellkeeper') {
     unit.bellTimer -= dt
-    if (unit.bellTimer <= 0 && game.baseHp > 0) {
-      const damage = Math.min(game.baseHp, tollDamage(game.wave))
-      game.baseHp -= damage
-      recordGateDamage(game,damage,'bell')
-      perform(game, unit, 'toll', { x: 68 }, onAction)
+    if (unit.bellTimer <= 0) {
+      const level=game.wave>=8?3:game.wave>=4?2:1
+      const summoned=addUnit(game,BELL_SUMMON.type,'enemy',level)
+      if(summoned) {
+        summoned.x=BELL_SUMMON.x;summoned.y=unit.y
+        summoned.summonedBy='bellkeeper';summoned.bellSourceId=unit.id
+        game.waveSpawned++
+        recordBellEvent(game,'bell-summon',summoned,{count:1})
+        effect(game,'summon',summoned.x,summoned.y,'援军',summoned.color)
+        log(game,`${unit.name}召来流寇援军 · 右侧一名真实敌军入场`,'danger')
+      } else {
+        recordBellEvent(game,'bell-blocked',unit,{count:0,reason:'enemy-capacity'})
+        log(game,`${unit.name}鸣钟，但敌军阵位已满，未能召入援军`,'normal')
+      }
+      perform(game, unit, 'toll', { x:BELL_SUMMON.x }, onAction)
       game.tacticsReport.tolls++
-      game.tacticsReport.gateDamage += damage
       unit.bellTimer = BELL_INTERVAL
-      effect(game, 'burst', 68, 200, `钟击 −${damage}`, '#edbc88')
-      log(game, `钟声击中城门 · 耐久 −${damage}`, 'danger')
     }
   }
   unit.cooldown = Math.max(0, unit.cooldown - dt)
@@ -361,18 +372,21 @@ export function unitStep(game, unit, dt, onAction) {
   }
   if (healingTarget) anticipate(unit, 'heal', healingTarget)
   if (unit.side === 'enemy' && unit.x <= 56) {
-    const breach = breachDamage(unit.type, game.baseHp)
-    game.baseHp -= breach
-    recordGateDamage(game,breach,'breach')
-    effect(game, 'damage', 65, 180, `城堡 −${breach}`, '#ef778b')
-    log(game, `${unit.name}突破防线 · 城堡 −${breach}`, 'danger')
+    const escaped=losePlayerLife(game,{source:isBoss(unit.type)?'boss-breach':'breach',unit,boss:isBoss(unit.type)})
+    if(escaped) {
+      recordGateDamage(game,escaped.amount,'breach')
+      effect(game,'damage',65,180,escaped.failed?'生命挑战失败':'生命 −'+escaped.amount,'#ef778b')
+      log(game,escaped.failed?`${unit.name}突破防线 · ${isBoss(unit.type)?'首领突破':'0 生命时再次漏敌'}，本局失败`:
+        `${unit.name}突破防线 · 生命 −${escaped.amount}，剩余 ${escaped.after}`,'danger')
+      if(unit.summonedBy==='bellkeeper')recordBellEvent(game,'bell-breach',unit,{lifeLost:escaped.amount,failed:escaped.failed})
+    }
     unit.hp = 0
     unit.breached = true
   }
 }
 
 export function breachDamage(type, gateHp) {
-  return isBoss(type) ? gateHp : Math.min(gateHp, HOSTILE[type].breach)
+  return isBoss(type) ? gateHp : Math.min(gateHp,1)
 }
 
 export function bossStep(game, dt, onAction) {

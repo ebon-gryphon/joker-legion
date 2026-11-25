@@ -29,7 +29,11 @@ test('seed 4 prints a real second-wave legendary flush-five with earned gold, pa
     assert.ok(action.params.offers.includes(action.params.id))
   }
   assert.equal(run.result.phase,'won');assert.equal(run.result.wave,12)
-  assert.equal(run.waves.reduce((sum,wave)=>sum+wave.report.economy.crystals.total,0),70)
+  assert.equal(run.actions[0].before.life,12)
+  assert.equal(run.result.lifeFailed,false);assert.ok(run.result.life>=0 && run.result.life<=run.result.maxLife)
+  assert.equal(run.waves.reduce((sum,wave)=>sum+(wave.report.economy?.crystals.total || 0),0),65)
+  assert.equal(run.actions.some(action=>action.wave===12 && ['reward','buy','next-wave'].includes(action.type)),false)
+  assert.equal(run.waves.find(wave=>wave.wave===12).phase,'won')
   assert.ok(run.waves.some(wave=>wave.wave===2 && wave.phase==='shop'))
   assert.equal(replayBuild(run).phase,run.result.phase)
   assert.ok(run.fixtures.some(fixture=>fixture.id==='a-before-3520'))
@@ -50,7 +54,7 @@ test('seed 3 reports full-health Red Echo as zero healing and Holy Grail as actu
   const run=runBuildStrategy(BUILD_ROUTES[2])
   const red=run.milestones.firstRedEcho.actual
   assert.equal(red.triggered,true);assert.equal(red.effective,false)
-  assert.equal(red.effects.healed,0);assert.equal(red.effects.gateRepaired,0)
+  assert.equal(red.effects.healed,0);assert.equal(red.effects.lifeHealed,0)
   const events=run.waves.flatMap(wave=>wave.itemEvents).filter(event=>event.id==='heart-engine' || event.itemId==='heart-engine')
   assert.ok(events.some(event=>event.effects.damage>0))
   assert.ok(run.result.heartEngineDamage>0);assert.equal(run.result.redEchoHealing,0)

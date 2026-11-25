@@ -34,11 +34,12 @@ test('crystal gains update their own earned total and reject invalid amounts ato
  assert.equal(gainCrystals(game,1),0);assert.deepEqual(game,before)
 })
 
-test('endWave credits the actual wave once, including checkpoint bonuses and final-wave supplies',()=>{
+test('endWave credits nonterminal waves once and the final victory has no currency or shelf',()=>{
  for(const wave of [1,5,10,12]){
   const game=createGame({seed:'crystal-income-'+wave});game.wave=wave;game.phase='battle'
   const gold=game.gold,rng=game.rng
   endWave(game)
+  if(wave===12){assert.equal(game.phase,'won');assert.equal(game.crystals,0);assert.equal(game.gold,gold);assert.deepEqual(game.rewards,[]);assert.deepEqual(game.shop,[]);assert.equal(game.rng,rng);continue}
   const expected=waveCrystalIncome(wave)
   assert.equal(game.phase,'shop');assert.equal(game.crystals,expected);assert.equal(game.stats.crystalsEarned,expected)
   assert.equal(game.gold,gold+(wave===12?0:8+wave*2));assert.equal(game.lastSettlement.crystals.total,expected)

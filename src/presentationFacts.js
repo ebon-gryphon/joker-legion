@@ -78,7 +78,10 @@ export function deriveReportHighlights(report,{limit=7,liveEvents=[]}={}) {
   const absorbed=(report.units || []).reduce((sum,row)=>sum+quantity(row.absorbed),0)
   if(absorbed>0)rows.push({id:'shield',kind:'guard',label:'护盾实际挡伤',detail:'本波共吸收 '+rounded(absorbed)+' 伤害；包含各种护盾来源。'})
   const interrupts=quantity(report.tacticsReport?.interrupts),bell=quantity(report.gate?.sources?.bell)
-  if(interrupts>0 || bell>0)rows.push({id:'bell',kind:'interrupt',label:'止钟与城门',detail:'真实打断鸣钟 '+interrupts+' 次 · 城门受钟击损失 '+rounded(bell)+'。'})
+  if(report.lifeVersion===1){
+    const summons=(report.lifeEvents || []).filter(event=>event.wave===report.wave && event.kind==='bell-summon').length
+    if(interrupts>0 || summons>0)rows.push({id:'bell',kind:'interrupt',label:'止钟与援军',detail:'真实打断鸣钟 '+interrupts+' 次 · 成功召唤援军 '+summons+' 次。鸣钟本身不扣生命，突破按逐次生命事件结算。'})
+  }else if(interrupts>0 || bell>0)rows.push({id:'bell',kind:'interrupt',label:'旧制止钟记录',detail:'旧制打断鸣钟 '+interrupts+' 次 · 旧制钟击损失 '+rounded(bell)+'，不再计入新红心生命。'})
   const heart=(report.systems || []).find(row=>row.id==='heart-engine')
   if(heart?.damage>0)rows.push({id:'heart-engine',kind:'conversion',label:'荆棘圣杯实际兑现',detail:'有效治疗转化为 '+rounded(heart.damage)+' 点敌方生命损失。已计入总伤害，不重复相加。'})
   const queen=liveEvents.filter(event=>event.kind==='queen-interrupt' && event.actual && event.wave===report.wave)

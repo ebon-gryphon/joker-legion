@@ -9,6 +9,7 @@ import { championProgress, veteranLevel } from './training.js'
 import { ROYAL_MARCHES } from './jobs.js'
 import { scoreItemChips } from './itemEffects.js'
 import { buildScoreTrace } from './scoreBreakdown.js'
+import {scoreBuildBonuses,planBuildPassives,scaleBuildOrder,hasBuildPassive,BUILD_PASSIVE_BY_ID} from './buildPassives.js'
 
 export function setOrderTarget(game, type) {
   if (!canSelectHand(game) || !Object.hasOwn(REGIMENTS, type)) return false
@@ -29,7 +30,11 @@ export function planHand(game, cardIds, reveal, {trace=true}={}) {
   const extraChips = scoreItemChips(game,scoring,key,containsPair)
   const score = handScore(key, level, points + extraChips)
   const rewardPercent=game.waveBonuses?.active?.firstScorePercent || 0
-  if(rewardPercent){score.baseTotal=score.total;score.rewardPercent=rewardPercent;score.total=Math.floor(score.total*(1+rewardPercent));score.rewardBonus=score.total-score.baseTotal}
+  const bonusSources=[...(rewardPercent?[{id:'wave-first-score',label:'波后奖励·下波首手',percent:rewardPercent}]:[]),
+    ...scoreBuildBonuses(game,key).filter(row=>row.applied).map(row=>({id:row.id,label:row.name,percent:row.percent}))]
+  const totalPercent=bonusSources.reduce((sum,row)=>sum+row.percent,0)
+  if(totalPercent){score.baseTotal=score.total;score.rewardPercent=totalPercent;score.bonusSources=bonusSources;score.total=Math.floor(score.total*(1+totalPercent));score.rewardBonus=score.total-score.baseTotal}
+  const prepaid=game.paidHandsLeft>0,cost=prepaid?0:hand.cost
   const lead = scoring.reduce((best,card)=>rankOf(card)>rankOf(best)?card:best)
   const sourceSlot = card => slotOf(game.hand.find(c => c.id === card.id))
   const legacyCard = game.champion && !game.champion.pattern && scoring.find(c=>sourceSlot(c)===game.champion.slot)
@@ -64,20 +69,20 @@ export function planHand(game, cardIds, reveal, {trace=true}={}) {
   if (echo) combo.push('第三幕 · 领队升星')
   if (royalOrder) combo.push('皇家密令 · 三星领队')
   const {recruits,reserve,trainer,xp,waiting} = muster(game,recruit)
+  const buildPlan=planBuildPassives(game,{key,cards,scoring,cost,trainingXp:xp,waiting,trainer})
+  const trainingXp=buildPlan.trainingXp
   const projected = [...present,...recruits]
   const type = projected.some(u=>u.type===game.orderTarget) ? game.orderTarget :
     projected.find(u=>u.type===recruit.type)?.type || projected[0]?.type || recruit.type
   const boosted = owns(game, 'flush-crown') && containsFlush
-  const bonus = orderBonusFromScore(key,score.total,boosted)
+  const bonus = scaleBuildOrder(orderBonusFromScore(key,score.total,boosted),buildPlan.orderFactor)
   const overflow = reserve.length
   const recipients = [...present, ...recruits].filter(u => u.type === type)
   const crown = royal ? recipients.filter(u => !u.crowned).sort((a,b) => rankOf(b) - rankOf(a))[0] : null
-  if (boosted) combo.push('同花王冠 · 战令效果 +25%，城门恢复 8')
+  if (boosted) combo.push('同花王冠 · 战令效果 +25%，每波首次五张计分同花尝试恢复 1 玩家生命')
   if (crown) combo.push('皇家加冕 · ' + crown.name + ' 生命、攻击与治疗 +50%')
   if (owns(game, 'red-echo') && scoring.some(card => card.suit === '♥')) combo.push('红心回响 · 即时治疗')
   if (returning) combo.push('主将归队 · ' + championProgress(game.champion))
-  const prepaid = game.paidHandsLeft > 0
-  const cost = prepaid ? 0 : hand.cost
   let reason = ''
   if (!inCamp(game)) reason = '当前不能出牌'
   else if (game.handsLeft <= 0) reason = '本波出牌次数已用完'
@@ -86,13 +91,18 @@ export function planHand(game, cardIds, reveal, {trace=true}={}) {
   const championPresent = present.some(u => u.id === game.champion?.unitId) || (!game.champion?.unitId && recruits.some(u=>recalls(game.champion,u)))
   const king = scoring.find(c => c.rank === 'K')
   const march = !!king && !game.royalMarch && championPresent &&
-    veteranLevel((game.champion?.xp || 0) + (trainer?.id === game.champion?.unitId || (trainer && recalls(game.champion,trainer)) ? xp : 0)) >= 3
+    veteranLevel((game.champion?.xp || 0) + (trainer?.id === game.champion?.unitId || (trainer && recalls(game.champion,trainer)) ? trainingXp : 0)) >= 3
   const marchSuit = march ? king.suit : null
   if (march) combo.push(king.suit + 'K 御驾亲征 · ' + ROYAL_MARCHES[king.suit].name + ' · ' + ROYAL_MARCHES[king.suit].text)
   const power = Object.values(bonus).reduce((total, v) => total + v, 0)
+  const captainEligible=hasBuildPassive(game,'captain-orders') && (present.some(unit=>unit.id===game.champion?.unitId&&unit.type===type) || returning&&recruit.type===type)
+  const captainPercent=BUILD_PASSIVE_BY_ID['captain-orders'].effect.percent
+  const captainBonus=captainEligible?scaleBuildOrder(bonus,1+captainPercent):null
+  const captainRow=buildPlan.rows.find(row=>row.id==='captain-orders')
+  if(captainRow)Object.assign(captainRow,{eligible:captainEligible,applied:captainEligible,potential:{orderPercent:captainEligible?captainPercent:0},reason:captainEligible?'仅本团主将获得上述本手战令逐项 +'+captainPercent*100+'%，行动间隔仍受下限限制。':'本手主将不在受令战团。'})
   const plan = { key, name: royal ? '皇家同花顺' : hand.name, level, order: hand.order, points, score, extraChips, waiting:!!waiting, returning, royalOrder, bonus, containsPair, containsFlush,
     scoringIds: scoring.map(card => card.id), target: type, targetCount: recipients.length, crownId: crown?.id, crownRecruit: recruits.indexOf(crown),
-    cost, prepaid, power, grade, captainGrade, variantRank, look, statBonus, strengthDetail, profession:squad.name, count:squad.count, recruits, reserve, trainingXp:xp, trainerName:trainer?.name, trainerId:trainer?.id, trainerRecruit:recruits.indexOf(trainer), march, marchSuit, actualUnits: recruits.length, overflow,
+    cost, prepaid, power, grade, captainGrade, variantRank, look, statBonus, strengthDetail, profession:squad.name, count:squad.count, recruits, reserve, trainingXp, trainerName:trainer?.name, trainerId:trainer?.id, trainerRecruit:recruits.indexOf(trainer), march, marchSuit, actualUnits: recruits.length, overflow,buildPlan,captainBonus,
     description: describeBonus(bonus), combo, canDeploy: !reason, reason }
   if(trace) plan.scoreTrace=buildScoreTrace(game,plan,{cards,scoring,mode:reveal?'resolved':'preview'})
   return plan

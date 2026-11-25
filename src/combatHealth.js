@@ -4,11 +4,18 @@ import { applyFallenItems } from './itemEffects.js'
 import { FIELD_LIMIT, MAX_ENEMIES, OLD_FIELD_LIMIT } from './campaignRules.js'
 import { isBoss } from './bossRules.js'
 import { recordHealing, recordDamage, recordDeath, recordItemEvent } from './combatStats.js'
+import {heartOathMultiplier,recordBuildPassiveEvent} from './buildPassives.js'
+import { recordBellEvent } from './playerLife.js'
 
 export function healUnit(game, unit, amount, delay = 0, source = null) {
   if (unit.hp <= 0) return 0
   if (unit.side === 'ally') amount *= 1 + copies(game,'healer-brooch') * .02
+  const unboosted=amount,multiplier=heartOathMultiplier(game,source),missing=unit.maxHp-unit.hp
+  amount*=multiplier
   const restored = Math.min(unit.maxHp - unit.hp, amount)
+  if(multiplier>1)recordBuildPassiveEvent(game,'heart-oath',{effective:restored>Math.min(missing,unboosted),unitId:source.id,targetIds:[unit.id],
+    reason:restored>Math.min(missing,unboosted)?'牧师团治疗尝试+'+Number(((multiplier-1)*100).toFixed(4))+'%，额外收益按真实缺血截断。':'本次目标缺血不足，红桃誓约没有额外有效治疗。',
+    effects:{healed:Math.max(0,restored),extraHealing:Math.max(0,restored-Math.min(missing,unboosted))}})
   if (restored <= 0) return 0
   unit.hp += restored
   recordHealing(game,unit,restored,source)
@@ -100,6 +107,7 @@ export function settleDeaths(game) {
             pattern:unit.pattern, jobId:unit.jobId, grade:unit.grade, fusion:unit.fusion, hp:unit.hp, maxHp:unit.maxHp, level:unit.level },
         })
         if (side === 'enemies') {
+          if(unit.summonedBy==='bellkeeper' && !unit.breached && !unit.timedOut)recordBellEvent(game,'bell-kill',unit)
           if (!unit.breached) { game.waveKills++; game.stats.kills++ }
           if (isBoss(unit.type)) {
             game.bossTelegraph = null

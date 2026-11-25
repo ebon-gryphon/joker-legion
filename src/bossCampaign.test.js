@@ -6,10 +6,12 @@ import { bossStep, breachDamage } from './combatActions.js'
 import { HOSTILE, scoutWave } from './tactics.js'
 import { BOSS_SKILLS } from './bossRules.js'
 import { validDailyRecord } from './daily.js'
+import {resetBuildWave} from './buildPassives.js'
 
 function royalBattle(wave = 12, formation = 'guard') {
   const g = createGame({seed:'two-royals'})
   g.wave = wave
+  resetBuildWave(g)
   g.formation = formation
   addUnit(g,'knight','ally',1,{identity:{suit:'♠',rank:'2'}})
   addUnit(g,'healer','ally',1,{identity:{suit:'♥',rank:'2'}})
@@ -42,9 +44,10 @@ test('clearing the midpoint opens supplies and wave seven; only wave twelve ends
     g.enemies=[];g.spawnIndex=g.schedule.length;g.waveTime=4
     tick(g,1/30)
     assert.equal(g.stats.wavesCleared,wave)
-    assert.equal(g.phase,'shop')
+    assert.equal(g.phase,wave===12?'won':'shop')
     assert.ok(restoreGame(snapshotGame(g)))
     assert.equal(nextWave(g),false)
+    if(wave===12){assert.deepEqual(g.rewards,[]);assert.deepEqual(g.shop,[]);continue}
     assert.ok(claimAvailableReward(g,'power'))
     assert.ok(nextWave(g));assert.equal(g.wave,wave===6?7:12)
     assert.equal(g.phase,wave===6?'ready':'won')

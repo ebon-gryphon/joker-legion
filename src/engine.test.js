@@ -1,5 +1,6 @@
 import { workshopPairs } from './forge.js'
 import { fixtureCompany } from './armyFixtures.js'
+import { resetBuildWave } from './buildPassives.js'
 import {claimTestReward, setTestRewardShelf, claimAvailableReward} from './rewardFixtures.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -28,7 +29,7 @@ function playRun(seed, doctrine = 'iron') {
   const game = createGame({ seed, doctrine })
   for (let index = 0; index < 4000 && !['won', 'lost'].includes(game.phase); index++) {
     if (game.phase === 'shop') {
-      assert.ok(claimAvailableReward(game, game.baseHp < 65 ? 'repair' : 'power'))
+      assert.ok(claimAvailableReward(game, game.baseHp < game.maxBaseHp/2 ? 'repair' : 'power'))
       trainOrder(game, game.lastDeploy?.key || 'pair')
       for (const id of game.shop.slice()) if (game.crystals >= JOKERS.find(item=>item.id===id).price) buyJoker(game, id)
       assert.equal(nextWave(game), true)
@@ -197,13 +198,14 @@ test('redraw pays gold only after free uses and cannot charge twice for one sele
 
 test('waves have finite enemy schedules and idle play can lose by actual base leaks', () => {
   const game = createGame({ seed: 42, doctrine: 'scarlet' })
-  game.baseHp = 28
+  game.baseHp = 1
   fixtureCards(game,[['2','♥']]); select(game,[0])
   assert.equal(deploy(game), true)
   assert.equal(beginBattle(game), true)
   for (let i = 0; i < 1200 && game.phase === 'battle'; i++) tick(game, 0.1)
   assert.equal(game.phase, 'lost')
   assert.equal(game.baseHp, 0)
+  assert.equal(game.lifeFailed,true)
   assert.ok(game.stats.kills < game.waveSpawned)
   const frozen = snapshotGame(game)
   assert.equal(tick(game, 1), false)
@@ -215,6 +217,7 @@ test('waves have finite enemy schedules and idle play can lose by actual base le
 function healerStandoff(wave = 1, enemyType = 'raider') {
   const game = createGame({ seed: 'healer-standoff' })
   game.wave = wave
+  resetBuildWave(game)
   fixtureCompany(game, 'healer')
   game.allies = [game.allies.find(unit => unit.jobId === 'medic')]
   game.schedule = [{ at: 0, type: enemyType }]; beginBattle(game)
@@ -238,12 +241,14 @@ test('a lone self-healing priest holds until the deadline, then only the survivi
     tick(g, 1)
     assert.equal(g.phase, 'shop')
     assert.equal(g.waveTime, deadline)
-    assert.equal(g.baseHp, gate - 6)
-    assert.deepEqual(g.waveTimeout, { count: 1, damage: 6, boss: false })
+    assert.equal(g.baseHp, gate - 1)
+    assert.deepEqual({count:g.waveTimeout.count,damage:g.waveTimeout.damage,boss:g.waveTimeout.boss,queuedWithdrawn:g.waveTimeout.queuedWithdrawn},
+      {count:1,damage:1,boss:false,queuedWithdrawn:0})
+    assert.equal(g.waveTimeout.unitIds.length,1)
     assert.equal(g.stats.kills, 0)
     assert.equal(g.gold, 18)
     assert.equal(tick(g, 2), false)
-    assert.equal(g.baseHp, gate - 6)
+    assert.equal(g.baseHp, gate - 1)
     assert.deepEqual(restoreGame(snapshotGame(g)).waveTimeout, g.waveTimeout)
     assert.ok(claimAvailableReward(g, 'power'))
     nextWave(g)
@@ -260,29 +265,34 @@ test('the last combat step can clear the field, while a surviving boss breaks th
     game.allies[0].cooldown = killBoss ? 0 : 1
     const gate = game.baseHp
     tick(game, 1 / 30)
-    assert.equal(game.phase, killBoss ? 'shop' : 'lost')
+    assert.equal(game.phase, killBoss ? 'won' : 'lost')
     assert.equal(game.stats.kills, killBoss ? 1 : 0)
     assert.equal(game.baseHp, killBoss ? gate : 0)
-    assert.deepEqual(game.waveTimeout, killBoss ? null : { count: 1, damage: gate, boss: true, bossName:'缀命皇后' })
-    if(killBoss){assert.equal(nextWave(game),false);assert.ok(claimAvailableReward(game));assert.ok(nextWave(game));assert.equal(game.phase,'won')}
+    if(killBoss){assert.equal(game.waveTimeout,null);assert.equal(nextWave(game),false);assert.equal(game.rewards.length,0)}
+    else assert.deepEqual({count:game.waveTimeout.count,damage:game.waveTimeout.damage,boss:game.waveTimeout.boss,bossName:game.waveTimeout.bossName},
+      {count:1,damage:gate,boss:true,bossName:'缀命皇后'})
   }
 })
 
-test('an overdue legacy battle resolves queued reinforcements immediately without another attack', () => {
+test('an overdue legacy battle resolves only its real surviving enemy and withdraws queued reinforcements without another attack', () => {
   const snapshot = snapshotGame(healerStandoff())
   delete snapshot.waveTimeout
+  for(const key of ['lifeVersion','lifeFailed','lifeEvents','lifeItemState'])delete snapshot[key]
   snapshot.waveTime = WAVES[0].duration + 90
   snapshot.schedule.push({ at: 8, type: 'brute' })
-  snapshot.baseHp = 15
+  snapshot.baseHp = 15;snapshot.maxBaseHp=100
   snapshot.allies[0].cooldown = 0
   snapshot.enemies[0].hp = 1
   const game = restoreGame(snapshot)
+  assert.equal(game.baseHp,2,'legacy wound ratio is rounded up while damaged saves remain below their new maximum')
   tick(game, 1 / 30)
-  assert.equal(game.phase, 'lost')
+  assert.equal(game.phase, 'shop')
   assert.equal(game.waveTime, WAVES[0].duration)
   assert.equal(game.time, snapshot.time)
   assert.equal(game.stats.kills, 0)
-  assert.deepEqual(game.waveTimeout, { count: 2, damage: 15, boss: false })
+  assert.equal(game.baseHp,1);assert.equal(game.lifeFailed,false)
+  assert.equal(game.waveTimeout.count,1);assert.equal(game.waveTimeout.queuedWithdrawn,1)
+  assert.equal(game.waveTimeout.damage,1)
 })
 
 test('wave rewards, purchases, sell and reroll respect phases, funds and once-only reward choice', () => {

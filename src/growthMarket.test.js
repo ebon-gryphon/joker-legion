@@ -95,6 +95,17 @@ test('stacked scoring, consumable charges, opening shields and wave income are a
   assert.ok(claimTestReward(g,'repair'));assert.ok(nextWave(g));assert.ok(saved(g))
 })
 
+test('each life rivet layer restores one on a clear, while full life records zero without inventing a gain',()=>{
+  for(const missing of [0,2]) {
+    const g=createGame();soldier(g,'high');add(g,'gate-rivet',3);g.schedule=[];beginBattle(g)
+    g.baseHp=g.maxBaseHp-missing;endWave(g)
+    const event=(g.lifeEvents || []).find(event=>event.kind==='heal' && event.source==='gate-rivet')
+    assert.ok(event);assert.equal(event.sourceId,'gate-rivet');assert.equal(event.attempted,3)
+    assert.equal(event.amount,missing);assert.equal(g.baseHp,g.maxBaseHp)
+    const before=snapshotGame(g);endWave(g);assert.deepEqual(snapshotGame(g),before)
+  }
+})
+
 test('two waiting legends can fuse on the bench, then take one free spot with their saved quality',()=>{
   const g=createGame(), guard=soldier(g,'high')
   const identity={...DETACHMENTS.pair.members[0],source:'card',grade:4,pattern:'pair'}

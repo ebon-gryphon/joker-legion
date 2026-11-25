@@ -10,7 +10,7 @@ const props = defineProps({ unit: {type:Object,required:true}, title: String })
 const {audio,sound,toggleSound,reducedMotion} = inject('legionAudio')
 const canvas=ref(null), mode=ref('idle'), active=ref(false), slow=ref(false)
 const profile=computed(()=>performanceOf(props.unit,['idle','walk','hit'].includes(mode.value)?'attack':mode.value))
-const labels={idle:'待机',walk:'行走',hit:'受击',pulse:'震荡',attack:'攻击',heal:'治疗',skill:'战技',toll:'钟击',bombard:'轰击'}
+const labels={idle:'待机',walk:'行走',hit:'受击',pulse:'震荡',attack:'攻击',heal:'治疗',skill:'战技',toll:'召唤援军',bombard:'轰击'}
 const modes=computed(()=>{
   const basic=['idle','walk','hit']
   if(props.unit.fusion) return [...basic,'attack','skill']

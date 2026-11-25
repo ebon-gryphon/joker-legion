@@ -1,11 +1,14 @@
 import { JOKER_BY_ID } from './campaignRules.js'
 
-export const ITEM_EFFECT_LABELS={chips:'筹码',shield:'赋予护盾',healed:'有效治疗',gateRepaired:'城门修复',
+export const ITEM_EFFECT_LABELS={chips:'筹码',shield:'赋予护盾',healed:'友军有效治疗',lifeHealed:'生命恢复',gateRepaired:'旧制修复',
   starGain:'额外星级',xpGain:'额外经验',damage:'实际伤害',shieldDamage:'消耗敌盾'}
+const DISPLAY_EFFECT_LABELS={...ITEM_EFFECT_LABELS,energyRefund:'返还军令',actualSpent:'实际军令支出',
+  attackGain:'实际攻击增加',healGain:'实际治疗力增加',healthGain:'实际生命上限增加',periodReduction:'实际行动间隔缩短',extraHealing:'其中额外有效治疗',scorePercent:'最终分加成',orderPercent:'战令加成',percent:'永久加成',
+  finalScore:'本手最终分',totalXp:'实际总经验',activated:'本波能力激活',arrows:'追加箭数',targets:'实际目标'}
 
 export function actualEffectText(effects={}) {
-  return Object.entries(ITEM_EFFECT_LABELS).filter(([key])=>Number.isFinite(effects[key]) && effects[key]!==0)
-    .map(([key,label])=>label+' '+Number(effects[key].toFixed(1))).join(' · ') || '实际收益 0'
+  return Object.entries(DISPLAY_EFFECT_LABELS).filter(([key])=>Number.isFinite(effects[key]) && effects[key]!==0)
+    .map(([key,label])=>label+' '+Number((['scorePercent','orderPercent','percent'].includes(key)?effects[key]*100:effects[key]).toFixed(key==='periodReduction'?3:1))+(['scorePercent','orderPercent','percent'].includes(key)?'%':key==='periodReduction'?' 秒':'')).join(' · ') || '实际收益 0'
 }
 
 // A view over recorded effects, never a replay or a second score calculation.
@@ -26,7 +29,7 @@ export function itemEventGroups(combat) {
 
 export function gateSourceRows(combat) {
   if(!combat?.gate?.sources) return null
-  return [['bell','鸣钟击城'],['breach','敌军突破'],['timeout','超时残敌'],['unknown','未分类损伤']]
+  return [['bell','旧制钟击'],['breach','旧制敌军突破'],['timeout','旧制超时残敌'],['unknown','旧制未分类损伤']]
     .map(([id,label])=>({id,label,amount:combat.gate.sources[id] || 0})).filter(row=>row.amount>0)
 }
 
