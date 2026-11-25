@@ -74,7 +74,7 @@ export function beginBattle(game) {
   }
   spawnEnemies(game)
   applyOpeningItems(game)
-  log(game, `${waveInfo(game).name} · ${game.schedule.some(slot=>slot.at>0)?'首批敌军入场':'全军入场'} · 军团自动交战`, 'danger')
+  log(game, `${waveInfo(game).name} · 全军入场 · 军团自动交战`, 'danger')
   return true
 }
 

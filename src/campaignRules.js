@@ -52,18 +52,18 @@ export const DOCTRINES = [
 ]
 
 export const WAVES = [
-  { id: 1, name: '荒野来客', title: '第一幕 · 集结', description: '流寇从右侧来袭。打出高牌招刀兵，再用对子招牧师给前排加盾。', boss: false, duration: 38 },
-  { id: 2, name: '夜翼之潮', title: '第二幕 · 破风', description: '夜翼移动更快。游侠擅长截住漏过前排的敌人。', boss: false, duration: 42 },
-  { id: 3, name: '碎盾先锋', title: '第三幕 · 破阵', description: '巨兵掩护鸣钟使。战前打出对子，可打断首次鸣钟。', boss: false, duration: 45 },
-  { id: 4, name: '猩红仪式', title: '第四幕 · 回响', description: '敌方术士从远处施法。保住前排，战前向后排下令。', boss: false, duration: 48 },
-  { id: 5, name: '王城禁卫', title: '第五幕 · 决战前夜', description: '禁卫与射手协同推进。安排兵种，保护后排。', boss: false, duration: 50 },
-  { id: 6, name: '无冕之王', title: '第六幕 · 折冠之战', description: '中期首领先标记前线轰击，半血后向后排发动破阵震击。分散布阵并留盾保护治疗者，胜后继续远征。', boss: true, bossType:'boss', duration: 64 },
-  { id: 7, name: '残旗追猎', title: '第七幕 · 越过王城', description: '王庭残军重新集结，夜翼掩护双路远射。培养老兵并清理鸣钟使。', boss: false, duration: 58 },
-  { id: 8, name: '双钟封锁', title: '第八幕 · 破锁', description: '两名鸣钟使受巨兵保护。用猎手阵优先截断援军召唤，再补足前排。', boss: false, duration: 60 },
-  { id: 9, name: '血焰长廊', title: '第九幕 · 穿火', description: '术士与射手交叉火力增强。散兵承伤或以猎手抢攻后排。', boss: false, duration: 63 },
-  { id: 10, name: '黑铁重围', title: '第十幕 · 突围', description: '重甲敌兵成群推进，双钟计时更紧。融合精英与主将承担持续作战。', boss: false, duration: 66 },
-  { id: 11, name: '缀命禁军', title: '第十一幕 · 最后军议', description: '皇后的禁军护住三名鸣钟使。出战前整备护盾和精英，保留主将。', boss: false, duration: 70 },
-  { id: 12, name: '缀命皇后', title: '终幕 · 斩断命线', description: '最终首领轮换断线裁决与王庭震荡。分散布阵，给被标记者列盾；震荡蓄力时削去其 8% 最大生命可打断。', boss: true, bossType:'finalBoss', duration: 90 },
+  { id: 1, name: '荒野来客', title: '第一幕 · 集结', description: '流寇从右侧来袭。打出高牌招刀兵，再用对子招牧师给前排加盾。', boss: false, duration: 43 },
+  { id: 2, name: '夜翼之潮', title: '第二幕 · 破风', description: '夜翼移动更快。游侠擅长截住漏过前排的敌人。', boss: false, duration: 43 },
+  { id: 3, name: '碎盾先锋', title: '第三幕 · 破阵', description: '巨兵掩护鸣钟使。战前打出对子，可打断首次鸣钟。', boss: false, duration: 43 },
+  { id: 4, name: '猩红仪式', title: '第四幕 · 回响', description: '敌方术士从远处施法。保住前排，战前向后排下令。', boss: false, duration: 43 },
+  { id: 5, name: '王城禁卫', title: '第五幕 · 决战前夜', description: '禁卫与射手协同推进。安排兵种，保护后排。', boss: false, duration: 43 },
+  { id: 6, name: '无冕之王', title: '第六幕 · 折冠之战', description: '中期首领先标记前线轰击，半血后向后排发动破阵震击。分散布阵并留盾保护治疗者，胜后继续远征。', boss: true, bossType:'boss', duration: 60 },
+  { id: 7, name: '残旗追猎', title: '第七幕 · 越过王城', description: '王庭残军重新集结，夜翼掩护双路远射。培养老兵并清理鸣钟使。', boss: false, duration: 43 },
+  { id: 8, name: '双钟封锁', title: '第八幕 · 破锁', description: '两名鸣钟使受巨兵保护。用猎手阵优先截断援军召唤，再补足前排。', boss: false, duration: 43 },
+  { id: 9, name: '血焰长廊', title: '第九幕 · 穿火', description: '术士与射手交叉火力增强。散兵承伤或以猎手抢攻后排。', boss: false, duration: 43 },
+  { id: 10, name: '黑铁重围', title: '第十幕 · 突围', description: '重甲敌兵成群推进，双钟计时更紧。融合精英与主将承担持续作战。', boss: false, duration: 43 },
+  { id: 11, name: '缀命禁军', title: '第十一幕 · 最后军议', description: '皇后的禁军护住三名鸣钟使。出战前整备护盾和精英，保留主将。', boss: false, duration: 43 },
+  { id: 12, name: '缀命皇后', title: '终幕 · 斩断命线', description: '最终首领轮换断线裁决与王庭震荡。分散布阵，给被标记者列盾；震荡蓄力时削去其 8% 最大生命可打断。', boss: true, bossType:'finalBoss', duration: 60 },
 ]
 
 export const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']

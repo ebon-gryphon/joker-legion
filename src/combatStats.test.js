@@ -1,7 +1,7 @@
 import {claimTestReward, setTestRewardShelf, claimAvailableReward} from './rewardFixtures.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createGame, addUnit, beginBattle, deploy, snapshotGame, restoreGame, tick, useTrick, chooseReward, nextWave } from './engine.js'
+import { WAVES, createGame, addUnit, beginBattle, deploy, snapshotGame, restoreGame, tick, useTrick, chooseReward, nextWave } from './engine.js'
 import { endWave } from './campaign.js'
 import { damageUnit, healUnit, settleDeaths } from './combatHealth.js'
 import { unitStep } from './combatActions.js'
@@ -188,7 +188,7 @@ test('older gate ledgers resume without fabricating unavailable preparation-vers
 test('failure records timeout gate damage once and completing a report twice is idempotent',()=>{
   const g=practice({enemies:['boss']})
   g.baseHp=8;initializeCombatStats(g,{runId:'loss'})
-  g.waveTime=37.99;tick(g,1/30)
+  g.waveTime=WAVES[g.wave-1].duration-.01;tick(g,1/30)
   assert.equal(g.phase,'lost')
   const report=combatSummary(g)
   assert.equal(report.result,'lost');assert.equal(report.gate.damage,8);assert.equal(report.gate.netLoss,8)
@@ -202,7 +202,7 @@ test('life damage preserves real breach and timeout sources, bell summons do not
   const g=practice({enemies:['bellkeeper','raider']})
   g.enemies[0].bellTimer=.01;unitStep(g,g.enemies[0],1/30)
   g.enemies[1].x=50;unitStep(g,g.enemies[1],1/30);settleDeaths(g)
-  g.waveTime=37.99;tick(g,1/30)
+  g.waveTime=WAVES[g.wave-1].duration-.01;tick(g,1/30)
   assert.deepEqual(combatSummary(g).gate.sources,{bell:0,breach:1,timeout:2,unknown:0})
   assert.equal(combatSummary(g).gate.damage,3)
   const old=practice();old.baseHp-=5;recordGateDamage(old,5,'bell')

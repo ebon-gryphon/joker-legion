@@ -2,7 +2,6 @@ import {waveInfo} from './endless.js'
 import { CAMP_AREA } from './formation.js'
 import { bossStep, unitStep } from './combatActions.js'
 import { log, effect, clamp } from './gameState.js'
-import { spawnEnemies } from './waveSchedule.js'
 import { settleDeaths } from './combatHealth.js'
 import { WAVES, STEP } from './campaignRules.js'
 import { resolvePreparedTactics, settleFeint } from './battlePlans.js'
@@ -18,9 +17,8 @@ export function describeWaveTimeout({count,damage,boss,bossName,failed=false,que
 }
 
 function resolveTimeout(game) {
-  // Only real surviving units escape. Unspawned schedule entries withdraw.
-  const remaining=game.enemies.filter(unit=>unit.hp>0),queuedWithdrawn=game.schedule.length-game.spawnIndex
-  if(!remaining.length){game.enemies=[];game.spawnIndex=game.schedule.length;return}
+  const remaining=game.enemies.filter(unit=>unit.hp>0)
+  if(!remaining.length){game.enemies=[];return}
   const before = game.baseHp
   const boss=remaining.find(unit=>isBoss(unit.type))
   let processed=0
@@ -31,15 +29,13 @@ function resolveTimeout(game) {
     if(unit.summonedBy==='bellkeeper')recordBellEvent(game,'bell-timeout',unit,{lifeLost:event?.amount || 0,failed:game.lifeFailed})
   }
   recordGateDamage(game,before-game.baseHp,'timeout')
-  game.waveTimeout = {count:remaining.length,damage:before-game.baseHp,boss:!!boss,processed,queuedWithdrawn,failed:game.lifeFailed,
+  game.waveTimeout = {count:remaining.length,damage:before-game.baseHp,boss:!!boss,processed,failed:game.lifeFailed,
     ...(boss?{bossName:boss.name}:{}),unitIds:remaining.map(unit=>unit.id)}
   game.enemies = []
-  game.spawnIndex = game.schedule.length
   log(game, describeWaveTimeout(game.waveTimeout), 'danger')
 }
 
 function advanceCombat(game, dt, onAction) {
-  spawnEnemies(game)
   if (game.trickUsed && game.doctrine === 'arcane') {
     const expired = game.allies.find(unit => unit.echoUntil <= game.time)
     if (expired) {
@@ -94,7 +90,7 @@ function simulationStep(game, dt, onAction) {
     game.selected = []
     game.bossTelegraph = null
     log(game, '生命挑战失败。带着这次的构筑经验，再演一幕。', 'danger')
-  } else if (game.spawnIndex >= game.schedule.length && !game.enemies.length && game.waveTime > 3) {
+  } else if (game.spawnIndex >= game.schedule.length && !game.enemies.length) {
     settleFeint(game)
     endWave(game)
   }

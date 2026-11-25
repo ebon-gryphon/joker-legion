@@ -134,12 +134,15 @@ export function drawEffect(c, effect, time, yMap, reduced, lag, labels) {
     c.globalAlpha = Math.min(.8, life * 1.4); diamond(c, x, y + 2, 17 + progress * 9, 5 + progress * 3, color)
     for (let i = 0; i < 4; i++) { rect(c, x - 11 + i * 7, y - 12 - progress * 42 - i * 5, 2, 6, color); if (i % 2) cross(c, x - 14 + i * 9, y - 8 - progress * 32 - i * 5, 2, '#f0d8b4') }
   } else if (type==='death' && effect.fallen) {
+    // Authoritative death has already been recorded; only the painted fade is shortened.
+    const fade=progress/.7
+    if(fade>=1){c.restore();return}
     const unit=effect.fallen, hostile=unit.side==='enemy', art=ENEMY_CATALOG[unit.type]
     const h=art?.height ?? (unit.fusion ? 65 : 49+(unit.level-1)*3), w=art?.width ?? (unit.fusion ? 60 : 50)
     const sink=reduced ? 0 : progress*progress
     c.translate(x+(hostile?1:-1)*Math.round(sink*7),y+Math.round(sink*3))
     c.transform(1,0,(hostile?-1:1)*sink*.22,1-sink*.23,0,0)
-    c.globalAlpha=1-progress*progress
+    c.globalAlpha=1-fade*fade
     drawCardSprite(c,unit,-w/2,-h,w,h,{combat:true,flip:hostile,pose:restingPose(performanceOf(unit) || {gesture:'thrust'},time,0,(1-progress)*.2,reduced)})
   } else if (type === 'burst' || type === 'death') {
     c.globalAlpha = Math.min(1, life * 2); const spread = (type === 'burst' ? 42 : 25) * progress

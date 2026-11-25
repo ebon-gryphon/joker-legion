@@ -20,7 +20,7 @@ import { validFusionJobs } from './professionFusion.js'
 import { LURE_TRAVEL, LURE_REVEAL } from './performers.js'
 import { PAY_WAGONS } from './convoy.js'
 import { createGame } from './campaign.js'
-import { makeSchedule, spawnEnemies } from './waveSchedule.js'
+import { makeSchedule, spawnEnemies, waveSchedule } from './waveSchedule.js'
 import { PERFORMANCES } from './performance.js'
 import { BOSS_SKILLS, isBoss } from './bossRules.js'
 import { validCombatStats, migrateCombatStats, discardInvalidScoreMetadata } from './combatStats.js'
@@ -48,10 +48,9 @@ export function restoreGame(snapshot) {
   // Never merge persisted data into live objects; whitelist and validate a full snapshot.
   try {
     const data = typeof snapshot === 'string' ? JSON.parse(snapshot) : JSON.parse(JSON.stringify(snapshot))
-    if(data?.mode==='endless'){
-      data.endlessRevision??=1
-      if(![1,2].includes(data.endlessRevision))return null
-    }
+    if(data?.encounterVersion!=null && data.encounterVersion!==1)return null
+    if(data?.endlessRevision!=null && ![1,2].includes(data.endlessRevision))return null
+    if(data?.encounterVersion==null && data?.waveTimeout)data.waveTimeout.legacyDuration=data.waveTime
     if(data?.lifeVersion===undefined && !prepareLegacyLife(data))return null
     discardInvalidScoreMetadata(data)
     if (!validExpedition(data) || !validDeck(data) || !validHandAndTricks(data) ||
@@ -243,9 +242,14 @@ function validWave(data) {
   if(data.enemies.some(unit=>unit.type==='cantor' && (!Number.isFinite(unit.riteTimer) || unit.riteTimer<0 || unit.riteTimer>4.5 || unit.chanting!==undefined && typeof unit.chanting!=='boolean')))return false
   if (!Number.isFinite(data.bossTimer)) return false
   if (!Array.isArray(data.schedule) || data.schedule.length > 40 || !data.schedule.every(item => Number.isFinite(item.at) && item.at >= 0 && Object.hasOwn(HOSTILE, item.type))) return false
+  if(data.encounterVersion===1 && ['ready','battle'].includes(data.phase)){
+    if(data.schedule.some(slot=>slot.at!==0))return false
+    if(data.phase==='battle' && data.spawnIndex!==data.schedule.length)return false
+  }
   if (data.waveTimeout != null) {
     const { count, damage, boss, bossName } = data.waveTimeout
-    if (!['shop', 'won', 'lost','retired'].includes(data.phase) || data.waveTime !== waveInfo(data).duration ||
+    if (!['shop', 'won', 'lost','retired'].includes(data.phase) || data.waveTime !== (data.waveTimeout.legacyDuration ?? waveInfo(data).duration) ||
+        (data.waveTimeout.legacyDuration!=null && !(data.waveTime>0 && data.waveTime<=90)) ||
         !Number.isSafeInteger(count) || count < 1 || count > MAX_ENEMIES + data.schedule.length ||
         !Number.isFinite(damage) || damage < 0 || damage > data.maxBaseHp || typeof boss !== 'boolean' ||
         (boss && data.phase !== 'lost') || (bossName !== undefined && (!boss || !['无冕之王','缀命皇后'].includes(bossName)))) return false
@@ -452,12 +456,7 @@ function migrateExpedition(data) {
     pristine.handsLeft = Math.max(0, HANDS_PER_WAVE - Math.max(used, data.reserveUsed ? 1 : 0))
     pristine.legacyFieldSize = pristine.allies.length > FIELD_LIMIT ? pristine.allies.length : 0
     if (pristine.phase === 'ready') {
-      makeSchedule(pristine)
       if (!pristine.allies.length) pristine.handsLeft = HANDS_PER_WAVE
-    }
-    if (pristine.phase === 'battle') {
-      for (const spawn of pristine.schedule.slice(pristine.spawnIndex)) spawn.at = 0
-      spawnEnemies(pristine)
     }
   }
   if (!data.squadRules && pristine.allies.length > FIELD_LIMIT) pristine.legacyFieldSize = pristine.allies.length
@@ -506,5 +505,20 @@ function migrateExpedition(data) {
   // Optional measurement data never makes an otherwise valid expedition unplayable.
   const measured = validCombatStats(data) ? data : {}
   migrateCombatStats(pristine, measured)
+  if(data.encounterVersion==null || data.handsLeft===undefined){
+    if(pristine.phase==='ready')makeSchedule(pristine)
+    else if(pristine.phase==='battle'){
+      // Keep every already fought or living enemy. Fill remaining places only once on import.
+      const plan=waveSchedule(pristine.seed,pristine.wave,pristine.difficulty,pristine.mode)
+      const arrived=pristine.schedule.slice(0,pristine.spawnIndex)
+      const pending=pristine.schedule.slice(pristine.spawnIndex)
+      const seats=Math.min(MAX_ENEMIES-pristine.enemies.length,Math.max(0,plan.length-arrived.length))
+      const boss=pending.find(slot=>isBoss(slot.type))
+      const ordered=boss?[boss,...pending.filter(slot=>slot!==boss)]:pending
+      const admitted=pristine.waveTime>=waveInfo(pristine).duration ? ordered.filter(slot=>isBoss(slot.type)).slice(0,seats) : ordered.slice(0,seats)
+      pristine.schedule=[...arrived,...admitted].map(slot=>({...slot,at:0}))
+      spawnEnemies(pristine)
+    }
+  }
   return pristine
 }

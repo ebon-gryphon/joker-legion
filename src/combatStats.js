@@ -194,6 +194,11 @@ function reportOf(game, ledger) {
   const current=copy(ledger)
   current.duration=Math.max(0,(game.waveTime || 0)-ledger.fromWaveTime)
   current.battleDuration=game.waveTime || 0
+  if(ledger.started && !ledger.partial && game.encounterVersion===1){
+    current.enemyForce={regular:game.spawnIndex,total:game.waveSpawned,
+      summoned:game.lifeEvents.filter(e=>e.kind==='bell-summon').length,
+      brood:ledger.enemyEvents.filter(e=>e.kind==='split').reduce((sum,e)=>sum+e.amount,0)}
+  }
   current.energyLeft=game.energy
   current.gate.end=game.baseHp
   current.gate.netLoss=current.gate.start-current.gate.end

@@ -1,5 +1,5 @@
 import {quarry,recordEnemy,advanceRite} from './enemyBehavior.js'
-import {endlessScale} from './endless.js'
+import {endlessScale,ENDLESS} from './endless.js'
 import { CAMP_AREA } from './formation.js'
 import { distance, clamp, effect, owns, trigger, log } from './gameState.js'
 import { damageUnit, healUnit, nearest } from './combatHealth.js'
@@ -358,6 +358,11 @@ export function unitStep(game, unit, dt, onAction) {
   if(unit.type==='cantor'){
     if(advanceRite(game,unit,dt))perform(game,unit,'heal',unit,onAction)
     if(unit.chanting && unit.x>56)return
+  }
+  // Wings advance along their actual flank. A nearby defender can pin them in melee.
+  if(unit.type==='bat' && game.mode==='endless' && game.wave>12 && game.feint?.result!=='active'){
+    const blockers=enemies.filter(ally=>Math.abs(ally.y-unit.y)<=ENDLESS.wingLane && distance(unit,ally)<=unit.range+5)
+    enemy=nearest(unit,blockers)
   }
   let healingTarget
   if (unit.side === 'ally' && unit.type === 'healer') {

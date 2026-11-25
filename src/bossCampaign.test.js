@@ -32,7 +32,7 @@ test('twelve deterministic waves place separate, stronger bosses at six and twel
     assert.deepEqual(schedule,waveSchedule('campaign',w,difficulty))
     assert.ok(schedule.length>0 && schedule.length<=40)
     assert.equal(scoutWave(schedule).bossAt,[6,12].includes(w)?0:null)
-    if(w>=7 && w<=11) assert.ok(schedule.length>waveSchedule('campaign',w-1,difficulty).length)
+    assert.ok(schedule.length<=15 && schedule.every(slot=>slot.at===0))
   }
   assert.ok(waveSchedule('campaign',12).some(s=>s.type==='finalBoss'))
   assert.equal(breachDamage('finalBoss',77),77)

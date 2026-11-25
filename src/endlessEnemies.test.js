@@ -86,18 +86,32 @@ test('标准与无尽前十二波同队列，新敌军按波替换既有名额',
   for(let wave=1;wave<=12;wave++){
     const types=E.waveSchedule(4,wave).map(e=>e.type)
     assert.deepEqual(E.waveSchedule(4,wave),E.waveSchedule(4,wave,'standard','endless'))
-    assert.equal(types.length,[9,11,11,10,13,9,14,15,17,19,20,16][wave-1])
+    assert.equal(types.length,[9,11,11,10,13,9,12,13,14,15,15,14][wave-1])
     for(const [type,at] of [['banner',4],['hunter',7],['cantor',9],['splitter',5]])assert.equal(types.includes(type),wave>=at)
   }
 })
-test('种子支配分批组合，十八和二十四波使用交替首领技能',()=>{
+test('种子决定同时入场的混编，十八和二十四波使用交替首领技能',()=>{
   const plan=(seed,w)=>E.waveSchedule(seed,w,'standard','endless')
   assert.deepEqual(plan(4,19),plan(4,19));assert.notDeepEqual(plan(4,19),plan(15,19))
-  assert.equal(plan(4,18)[0].type,'boss');assert.equal(plan(4,24)[0].type,'finalBoss')
+  assert.ok(plan(4,18).some(e=>e.type==='boss'));assert.ok(plan(4,24).some(e=>e.type==='finalBoss'))
   for(let wave=13;wave<90;wave++){
-    const g=game('endless',wave);spawnEnemies(g);assert.equal(g.enemies.length,ENDLESS.batchSize)
-    g.waveTime=70;spawnEnemies(g);assert.ok(g.enemies.length<=MAX_ENEMIES)
+    const g=game('endless',wave);spawnEnemies(g);assert.equal(g.enemies.length,g.schedule.length);assert.ok(g.enemies.length>=12 && g.enemies.length<=16)
+    const count=g.enemies.length;g.enemies.pop();g.waveTime=20;spawnEnemies(g);assert.equal(g.enemies.length,count-1)
     assert.ok(new Set(g.schedule.map(e=>e.type)).size>=3)
+  }
+})
+test('无尽夜翼沿实际侧翼推进，同侧部署可以截住它，前十二波仍追击最近士兵',()=>{
+  for(const wave of [9,19]){
+    const g=game('endless',wave),wing=enemy(g,'bat'),defender=ally(g,'knight',480)
+    wing.y=175;defender.y=300
+    unitStep(g,wing,.1)
+    assert.ok(wing.x<500)
+    if(wave===9)assert.ok(wing.y>175)
+    else assert.equal(wing.y,175)
+    defender.x=wing.x-10;defender.y=wing.y+10;wing.cooldown=0
+    const before=defender.hp
+    unitStep(g,wing,.1)
+    assert.ok(defender.hp<before)
   }
 })
 test('无尽使用冻结的十二波基线与指数曲线，不加快行动',()=>{
@@ -105,7 +119,7 @@ test('无尽使用冻结的十二波基线与指数曲线，不加快行动',()=
     const g=game('endless',wave),u=enemy(g,'cantor')
     const early=1.07**(Math.min(wave,23)-12),late=Math.max(0,wave-23)
     const scale=(1+.22*11)*early*1.145**late
-    assert.equal(u.maxHp,Math.round(HOSTILE.cantor.hp*scale));assert.equal(u.atk,Math.round(HOSTILE.cantor.atk*(1+.22*11)*early*1.10**late))
+    assert.equal(u.maxHp,Math.round(HOSTILE.cantor.hp*scale*(ENDLESS.eliteHealthStart+(ENDLESS.eliteHealth-ENDLESS.eliteHealthStart)*Math.min(1,(wave-13)/ENDLESS.eliteRampWaves))));assert.equal(u.atk,Math.round(HOSTILE.cantor.atk*(1+.22*11)*early*1.10**late*ENDLESS.eliteAttack))
     assert.equal(u.period,HOSTILE.cantor.period);assert.equal(endlessScale(g),early*1.145**late)
   }
 })

@@ -10,12 +10,13 @@ const label=process.argv[2] || 'after'
 if(!/^[a-z0-9-]+$/.test(label))throw Error('Invalid measurement label')
 const destination=new URL('../output/balance/',import.meta.url)
 await mkdir(destination,{recursive:true})
-const cases=[...BUILD_ROUTES,...[9,7].map(seed=>({...BUILD_ROUTES[1],seed,difficulty:'veteran'}))]
+const cases=[...BUILD_ROUTES,{...BUILD_ROUTES[2],seed:8},...[9,7].map(seed=>({...BUILD_ROUTES[1],seed,difficulty:'veteran'}))]
 const results=[]
 for(const base of cases){
   const waves=[]
-  let army,health
+  let army,health,opening
   const route=runBuildStrategy({...base,mode:'endless',stopWave:60},{fixtures:false,onBattleStart:g=>{
+    opening=g.spawnIndex
     army=structuredClone(g.allies.filter(u=>u.echoUntil==null).map(u=>({name:u.name,atk:u.atk,heal:u.heal,maxHp:u.maxHp,period:u.period,
       xp:u.trainingXp,grade:u.grade,stars:u.level,job:u.jobId,training:u.trainingGrowth,order:u.waveBonus,permanent:u.rewardModifiers})))
     // Only this detached probe consumes RNG. Use the same real constructor and rounding as the simulation.
@@ -27,7 +28,7 @@ for(const base of cases){
     const sum=(kind)=>count(kind).reduce((s,e)=>s+e.amount,0)
     const spawnedHp=spawns.reduce((s,e)=>s+health[e.type],0)+sum('split')*Math.round(health.splitter*ENEMY_RULES.brood)+report.lifeEvents.filter(e=>e.kind==='bell-summon').length*health.raider
     const loss=report.lifeEvents.filter(e=>e.kind==='loss' || e.failed)
-    waves.push({wave:g.wave,life:g.baseHp,minLife:Math.min(report.lifeStart,...report.lifeEvents.map(e=>e.after)),loss,phase:g.phase,
+    waves.push({wave:g.wave,boss:g.wave%6===0,scheduled:g.schedule.length,initial:opening,initialHp:g.schedule.slice(0,opening).reduce((s,e)=>s+health[e.type],0),regularSpawned:spawns.length,bellSummons:report.lifeEvents.filter(e=>e.kind==='bell-summon').length,timeout:!!g.waveTimeout,life:g.baseHp,minLife:Math.min(report.lifeStart,...report.lifeEvents.map(e=>e.after)),loss,phase:g.phase,
       seconds:+report.battleDuration.toFixed(2),cleared:g.phase==='shop',casualties:report.units.filter(u=>!u.echo).reduce((s,u)=>s+u.deaths,0),
       attack:army.reduce((s,u)=>s+u.atk,0),heal:army.reduce((s,u)=>s+u.heal,0),maxAtk:Math.max(...army.map(u=>u.atk)),maxHeal:Math.max(...army.map(u=>u.heal)),maxHp:Math.max(...army.map(u=>u.maxHp)),army,
       spawnedHp,effectiveHp:Math.round(spawnedHp+sum('guard')+sum('heal')),guarded:sum('guard'),healed:sum('heal'),

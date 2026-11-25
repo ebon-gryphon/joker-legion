@@ -48,16 +48,14 @@ test('one remaining life may reach zero and clear into shop; a later real escape
   E.tick(zero,STEP);assert.equal(zero.phase,'lost');assert.equal(zero.lifeFailed,true);assert.equal(zero.baseHp,0)
 })
 
-test('ordinary timeout settles actual live units individually and withdraws unspawned entries',()=>{
+test('ordinary timeout settles actual live units individually at the published deadline',()=>{
   const g=practice(['raider','brute'],{life:2})
-  g.schedule=[{at:999,type:'warlock'}];g.spawnIndex=0;g.waveTime=WAVES[g.wave-1].duration-STEP
+  g.waveTime=WAVES[g.wave-1].duration-STEP
   E.tick(g,STEP)
   assert.equal(g.phase,'shop');assert.equal(g.baseHp,0);assert.equal(g.lifeFailed,false)
-  assert.equal(g.waveTimeout.count,2);assert.equal(g.waveTimeout.damage,2);assert.equal(g.waveTimeout.queuedWithdrawn,1)
+  assert.equal(g.waveTimeout.count,2);assert.equal(g.waveTimeout.damage,2)
   assert.deepEqual(g.lifeEvents.filter(event=>event.source==='timeout' && event.kind==='loss').map(event=>[event.before,event.after]),[[2,1],[1,0]])
-  const onlyQueued=practice([],{life:1});onlyQueued.schedule=[{at:999,type:'brute'}];onlyQueued.waveTime=WAVES[0].duration-STEP
-  E.tick(onlyQueued,STEP);assert.equal(onlyQueued.phase,'shop');assert.equal(onlyQueued.baseHp,1)
-  assert.equal(onlyQueued.lifeEvents.some(event=>event.kind==='loss'),false)
+
 })
 
 test('zero-life timeout and both boss defeat paths use explicit failure rather than life <= zero',()=>{

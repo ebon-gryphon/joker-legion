@@ -58,7 +58,7 @@ export function workshopPairs(game) {
 
 function materialShare(game,leader,donor,kind) {
   const base=kind==='ascend'?.5:kind==='profession'?1:kind==='promote'?.8:.6
-  if(game.mode!=='endless' || game.wave<=12 || game.endlessRevision===1)return base
+  if(game.mode!=='endless' || game.wave<=12)return base
   if(kind==='profession'){
     const known=professionJobs(leader)
     if(professionJobs(donor).some(id=>!known.includes(id)))return base

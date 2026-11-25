@@ -9,7 +9,7 @@ export const ENEMY_CATALOG = {
   raider: { frame: 0, width: 51, height: 51, role: '近战突进', wave: 1,
     attack: '流寇要走到跟前才能挥斧。一个人威胁有限，成群突破防线时很难收拾。', counter: '先招黑桃铁卫挡住去路，让后排安心输出。' },
   bat: { frame: 1, width: 61, height: 36, role: '快速近战', wave: 2,
-    attack: '夜翼是普通敌军中移动最快的，交战也最频繁。前线一旦出现缺口，它们很快就能突破防线。', counter: '在铁卫身后留一队梅花游侠，提早射击靠近的夜翼。' },
+    attack: '夜翼是普通敌军中移动最快的，交战也最频繁。无尽第 13 波起，夜翼沿战场两翼直飞，遇到同侧近身守军才停下交锋。', counter: '在漏防的一翼部署铁卫，或让梅花游侠提早射击。' },
   archer: { frame: 2, width: 57, height: 54, role: '后排射击', wave: 2,
     attack: '暗弓手进入射程就停步放箭。前排交战越久，它能射出的箭就越多。', counter: '用猎手阵，让游侠和术士优先攻击射程内的敌方后排。' },
   brute: { frame: 3, width: 71, height: 68, role: '近身溅射', wave: 1,

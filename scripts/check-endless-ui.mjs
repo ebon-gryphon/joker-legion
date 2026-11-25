@@ -20,7 +20,8 @@ try {
   ws=new WebSocket(list.find(p=>p.type==='page').webSocketDebuggerUrl)
   await new Promise((r,j)=>{ws.onopen=r;ws.onerror=j})
   let serial=0;const pending=new Map()
-  ws.onmessage=({data})=>{const m=JSON.parse(data);if(m.id){const [r,j]=pending.get(m.id);pending.delete(m.id);m.error?j(Error(m.error.message)):r(m.result)}else if(m.method==='Runtime.exceptionThrown')errors.push(m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text)}
+  ws.onmessage=({data})=>{const m=JSON.parse(data);if(m.id){const [r,j]=pending.get(m.id);pending.delete(m.id);m.error?j(Error(m.error.message)):r(m.result)}else if(m.method==='Runtime.exceptionThrown')errors.push(m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text)
+    else if(m.method==='Runtime.consoleAPICalled' && m.params.type==='error')errors.push(m.params.args.map(arg=>arg.description ?? arg.value).join(' '))}
   const send=(method,params={})=>new Promise((r,j)=>{pending.set(++serial,[r,j]);ws.send(JSON.stringify({id:serial,method,params}))})
   async function run(expression){const r=await send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true,userGesture:true});if(r.exceptionDetails)throw Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text);return r.result.value}
   async function wait(expression){for(let i=0;i<200;i++){if(await run(expression))return;await pause(45)}throw Error('Timeout '+expression+' '+await run('document.body.innerText.slice(-1800)'))}
@@ -52,11 +53,25 @@ try {
       const c=reference.getContext('2d');c.imageSmoothingEnabled=false
       const scale=Math.max(w/image.width,h/image.height),dw=image.width*scale,dh=image.height*scale
       c.drawImage(image,Math.round((w-dw)*.14),Math.round((h-dh)*.48),dw,dh)
-      const a=c.getImageData(0,0,w,h).data,b=canvas.getContext('2d').getImageData(0,0,w,h).data
+      const display=canvas.getContext('2d'),drawImage=display.drawImage
+      // Capture one real background pass before soldiers and aura overlays cover it.
+      const painted=await new Promise((resolve,reject)=>{
+        const timer=setTimeout(()=>{delete display.drawImage;reject(Error('No battlefield paint'))},3000)
+        display.drawImage=function(source,...args){
+          const result=drawImage.call(this,source,...args)
+          if(source?.currentSrc===image.currentSrc){
+            clearTimeout(timer);delete this.drawImage;resolve(this.getImageData(0,0,w,h).data)
+          }
+          return result
+        }
+      })
+      const a=c.getImageData(0,0,w,h).data,b=display.getImageData(0,0,w,h).data
+      let backgroundSamples=0,backgroundMatches=0
       const hits=[0,0,0,0],samples=[0,0,0,0],light=[0,0],count=[0,0],edgeHits=[0,0,0,0],edges=[0,0,0,0]
       for(let y=6;y<h;y+=17)for(let x=5;x<w;x+=17){
         const zone=Number(x>w/2)+2*Number(y>h/2),k=4*(y*w+x)
-        samples[zone]++
+        samples[zone]++;backgroundSamples++
+        if([0,1,2].every(ch=>Math.abs(a[k+ch]-painted[k+ch])<=1))backgroundMatches++
         const matches=[0,1,2].every(ch=>Math.abs(a[k+ch]-b[k+ch])<=1)
         if(matches)hits[zone]++
         // The outer sky and near foreground remain visible even when the hostile formation fills a quadrant.
@@ -65,10 +80,10 @@ try {
           const side=Number(x>w*.75);light[side]+=.2126*b[k]+.7152*b[k+1]+.0722*b[k+2];count[side]++
         }
       }
-      return {digest,source:[image.width,image.height],edgeMatch:edgeHits.map((n,i)=>n/edges[i]),match:hits.map((n,i)=>n/samples[i]),luminance:light.map((n,i)=>n/count[i])}
+      return {digest,backgroundMatch:backgroundMatches/backgroundSamples,source:[image.width,image.height],edgeMatch:edgeHits.map((n,i)=>n/edges[i]),match:hits.map((n,i)=>n/samples[i]),luminance:light.map((n,i)=>n/count[i])}
     })()`)
     assert.equal(measured.digest,'2afeffe53f76841bfbd9dd65ff2fdabc0669dc0ce7ba22f20d8d01918be661c7')
-    assert.deepEqual(measured.source,[1536,804]);assert.ok(measured.edgeMatch.every(n=>n>.8) && measured.match.reduce((a,b)=>a+b)/4>.60,name+' background '+JSON.stringify(measured))
+    assert.deepEqual(measured.source,[1536,804]);assert.ok(measured.backgroundMatch===1 && measured.match.reduce((a,b)=>a+b)/4>.60,name+' background '+JSON.stringify(measured))
     assert.ok(measured.luminance[0]>measured.luminance[1],name+' faction contrast')
     results.push({case:'background-'+name,...measured});await shot('open-'+name)
   }
@@ -118,20 +133,34 @@ try {
   await wait('document.querySelector(".brief-intel")?.innerText.includes("刺客追击")')
   await shot('scout')
   results.push({case:'scout',intel:await run('document.querySelector(".brief-intel").innerText')})
+  const opening=await boot('opening')
+  assert.equal(opening.enemies.length,opening.schedule.length)
+  assert.equal(opening.waveTime,0)
+  assert.equal(new Set(opening.enemies.map(e=>e.x+'/'+e.y)).size,opening.schedule.length)
+  await verifyBackground('elite-opening')
+  results.push({case:'opening-field',wave:opening.wave,initial:opening.enemies.length,queued:opening.schedule.length-opening.spawnIndex})
   for(const name of ['boss-cast','late-field']){
     await boot(name)
     assert.ok(await state(name==='boss-cast'?'g.bossTelegraph?.remaining>0':'g.wave>=30 && g.enemies.some(e=>e.chanting)'))
     await verifyBackground(name)
   }
-  for(const name of ['bonus','guard','hunt','split','chant','heal','late-loss','standard12','endless12']){
+  for(const name of ['bonus','guard','hunt','split','chant','heal','bell','timeout','late-loss','standard12','endless12']){
     const before=await boot(name),start=before.combatLedger.enemyEvents.length
     await button('.field-controls','继续')
     const find='g.combatLedger.enemyEvents.slice('+start+').find(e=>e.kind==='+JSON.stringify(name)+' && '+(name==='split'?'e.amount===2':'(e.amount??1)>0')+')'
-    const condition=name==='chant'?'g.enemies.some(e=>e.chanting)':name==='late-loss'?'g.baseHp<'+before.baseHp:name.endsWith('12')?'g.phase!=="battle"':find
+    const condition=name==='bell'?'g.lifeEvents.some(e=>e.kind==="bell-summon")':name==='timeout'?'g.waveTimeout!=null':name==='chant'?'g.enemies.some(e=>e.chanting)':name==='late-loss'?'g.lifeEvents.slice('+before.lifeEvents.length+').some(e=>e.source==="breach" && e.unitType==="brood" && e.amount===1)':name.endsWith('12')?'g.phase!=="battle"':find
     await wait(lens(condition))
     if(await state('g.phase==="battle"'))await button('.field-controls','暂停')
     const event=['bonus','guard','hunt','split','heal'].includes(name)?await state(find):null
     const row={case:name,mode:before.mode,seed:before.seed,wave:before.wave,at:await state('g.waveTime'),beforeLife:before.baseHp,life:await state('g.baseHp'),event,phase:await state('g.phase')}
+    if(name==='bell'){
+      row.summon=await state('g.lifeEvents.find(e=>e.kind==="bell-summon")')
+      assert.equal(row.summon.unitType,'raider');assert.equal(row.summon.count,1)
+    }
+    if(name==='timeout'){
+      row.timeout=await state('g.waveTimeout')
+      assert.ok(row.timeout.count>0 && row.timeout.processed>0)
+    }
     if(name==='late-loss'){
       row.loss=await state('g.lifeEvents.slice('+before.lifeEvents.length+').find(e=>e.source==="breach" && e.unitType==="brood")')
       assert.equal(row.loss.amount,1)

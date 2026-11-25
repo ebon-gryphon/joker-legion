@@ -243,8 +243,8 @@ test('a lone self-healing priest holds until the deadline, then only the survivi
     assert.equal(g.phase, 'shop')
     assert.equal(g.waveTime, deadline)
     assert.equal(g.baseHp, gate - 1)
-    assert.deepEqual({count:g.waveTimeout.count,damage:g.waveTimeout.damage,boss:g.waveTimeout.boss,queuedWithdrawn:g.waveTimeout.queuedWithdrawn},
-      {count:1,damage:1,boss:false,queuedWithdrawn:0})
+    assert.deepEqual({count:g.waveTimeout.count,damage:g.waveTimeout.damage,boss:g.waveTimeout.boss},
+      {count:1,damage:1,boss:false})
     assert.equal(g.waveTimeout.unitIds.length,1)
     assert.equal(g.stats.kills, 0)
     assert.equal(g.gold, 18)
@@ -277,7 +277,7 @@ test('the last combat step can clear the field, while a surviving boss breaks th
 
 test('an overdue legacy battle resolves only its real surviving enemy and withdraws queued reinforcements without another attack', () => {
   const snapshot = snapshotGame(healerStandoff())
-  delete snapshot.waveTimeout
+  delete snapshot.waveTimeout;delete snapshot.encounterVersion
   for(const key of ['lifeVersion','lifeFailed','lifeEvents','lifeItemState'])delete snapshot[key]
   snapshot.waveTime = WAVES[0].duration + 90
   snapshot.schedule.push({ at: 8, type: 'brute' })
@@ -292,7 +292,7 @@ test('an overdue legacy battle resolves only its real surviving enemy and withdr
   assert.equal(game.time, snapshot.time)
   assert.equal(game.stats.kills, 0)
   assert.equal(game.baseHp,1);assert.equal(game.lifeFailed,false)
-  assert.equal(game.waveTimeout.count,1);assert.equal(game.waveTimeout.queuedWithdrawn,1)
+  assert.equal(game.waveTimeout.count,1);assert.equal(game.schedule.length,game.spawnIndex)
   assert.equal(game.waveTimeout.damage,1)
 })
 

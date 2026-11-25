@@ -94,7 +94,7 @@ test('legacy camps, battles and shops preserve their recorded soldiers on every 
   const game=createGame();fixtureCompany(game,'mage')
   const fresh=snapshotGame(game); assert.deepEqual(restoreGame(fresh).allies,game.allies)
   for(const phase of ['ready','battle','shop']) {
-    const legacy=structuredClone(fresh);delete legacy.orderRules;legacy.phase=phase;legacy.energy=5
+    const legacy=structuredClone(fresh);delete legacy.encounterVersion;delete legacy.orderRules;legacy.phase=phase;legacy.energy=5
     for(const key of ['economyVersion','crystals','crystalIncomeWave','lastSettlement','rewardState','waveBonuses','printsBudget','finalWaveCleared'])delete legacy[key]
     delete legacy.stats.crystalsEarned
     const restored=restoreGame(legacy)
@@ -132,6 +132,7 @@ test('v2 saves preserve an assembled camp and edited deck while switching furthe
   deal(game,['♥7','♦7'])
   assert.ok(printCards(game,game.hand[4].id,[game.hand[5].id]))
   const previous = snapshotGame(game)
+  delete previous.encounterVersion
   previous.schedule.push({ at: 22, type: 'brute', convoyGuard: true })
   Object.assign(previous,{orderRules:2,companies:['mage'],mustersLeft:2})
   const loaded = restoreGame(previous)
@@ -167,7 +168,7 @@ test('an older active oversized army can resume without gaining slots, and pendi
   fixtureCompany(g,'knight')
   while(g.allies.length<16) g.allies.push({...g.allies[0],id:'old-'+g.allies.length})
   const old=snapshotGame(g)
-  delete old.handsBought;delete old.paidHandsLeft;delete old.handsLeft;delete old.legacyFieldSize
+  delete old.encounterVersion;delete old.handsBought;delete old.paidHandsLeft;delete old.handsLeft;delete old.legacyFieldSize
   old.phase='battle';old.enemies=[];old.spawnIndex=0;old.stats.deploys=2
   old.schedule=[{at:1,type:'raider'},{at:15,type:'brute'}]
   const loaded=restoreGame(old)
@@ -237,7 +238,7 @@ test('old four-hand saves retain spent actions and new saves reject impossible p
   const g=createGame({seed:95}), current=snapshotGame(g)
   for (let remaining=0;remaining<=4;remaining++) {
     const old = {...current,handsLeft:remaining}
-    delete old.handsBought;delete old.paidHandsLeft
+    delete old.encounterVersion;delete old.handsBought;delete old.paidHandsLeft
     const loaded=restoreGame(old)
     assert.deepEqual([loaded.handsLeft,loaded.handsBought,loaded.paidHandsLeft],[Math.max(0,remaining-1),0,0])
     assert.ok(restoreGame(snapshotGame(loaded)))

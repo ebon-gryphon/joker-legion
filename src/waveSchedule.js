@@ -1,32 +1,32 @@
-import {ENDLESS,endlessBudget,hasRearguard,lastBatchTime} from './endless.js'
 import { seedNumber, random, log, effect } from './gameState.js'
 import { isBackline, HOSTILE } from './tactics.js'
 import { isBoss } from './bossRules.js'
 import { MAX_ENEMIES } from './campaignRules.js'
 import { addUnit } from './campArmy.js'
 
+// Each of the four formations has a twelve-member core and up to four additional starting slots.
+const COMPANIES = [
+  ['banner','splitter','archer','bat','raider','hunter','archer','bat','bat','cantor','brute','archer','raider','banner','bat','archer'],
+  ['cantor','brute','banner','bat','archer','raider','splitter','brute','bat','brute','archer','splitter','brute','warlock','bat','splitter'],
+  ['hunter','hunter','brute','bat','bat','raider','banner','splitter','bat','brute','splitter','brute','cantor','archer','bat','raider'],
+  ['splitter','cantor','brute','bat','hunter','raider','archer','splitter','bat','brute','banner','cantor','splitter','raider','warlock','bat'],
+]
+const rear = type => isBackline(type) || isBoss(type)
+
 export function waveSchedule(seed, wave, difficulty = 'standard', mode='standard') {
   const rollState = { rng: seedNumber(String(seed) + '/wave/' + wave) }
   if(wave>12 && mode==='endless') {
-    const packs=[['banner','archer','splitter'],['cantor','brute','banner'],['hunter','raider','brute'],['splitter','warlock','cantor']]
-    const budget=endlessBudget(wave)
-    if(wave>=18)packs.push(['banner','splitter','hunter'],['cantor','brute','archer'])
-    if(wave>=25)packs.push(['banner','cantor','splitter'],['hunter','bat','splitter'])
-    const queue=[]
-    for(let i=0;i<budget;i+=3){
-      const pack=packs[Math.floor(random(rollState)*packs.length)]
-      for(const type of pack.slice(0,budget-i))queue.push({type,at:Math.floor(queue.length/ENDLESS.batchSize)*ENDLESS.batchInterval})
+    const company=COMPANIES[Math.floor(random(rollState)*COMPANIES.length)]
+    const count=12+Math.floor(random(rollState)*5)
+    const types=company.slice(0,count)
+    if(wave%6===0){
+      // Royal escorts bring bowmen in the ritualists' places.
+      for(let i=0;i<types.length;i++)if(types[i]==='cantor')types[i]='archer'
+      types[types.length-1]=wave%12===0?'finalBoss':'boss'
     }
-    if(wave%6===0)queue[0].type=wave%12===0?'finalBoss':'boss'
-    if(hasRearguard(wave)) {
-      const last=queue.slice(-ENDLESS.reserveSize)
-      for(const unit of last)unit.at=lastBatchTime(wave)
-      if(wave%3===1){last[0].type='banner';last[1].type='splitter'}
-      if(wave%3===2){last[0].type='banner';last[1].type='splitter';last[2].type='cantor'}
-    }
-    return queue
+    return types.map(type=>({type,at:0}))
   }
-  const count = [0, 9, 11, 10, 10, 10, 8, 13, 14, 15, 16, 17, 12][wave]
+  const count = [0, 9, 11, 10, 10, 10, 8, 11, 12, 12, 12, 12, 10][wave]
   if (!count) return []
   const schedule = []
   for (let i = 0; i < count; i++) {
@@ -62,22 +62,33 @@ export function waveSchedule(seed, wave, difficulty = 'standard', mode='standard
 }
 
 export function makeSchedule(game) {
-  if(game.mode==='endless')game.endlessRevision=2
+  game.encounterVersion=1
   game.schedule = waveSchedule(game.seed, game.wave, game.difficulty, game.mode)
   game.spawnIndex = 0
 }
 
 export function spawnPosition(schedule,index,wave) {
-  const slot=wave<=12?index:index%ENDLESS.batchSize
-  const columnStep=Math.min(44,185/Math.max(1,Math.ceil(schedule.length/4)-1))
-  const back=wave>12 && isBackline(schedule[index].type)?120:0
-  return {x:770+Math.floor(slot/4)*columnStep+(slot%2)*9+back,
-    y:202+(slot%4)*36+(Math.floor(slot/4)%2)*9}
+  if(wave<=6){
+    const column=Math.floor(index/4),row=index%4
+    return {x:770+column*44+(row%2)*9,y:202+row*36+(column%2)*9}
+  }
+  if(wave>12 && schedule[index].type==='bat'){
+    const wing=schedule.slice(0,index).filter(slot=>slot.type==='bat').length
+    return {x:840+Math.floor(wing/2)*62,y:wing%2?348:152}
+  }
+  const back=rear(schedule[index].type)
+  const group=schedule.filter(entry=>rear(entry.type)===back)
+  const slot=schedule.slice(0,index).filter(entry=>rear(entry.type)===back).length
+  const columns=Math.ceil(group.length/4),column=Math.floor(slot/4),row=slot%4
+  const x=back?908-(columns-1-column)*58:635+column*58
+  return {x:x+(row%2)*16,y:177+row*49+(column%2)*14+(back?6:0)}
 }
 
 export function spawnEnemies(game) {
   if (game.spawnIndex >= game.schedule.length) return
-  while (game.spawnIndex < game.schedule.length && game.schedule[game.spawnIndex].at <= game.waveTime && game.enemies.length < MAX_ENEMIES) {
+  const seats=MAX_ENEMIES-game.enemies.length
+  if(game.schedule.length-game.spawnIndex>seats)game.schedule.length=game.spawnIndex+seats
+  while (game.spawnIndex < game.schedule.length) {
     const spawn = game.schedule[game.spawnIndex++]
     const level = isBoss(spawn.type) ? 3 : game.wave >= 8 ? 3 : game.wave >= 4 ? 2 : 1
     const unit = addUnit(game, spawn.type, 'enemy', level)
