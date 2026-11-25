@@ -76,4 +76,3 @@ export function validProfile(profile){
   const spent=LEGACY_NODES.reduce((sum,n)=>sum+n.prices.slice(0,profile.levels[n.id]).reduce((a,b)=>a+b,0),0)
   return earned===profile.lifetimeEarned && earned-spent===profile.balance && JSON.stringify(claimed)===JSON.stringify(profile.milestones)
 }
-

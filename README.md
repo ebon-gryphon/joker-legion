@@ -179,3 +179,5 @@ bun scripts/build-legion-demo.mjs --build
 每波的 `attack/heal` 是开战时正式军团的总攻击与总治疗属性，含本波已取得的战令。`effectiveHp` 等于实际入场生命总和、实际护旗减伤和有效敌军治疗之和，包含成功生成的援军与幼兽。`seconds` 为交战持续时间，`cleanSeconds` 只在本波全歼且未漏敌时记录。`life` 为波末生命，`minLife` 包含交锋期间的最低值。`casualties` 是本波正式士兵倒下次数。行为字段分别记录护旗、追击、追击增伤、分裂、蓄力和有效治疗事件；`brood` 是实际生成的幼兽数。
 
 本轮使用 `node scripts/measure-endless.mjs fast-review` 对六条固定路线（含标准难度活扣 8）逐波测量。整波编成、实战有效生命、清场时间和首损至失败的对照见[快速战斗实测](docs/balance/fast-battles.md)。
+
+传承平衡对照使用 `node scripts/measure-endless.mjs meta-review` 和 `node scripts/measure-endless.mjs meta-review-max --max-legacy`。两次调用使用相同的六条策略。[首次损血、最终波次与最高攻击记录](docs/balance/meta-review.json)

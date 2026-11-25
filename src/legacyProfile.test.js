@@ -151,4 +151,3 @@ test('无升级与 d0102c4 的九条路线逐波快照和最终 RNG 一致',()=>
     assert.equal(route.finalSnapshot.rng,row.rng);assert.equal(hash.digest('hex'),row.sha,'seed '+row.seed)
   }
 })
-

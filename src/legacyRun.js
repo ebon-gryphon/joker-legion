@@ -47,4 +47,3 @@ export function validRunInheritance(g){
     typeof s.refreshUsed==='boolean' && (!s.refreshUsed || s.levels.contract>0) && Array.isArray(s.bossWaves) &&
     s.bossWaves.every((wave,i)=>Number.isSafeInteger(wave) && wave>=6 && wave%6===0 && wave<=g.wave && (!i || wave>s.bossWaves[i-1]))
 }
-

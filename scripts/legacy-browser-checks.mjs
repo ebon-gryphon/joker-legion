@@ -82,8 +82,27 @@ export async function checkLegacyBrowser({folder,run,send,click,button,boot,stat
   assert.equal(concurrent.balance,credited.balance-6);assert.equal(concurrent.levels.treasury,2)
   assert.equal(concurrent.settledRuns.length,credited.settledRuns.length)
   await run('window.otherLegacyTab.close()')
+  // Verify that a damaged profile is refused without overwriting it or the saved commander.
+  const writeProfile=value=>run(`new Promise((resolve,reject)=>{
+    const r=indexedDB.open(${JSON.stringify(PROFILE_DATABASE)},1)
+    r.onsuccess=()=>{const db=r.result,tx=db.transaction('profiles','readwrite')
+      tx.objectStore('profiles').put(${JSON.stringify(value)},'local')
+      tx.oncomplete=()=>{db.close();resolve(true)};tx.onabort=()=>reject(tx.error)}
+    r.onerror=()=>reject(r.error)})`)
+  const damaged={...concurrent,balance:concurrent.balance+1}
+  const rawRun=await run('localStorage.getItem("joker.legion.demo.v1")')
+  try{
+    await writeProfile(damaged)
+    await button('.legacy-modal','返回');await click('.legacy-open')
+    await wait('document.querySelector(".legacy-modal [role=alert]")?.innerText.includes("已保留原档")')
+    assert.deepEqual(await profile(),damaged)
+    assert.equal(await run('localStorage.getItem("joker.legion.demo.v1")'),rawRun)
+    assert.equal(await run('document.querySelectorAll("[data-legacy-node]:not(:disabled)").length'),0)
+  }finally{await writeProfile(concurrent)}
+  await button('.legacy-modal','重读档案')
+  await wait('!document.querySelector(".legacy-modal [role=alert]")')
+  results.push({case:'inheritance-damaged-profile',refused:true,untouchedExpedition:true})
   results.push({case:'inheritance-concurrent-purchase',balanceBefore:credited.balance,balanceAfter:concurrent.balance,level:2})
   results.push({case:'inheritance-purchase-refresh-settle-recover',before:before.balance,afterPurchase:bought.balance,
     openingGold:initial.gold,runId:initial.runId,receipt,afterRecovery:credited.balance,ledgerEntries:credited.settledRuns.length})
 }
-

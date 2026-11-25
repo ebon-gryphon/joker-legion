@@ -38,4 +38,3 @@ defineEmits(['purchase','close','retry'])
 .legacy-grid article{display:flex;flex-direction:column;align-items:stretch;padding:13px;background:#292024;border:1px solid #624a41}
 .legacy-grid small,.legacy-wallet small{color:#cfb89e;font-size:12px}.legacy-grid button{margin-top:auto;align-self:flex-start}.legacy-grid article>small{margin-bottom:8px}
 </style>
-

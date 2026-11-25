@@ -37,4 +37,3 @@ export async function updateProfile(change=profile=>({profile})){
     tx.onabort=()=>reject(failure || tx.error || Error('军团传承未能保存'))
   })
 }
-
