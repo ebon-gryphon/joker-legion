@@ -2,11 +2,11 @@
 export const SCORE_LEVELS = Object.freeze({ title: .34, camp: .23, battle: .16 })
 const LOOP_SECONDS = 48
 
-export function createMusic(context) {
+export function createMusic(context,destination=context.destination) {
   const buffers = new Map()
   const bus = context.createGain()
   bus.gain.value = 0
-  bus.connect(context.destination)
+  bus.connect(destination)
   let wanted = null, active = null, epoch = null, disposed = false
 
   function bufferFor(scene) {

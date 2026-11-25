@@ -7,6 +7,7 @@ import EconomySummary from './EconomySummary.vue'
 import LifeReport from './LifeReport.vue'
 import {BUILD_PASSIVE_BY_ID} from './buildPassives.js'
 import { FUSION_BY_ID } from './forge.js'
+import { reportLeaders } from './reportView.js'
 import { REGIMENTS } from './orders.js'
 import { FORMATION_BY_ID } from './tactics.js'
 import { itemEventGroups, actualEffectText, gateSourceRows, runOutcomeText } from './reportTelemetry.js'
@@ -30,6 +31,7 @@ const shownFormation=computed(()=>props.combat ? FORMATION_BY_ID[props.combat.fo
 const shownTactics=computed(()=>props.combat ? props.combat.tacticsReport || {} : props.tactics)
 const shownUses=computed(()=>props.combat ? props.combat.fusionUses || {} : props.uses)
 const legacyReport=computed(()=>props.combat ? Object.entries(props.combat.regimentReport || {}).map(([type,row])=>({type,label:regiment(type),damage:rounded(row.damage),healed:rounded(row.healed)})) : props.report)
+const leaders=computed(()=>reportLeaders(props.combat))
 const gateView=computed(()=> {
   const gate=props.combat?.legacyGate || (props.combat?.lifeVersion!==1?props.combat?.gate:null)
   if(!gate) return null
@@ -47,6 +49,8 @@ const gateView=computed(()=> {
     <template v-if="combat">
       <p v-if="combat.openingBenefits?.length">开局传承 · {{ combat.openingBenefits.join(' ／ ') }}</p>
       <p class="report-overview"><b>{{ combat.result==='lost'?'远征失守':combat.ended?'本波守住':'本波记录' }}</b><span>{{ combat.battleDuration===undefined?'已记录交战':'交战总时长' }} {{ (combat.battleDuration ?? combat.duration).toFixed(1) }} 秒<template v-if="combat.battleDuration===undefined">（旧口径）</template></span><span v-if="combat.enemyForce">编成 {{ combat.enemyForce.regular }} · 鸣钟召来 {{ combat.enemyForce.summoned }} · 分裂幼兽 {{ combat.enemyForce.brood }} · 实际出场 {{ combat.enemyForce.total }}</span><span>剩余军令 {{ rounded(combat.energyLeft) }}</span></p>
+      <div class="report-headlines"><span v-if="leaders.hand">最高牌型 <b>{{ leaders.hand }}</b></span>
+        <span v-if="leaders.soldier">主要贡献 <b>{{ leaders.soldier.name }}</b> · {{ leaders.soldier.jobLabel }}</span></div>
       <LifeReport v-if="modernLife" :combat="combat"/>
       <template v-else-if="combat.postWaveLife"><p class="report-caveat">读档后波后生命 · 以下为新规则下的真实补给变化。</p><LifeReport :combat="combat.postWaveLife"/></template>
       <p v-if="gateView" class="report-gate"><b>旧制防线记录（不换算、不重复计入红心生命）</b><span>旧制数值 {{ rounded(gateView.start) }} → {{ rounded(gateView.end) }}</span><span v-if="gateView.partitioned">旧制损失 {{ rounded(gateView.damage) }} · 旧制恢复 {{ rounded(gateView.repaired) }}</span><span v-if="!gateView.partitioned">旧制整波损失 {{ rounded((combat.legacyGate || combat.gate).damage) }} · 恢复 {{ rounded((combat.legacyGate || combat.gate).repaired) }}（含备战）</span></p>
@@ -61,7 +65,7 @@ const gateView=computed(()=> {
       <details v-if="gateView" class="report-gate-sources"><summary class="key-disclosure">旧制损失来源</summary><p v-if="gateSources===null" class="report-caveat">这份旧记录没有保存来源分类。</p><p v-else-if="!gateSources.length">旧制没有已记录的损失。</p><p v-for="source in gateSources || []" :key="source.id">{{ source.label }} <b>{{ rounded(source.amount) }}</b></p><small>仅回看旧制事实，不再扣除或恢复当前红心生命。</small></details>
       <details v-if="combat.passiveEvents?.length" class="report-passive-events"><summary class="key-disclosure">构筑被动实际触发 · {{ combat.passiveEvents.length }} 条</summary><ol><li v-for="(event,index) in combat.passiveEvents" :key="event.eventId || index" :data-passive-event="event.id"><strong>{{ Number(event.at || 0).toFixed(1) }} 秒 · {{ BUILD_PASSIVE_BY_ID[event.id]?.name || event.id }} · {{ event.triggered?(event.effective?'已生效':'触发但无收益'):'未触发' }}</strong><p>{{ event.reason }}</p><small>{{ actualEffectText(event.effects) }}</small></li></ol><small>读取原触发记录；最终分与战令的合计结果不重复相加。</small></details>
       <details v-if="combat.enemyEvents?.length" class="enemy-event-report" @toggle="eventsOpen=$event.currentTarget.open"><summary class="key-disclosure">敌军行为 · {{ combat.enemyEvents.length }} 条</summary><p v-for="(e,i) in recentEnemyEvents" :key="i">{{ e.at.toFixed(1) }}秒 · {{ HOSTILE[e.type]?.name }} {{ e.actor }} · {{ behaviorLabels[e.kind] }} {{ e.name || e.target || '' }} {{ e.children?.join('、') }} {{ e.amount==null?'':Number(e.amount.toFixed(1)) }}<template v-if="e.kind==='strike'"> · 护盾吸收 {{ Number(e.absorbed.toFixed(1)) }}{{ e.killed?' · 击倒':'' }}</template></p><button v-if="eventsOpen && eventLimit<combat.enemyEvents.length" class="key-link" @click="eventLimit+=48">查看更早的记录</button></details>
-      <table class="personal-report">
+      <details class="soldier-contributions"><summary class="key-disclosure">逐名查看士兵贡献 · {{ people.length }} 名</summary><table class="personal-report">
         <caption>个人贡献 · 伤害与承伤按生命损失计，治疗不计溢出</caption>
         <thead><tr><th scope="col">士兵</th><th scope="col">伤害</th><th scope="col">治疗</th><th scope="col">承伤</th><th scope="col">击杀</th></tr></thead>
         <tbody><tr v-for="row in people" :key="row.unitId">
@@ -69,7 +73,7 @@ const gateView=computed(()=> {
           <td>{{ rounded(row.damage) }}</td><td>{{ rounded(row.healed) }}</td><td>{{ rounded(row.taken) }}<small v-if="row.absorbed">盾吸收 {{ rounded(row.absorbed) }}</small></td><td>{{ row.kills }}</td>
         </tr></tbody>
         <tfoot><tr><th scope="row">合计</th><td>{{ rounded(combat.totals.damage) }}</td><td>{{ rounded(combat.totals.healed) }}</td><td>{{ rounded(combat.totals.taken) }}</td><td>{{ combat.totals.kills }}</td></tr></tfoot>
-      </table>
+      </table></details>
       <p v-if="!people.length" class="report-caveat">尚无个人战斗记录。</p>
       <div v-if="combat.systems.length" class="system-report"><strong>道具与其他来源</strong><p v-for="row in combat.systems" :key="row.id">{{ row.name }}<span>伤害 {{ rounded(row.damage) }} · 治疗 {{ rounded(row.healed) }} · 击杀 {{ row.kills }}</span></p><small>这些贡献已计入合计，单独保留来源。</small></div>
       <div v-if="combat.majorOrders.length" class="order-report"><strong>主要战令</strong><p v-for="order in combat.majorOrders" :key="order.key+'/'+order.target+'/'+order.secondary">{{ order.name }} → {{ regiment(order.target) }}<template v-if="order.secondary"> / {{ regiment(order.secondary) }}</template><span>×{{ order.count }} · 消耗 {{ order.cost }} 军令</span></p><small>含战前出牌；免费加购的出牌按实际军令消耗计。</small></div>

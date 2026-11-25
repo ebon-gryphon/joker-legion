@@ -11,8 +11,8 @@ import DealKey from './DealKey.vue'
 import TitleCourt from './TitleCourt.vue'
 import ScoreToggle from './ScoreToggle.vue'
 
-const props = defineProps({ mode:String,best:Object,doctrine:String, difficulty:String, seed:String, levels:Object, saved:Object, dailyBest:Object })
-const emit = defineEmits(['mode','choose','difficulty','seed','start','daily','resume','guide','legacy'])
+const props = defineProps({ balance:Number,mode:String,best:Object,doctrine:String, difficulty:String, seed:String, levels:Object, saved:Object, dailyBest:Object })
+const emit = defineEmits(['mode','choose','difficulty','seed','start','daily','resume','guide','legacy','settings'])
 const selected = computed(() => performerOf(props.doctrine))
 const selecting = ref(false)
 const table = ref(null)
@@ -24,14 +24,21 @@ function pickActor(actor, event) {
   emit('choose',actor.doctrine)
 }
 
+const savedPrimary=()=>props.saved && !terminalPhase(props.saved.phase)?'.deal-resume':'.cover-start'
+async function showDaily() {
+  await showSelection(true)
+  const record=table.value?.querySelector('.daily-record')
+  if(record)record.open=true
+  table.value?.querySelector('.daily-deal')?.focus()
+}
 async function showSelection(open) {
   selecting.value = open
   await nextTick()
   table.value?.closest('.deal-scrim')?.scrollTo(0,0)
-  const target = table.value?.querySelector(open ? '.joker-portrait.picked' : '.cover-start')
+  const target = table.value?.querySelector(open ? '.joker-portrait.picked' : savedPrimary())
   target?.focus({preventScroll:true})
 }
-onMounted(() => table.value?.querySelector('.cover-start')?.focus({preventScroll:true}))
+onMounted(() => table.value?.querySelector(savedPrimary())?.focus({preventScroll:true}))
 </script>
 
 <template>
@@ -45,15 +52,19 @@ onMounted(() => table.value?.querySelector('.cover-start')?.focus({preventScroll
       </h1>
       <div class="cover-menu">
         <div class="cover-play">
-          <TitleCourt @click="showSelection(true)"/>
-          <button v-if="saved" class="deal-resume key-ink" @click="emit('resume')">
-            <KeyMark name="return"/><span>{{ terminalPhase(saved.phase)?'查看上局结算':'继续上局' }}<small>{{ performerOf(saved.doctrine).name }} · 第 {{ saved.wave }} 波</small></span>
+          <TitleCourt :secondary="!!saved && !terminalPhase(saved.phase)" @click="showSelection(true)"/>
+          <button v-if="saved" class="deal-resume key-ink" :class="{'ui-primary':!terminalPhase(saved.phase)}" @click="emit('resume')">
+            <KeyMark name="return"/><span>{{ terminalPhase(saved.phase)?'查看上局结算':'继续远征' }}<small>{{ saved.mode==='endless'?'无尽挑战':'标准远征' }} · {{ performerOf(saved.doctrine).name }} · 第 {{ saved.wave }} 波</small></span>
           </button>
+          <div class="cover-alternates">
+            <button class="key-link" @click="emit('mode','endless');showSelection(true)">∞ 无尽挑战</button>
+            <button class="key-link" @click="showDaily">♧ 每日同局</button>
+          </div>
         </div>
-        <nav class="table-guides" aria-label="军团与图鉴"><button class="key-index legacy-open" @click="emit('legacy')">♦ 军团传承</button>
+        <nav class="table-guides" aria-label="军团与图鉴"><button class="key-index legacy-open" @click="emit('legacy')">军团传承 <span class="cover-wallet" :aria-label="'红水晶余额 '+(balance ?? '读取中')">♦ {{ balance ?? '…' }}</span></button>
           <button class="key-index" v-for="[id,label] in guides" :key="id" @click="emit('guide',id)"><KeyMark :name="id"/>{{ label }}</button>
         </nav>
-        <ScoreToggle class="cover-score"/>
+        <button class="cover-score key-index" @click="emit('settings')">⚙ 设置</button>
       </div>
     </div>
 
@@ -64,7 +75,7 @@ onMounted(() => table.value?.querySelector('.cover-start')?.focus({preventScroll
       </div>
       <header class="casting-header">
         <div class="casting-heading"><button class="cover-back key-link" @click="showSelection(false)"><KeyMark name="return"/>← 返回封面</button><h2 id="intro-title">选你的小丑</h2></div>
-        <div class="casting-tools"><button class="key-index legacy-open" @click="emit('legacy')">♦ 军团传承</button><nav class="casting-guides" aria-label="游戏图鉴"><button class="key-index" v-for="[id,label] in guides" :key="id" @click="emit('guide',id)"><KeyMark :name="id"/>{{ label }}</button></nav><ScoreToggle/></div>
+        <div class="casting-tools"><button class="key-index legacy-open" @click="emit('legacy')">军团传承 <span class="cover-wallet" :aria-label="'红水晶余额 '+(balance ?? '读取中')">♦ {{ balance ?? '…' }}</span></button><nav class="casting-guides" aria-label="游戏图鉴"><button class="key-index" v-for="[id,label] in guides" :key="id" @click="emit('guide',id)"><KeyMark :name="id"/>{{ label }}</button></nav><ScoreToggle/></div>
       </header>
       <div class="casting-bio" aria-live="polite">
         <h3 class="casting-name">{{ selected.name }} <small>{{ selected.role }}</small></h3>
@@ -90,6 +101,10 @@ onMounted(() => table.value?.querySelector('.cover-start')?.focus({preventScroll
         </div>
         <details v-if="levels && LEGACY_NODES.some(n=>levels[n.id])" class="deal-legacy"><summary class="key-disclosure">本次开局的军团传承</summary><ul><li v-for="n in LEGACY_NODES.filter(n=>levels[n.id])" :key="n.id">{{ n.name }} · {{ n.effect(n.amount*levels[n.id]) }}</li></ul></details>
         <label class="deal-seed">固定种子 <input class="key-input" aria-label="固定种子" :value="seed" maxlength="64" placeholder="留空随机开局" autocomplete="off" spellcheck="false" @input="emit('seed',$event.target.value)"/><small>每日同局仍使用当天种子</small></label>
+        <details class="daily-record"><summary class="key-disclosure">每日同局 · 本机成绩</summary>
+          <p v-if="dailyBest">{{ mode==='endless'?'无尽挑战':'标准远征' }} · {{ selected.name }} · 已守住 {{ dailyBest.waves }} 波 · 击退 {{ dailyBest.kills }} 名 · {{ dailyBest.lifeVersion===1?'剩余生命':'旧制防线值' }} {{ dailyBest.gate }}</p>
+          <p v-else>今天的{{ selected.name }}尚无此模式与难度的本机成绩。</p>
+        </details>
         <div class="deal-actions intro-buttons">
           <DealKey :actor="selected" class="intro-start" @click="emit('start')">以{{ selected.name }}开局</DealKey>
           <button class="daily-deal key-ink" @click="emit('daily')"><KeyMark name="cards"/><span>每日同局<small>{{ dailyBest ? (dailyBest.lifeVersion===1?'本机最佳':'旧制记录')+' · '+dailyBest.waves+' 波 / '+dailyBest.kills+' 击退' : '每日同一开局 · 可重复挑战' }}</small></span></button>

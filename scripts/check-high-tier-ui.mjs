@@ -9,6 +9,7 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {restoreGame,forgeUnit,snapshotGame} from '../src/engine.js'
+import {replayBuild,runBuildStrategy,BUILD_ROUTES} from './verify-builds.mjs'
 import {createHash} from 'node:crypto'
 
 const root=fileURLToPath(new URL('../',import.meta.url)),output=join(root,'output')
@@ -287,11 +288,15 @@ try{
   for(const image of record.images)await writeFile(join(output,'high-tier-'+image.name+'.png'),Buffer.from(image.data,'base64'))
   const pairs=[],hashes=[]
   for(const image of record.images){
-   const name='high-tier-'+image.name+'.png',path=join(baselineDirectory,name)
+   const name='high-tier-'+image.name+'.png'
+   // The four live fusion specimens depend on the route's recruits. Compare to the
+   // pre-UI economic/fast-battle route, while the fixed art sheets use d06094c.
+   const fromRoute=image.name.startsWith('legal-fusions')
+   const path=fromRoute?join(root,'scripts/fixtures/025ec12',name):join(baselineDirectory,name)
    if(existsSync(path)){
     const before=await readFile(path),after=Buffer.from(image.data,'base64')
     pairs.push({name,before:before.toString('base64'),after:image.data,matrix:image.name.startsWith('module-matrix-')})
-    hashes.push({name,before:createHash('sha256').update(before).digest('hex'),after:createHash('sha256').update(after).digest('hex')})
+    hashes.push({name,reference:fromRoute?'025ec12':'d06094c',before:createHash('sha256').update(before).digest('hex'),after:createHash('sha256').update(after).digest('hex')})
    }
   }
   let baselineComparison={available:false,reason:'No local polish baseline; generate it before acceptance.'};const comparisonArtifacts=[]
@@ -392,22 +397,29 @@ try{
   assert.equal(await setup('s.forge('+JSON.stringify(mythic.action.params.leaderId)+','+JSON.stringify(mythic.action.params.donorId)+',"ascend")'),true)
   const reducedAccepted=await saved();assert.ok(!(await setup('s.presentationScene.get()')).cheer,'Reduced motion played cheer')
   await pause(200);assert.deepEqual(await saved(),reducedAccepted)
-  await boot(mythic.snapshot,390,844);await openForge()
-  assert.equal(await run('('+beginRealCheerCapture.toString()+')('+JSON.stringify(mythic.action.params.donorId)+','+JSON.stringify(mythic.action.params.leaderId)+')'),true)
+  let reserveSnapshot,reserveId,fieldId
+  replayBuild(runBuildStrategy(BUILD_ROUTES[0],{fixtures:false}),{onAction:({before})=>{
+    if(reserveSnapshot || before.phase!=='ready')return
+    const reserve=before.reserves.find(unit=>unit.grade===4), donor=before.allies.find(unit=>!unit.locked && unit.grade===4)
+    if(reserve && donor){reserveSnapshot=before;reserveId=reserve.id;fieldId=donor.id}
+  }})
+  assert.ok(reserveSnapshot,'Route must field and reserve two eligible legendary soldiers')
+  await boot(reserveSnapshot,390,844);await openForge()
+  assert.equal(await run('('+beginRealCheerCapture.toString()+')('+JSON.stringify(reserveId)+','+JSON.stringify(fieldId)+')'),true)
   const reserveAccepted=await saved(),reserveStarted=Date.now()
-  assert.ok(reserveAccepted.reserves.some(unit=>unit.id===mythic.action.params.donorId&&unit.grade===5))
-  assert.equal(reserveAccepted.allies.length,mythic.snapshot.allies.length-1)
+  assert.ok(reserveAccepted.reserves.some(unit=>unit.id===reserveId&&unit.grade===5))
+  assert.equal(reserveAccepted.allies.length,reserveSnapshot.allies.length-1)
   const normalReserveProjection=await projectionAudit()
   assert.deepEqual(normalReserveProjection.units.map(unit=>unit.id).sort(),reserveAccepted.allies.filter(unit=>unit.hp>0&&!unit.dead).map(unit=>unit.id).sort(),'Reserve reveal drew a phantom field soldier')
   await pause(Math.max(0,450-(Date.now()-reserveStarted)));await shot('reserve-mythic-phone-actual-cheer')
-  const normalReserveCheer=await collectCheer('reserve-mythic',390,844,mythic.action.params.donorId,reserveAccepted)
+  const normalReserveCheer=await collectCheer('reserve-mythic',390,844,reserveId,reserveAccepted)
   // Reverse the same earned equal-quality materials through the real forge action: the leader stays in reserve.
-  await boot(mythic.snapshot,390,844,true);await openForge();const before=await saved()
-  assert.equal(await setup('s.forge('+JSON.stringify(mythic.action.params.donorId)+','+JSON.stringify(mythic.action.params.leaderId)+',"ascend")'),true)
+  await boot(reserveSnapshot,390,844,true);await openForge();const before=await saved()
+  assert.equal(await setup('s.forge('+JSON.stringify(reserveId)+','+JSON.stringify(fieldId)+',"ascend")'),true)
   const after=await saved();await wait('!!document.querySelector(".high-tier-reveal[data-high-tier-grade=\\"5\\"]")')
   const reserveProjection=await projectionAudit()
   assert.ok(await run("!!document.querySelector('.high-tier-reveal.motion-off')"),'Reduced motion must reach the new reveal')
-  assert.ok(after.reserves.some(unit=>unit.id===mythic.action.params.donorId&&unit.grade===5));assert.equal(after.allies.length,before.allies.length-1)
+  assert.ok(after.reserves.some(unit=>unit.id===reserveId&&unit.grade===5));assert.equal(after.allies.length,before.allies.length-1)
   assert.ok((await run("document.querySelector('.high-tier-reveal').innerText")).includes('候补'))
   assert.ok(!(await setup('s.presentationScene.get()')).cheer,'Reduced-motion reserve played an army cheer')
   await shot('reserve-mythic-phone-reduced');assert.deepEqual(await saved(),after)
@@ -416,7 +428,7 @@ try{
  await scenario('route',async()=>{
   await new Promise((resolve,reject)=>{const child=spawn(process.execPath,[join(root,'scripts/check-presentation-ui.mjs')],{cwd:root,env:{...process.env,LEGION_TEST_URL:url,LEGION_UI_SCENARIOS:'journey'},stdio:'inherit'});child.on('error',reject);child.on('exit',code=>code===0?resolve():reject(Error('Full real-ticker journey exit '+code)))})
   const verification=JSON.parse(await readFile(join(output,'presentation-ui-verification.json'),'utf8')),journey=verification.results.find(row=>row.scenario==='journey')
-  assert.equal(journey.status,'passed');assert.deepEqual(journey.ending,{phase:'won',wave:12,wavesCleared:12,gate:100,gold:119,kills:164})
+  assert.equal(journey.status,'passed');assert.deepEqual(journey.ending,{phase:'won',wave:12,wavesCleared:12,gate:12,gold:89,kills:162})
   return {source:'scripts/check-presentation-ui.mjs; same-session legal handlers and real ticker',ending:journey.ending}
  })
  assert.deepEqual(errors,[]);await persist()

@@ -84,7 +84,7 @@ try {
   await wait("['shop','won','lost'].includes(document.querySelector('.scene-shell')?.dataset.phase)",900,40)
   await shot(prefix+'-actual-wave-end');return saved()
  }
- const budget=game=>({gold:game.gold,crystals:game.crystals,energy:game.energy,hands:game.handsLeft,prints:game.printsLeft})
+ const budget=game=>({gold:game.gold,crystals:game.crystals,life:game.baseHp,maxLife:game.maxBaseHp,lifeFailed:!!game.lifeFailed,energy:game.energy,hands:game.handsLeft,prints:game.printsLeft})
  async function continuousJourney(route,fromAction=1) {
   const reference=new Map(),unitIds=new Map(),records=[],waves=[]
   replayBuild(route,{onAction:({before,after,action})=>reference.set(action.n,{before,after:E.snapshotGame(after)})})
@@ -137,11 +137,11 @@ try {
       const item=JOKERS.find(item=>item.id===p.id),status=shopActionAvailability(before,'buy',p.id);assert.equal(status.available,true);
       await click('.purchase-button[aria-label='+JSON.stringify('购买'+item.name+' · '+status.price+' 蓝水晶')+']');waves.find(row=>row.wave===entry.wave).purchases ||= [];waves.find(row=>row.wave===entry.wave).purchases.push(p.id)
     }else if(entry.type==='research')await setup('s.train('+JSON.stringify(p.key)+')')
-    else if(entry.type==='next-wave'){await desk('market');if(entry.wave===12)assert.ok((await read('.field-advance')).includes('完成远征'));await click('.field-advance')}
+    else if(entry.type==='next-wave'){await desk('market');assert.ok(entry.wave<12);await click('.field-advance')}
     else if(entry.type==='battle-start'){
       const result=await battleUntilShop('journey-wave'+entry.wave)
-      assert.equal(result.rewards.length,3,'Every cleared wave offers three real rewards');assert.equal(result.phase,'shop');
-      assert.equal(result.crystals-before.crystals,waveCrystalIncome(entry.wave));
+      assert.equal(result.rewards.length,entry.wave===12?0:3);assert.equal(result.phase,entry.wave===12?'won':'shop');
+      assert.equal(result.crystals-before.crystals,entry.wave===12?0:waveCrystalIncome(entry.wave));
       if([1,5,6,10,12].includes(entry.wave))await shot('journey-wave'+entry.wave+'-cleared-three');
       waves.push({wave:entry.wave,phase:result.phase,gate:result.baseHp,gold:result.gold,crystals:result.crystals,kills:result.stats.kills,offers:result.rewards.map(row=>({id:row.id,name:row.name,direction:row.direction,duration:row.duration})),report:result.lastCombatReport})
       console.log(JSON.stringify({progress:'economy-continuous-journey',wave:entry.wave,phase:result.phase,gate:result.baseHp,gold:result.gold}))
@@ -159,7 +159,7 @@ try {
     records.push({n:entry.n,wave:entry.wave,type:entry.type,params:actualParams,before:entry.type==='tick'?entry.before:budget(before),after:budget(after),...(entry.type==='deploy'?{scoreTrace:after.lastDeploy.scoreTrace}:{}),...(entry.type==='tick'?{source:'observed real ticker; no scripted tick call'}:{})})
     await writeFile(join(output,'economy-journey-actions.json'),JSON.stringify({seed:4,method:'Same browser and same new game from cover start to 12-wave victory; physical reward/buy/next controls and normal main action handlers, every battle uses the real browser ticker. No saved-game replacement.',continuedFromAction:fromAction,actions:records,waves},null,2)+'\n')
   }
-  const end=await saved();assert.equal(end.phase,'won');assert.equal(end.stats.wavesCleared,12);assert.equal(end.baseHp,100)
+  const end=await saved();assert.equal(end.phase,'won');assert.equal(end.stats.wavesCleared,12);assert.equal(end.baseHp,route.finalSnapshot.baseHp)
   await shot('journey-main-12-wave-victory')
   return {ending:{phase:end.phase,wave:end.wave,wavesCleared:end.stats.wavesCleared,gate:end.baseHp,gold:end.gold,crystals:end.crystals,kills:end.stats.kills},actionsRecorded:records.length,waves:waves.map(({report,...wave})=>wave)}
  }
@@ -191,9 +191,9 @@ try {
  }
  async function verifyThree(game){
   assert.equal(game.rewards.length,3);assert.equal(new Set(game.rewards.map(row=>row.id)).size,3)
-  const actual=await run("[...document.querySelectorAll('.reward-card')].map(e=>({id:e.dataset.reward,text:e.innerText,disabled:e.disabled}))")
+  const actual=await run("[...document.querySelectorAll('.reward-card')].map(e=>({id:e.dataset.reward,text:e.innerText,description:e.querySelector('small[id]')?.textContent+(e.closest('article')?.querySelector('.offer-notes p')?.textContent || ''),disabled:e.disabled}))")
   assert.equal(actual.length,3)
-  for(const offer of game.rewards){const card=actual.find(row=>row.id===offer.id);assert.ok(card && card.text.includes(offer.name));assert.ok(card.text.includes(offer.duration));if(!card.disabled)assert.ok(card.text.includes(offer.description))}
+  for(const offer of game.rewards){const card=actual.find(row=>row.id===offer.id);assert.ok(card && card.text.includes(offer.name));assert.ok(card.text.includes(offer.duration));if(!card.disabled)assert.ok(card.description===offer.description)}
   return actual
  }
  async function shopActions(wave){
@@ -226,7 +226,13 @@ try {
   const speed=await run("[...document.querySelectorAll('.field-controls button')].find(e=>e.getAttribute('aria-label')?.includes('1倍速'))?.getAttribute('aria-label')")
   if(speed)await click('.field-controls button[aria-label='+JSON.stringify(speed)+']')
   await wait("['shop','won','lost'].includes(document.querySelector('.scene-shell')?.dataset.phase)",2000,40)
-  const cleared=await saved();assert.equal(cleared.phase,'shop');assert.equal(cleared.stats.wavesCleared,wave)
+  const cleared=await saved()
+  if(wave===12){
+    assert.equal(cleared.phase,'won');assert.equal(cleared.stats.wavesCleared,12)
+    assert.equal(cleared.crystals,earned.snapshot.crystals);assert.equal(cleared.shop.length+cleared.rewards.length,0)
+    await shot('wave12-final-victory');results.push({wave,status:'passed',ending:'won',crystalsIncome:0});continue
+  }
+  assert.equal(cleared.phase,'shop');assert.equal(cleared.stats.wavesCleared,wave)
   assert.equal(cleared.crystals-earned.snapshot.crystals,waveCrystalIncome(wave));assert.equal(cleared.lastSettlement.crystals.base,5);assert.equal(cleared.lastSettlement.crystals.bonus,[5,10].includes(wave)?5:0)
   assert.deepEqual(cleared.lastCombatReport.economy,cleared.lastSettlement)
   await verifyHud(cleared)
@@ -238,7 +244,6 @@ try {
   const claimed=await claimFirst(),transactions=await shopActions(wave)
   const after=await saved();assert.equal(after.rewardChosen,claimed.id)
   await shot('wave'+wave+'-actual-shop')
-  if(wave===12){assert.equal(after.finalWaveCleared,true);assert.ok((await read('.field-advance')).includes('完成远征'));await click('.field-advance');await wait("document.querySelector('.scene-shell')?.dataset.phase==='won'");const won=await saved();assert.equal(won.wave,12);assert.equal(won.stats.wavesCleared,12);assert.equal(won.crystals,after.crystals);assert.equal(won.gold,after.gold);await shot('wave12-final-victory')}
   results.push({wave,status:'passed',elapsedMs:Date.now()-started,legalPrefixActions:earned.actions.length,crystalsIncome:cleared.lastSettlement.crystals,goldIncome:cleared.lastSettlement.gold,reward:claimed.id,offers:cards,transactions,ending:(await saved()).phase});console.log(JSON.stringify(results.at(-1)))
  }
  if(groups.has('sizes'))for(const [width,height] of [[1366,900],[390,844],[360,740],[844,390],[768,1024]]){
@@ -272,8 +277,7 @@ try {
  const preview=await setup('({trace:s.preview.scoreTrace,score:s.preview.score.total})')
  assert.ok(preview.trace.finalBonus && preview.trace.finalBonus.percent===.25)
  assert.equal(preview.score,preview.trace.chipsBeforeMult*preview.trace.mult+preview.trace.finalBonus.amount)
- assert.ok((await read('.score-source-summary')).includes('25%'))
- await click('.score-detail-toggle');assert.ok((await read('[data-score-final-bonus]')).includes('独立于牌谱倍率'))
+ await click('.score-detail-toggle');assert.ok((await read('.score-source-summary')).includes('25%'));assert.ok((await read('[data-score-final-bonus]')).includes('独立于牌谱倍率'))
  assert.ok((await read('.score-final-ledger')).includes('＋ '+preview.trace.finalBonus.amount+' 奖励分'))
  await shot('opening-score-real-preview');await click('.deploy-button')
  await wait("document.querySelector('.score-sequence')?.dataset.complete==='true'",160,25)

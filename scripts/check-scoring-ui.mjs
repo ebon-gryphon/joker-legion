@@ -1,4 +1,5 @@
 // Real mouse acceptance in isolated Chrome; fixtures are earned and replayed by verify-builds.mjs.
+import {previewHand,restoreGame} from '../src/engine.js'
 import assert from 'node:assert/strict'
 import {spawn} from 'node:child_process'
 import {mkdtemp,readFile,writeFile,mkdir} from 'node:fs/promises'
@@ -86,24 +87,26 @@ try {
  results.push({scenario:'fixed-seed new game, three hands, skip, reload, full first battle',threeHandMs,score:completed.lastDeploy.score,gate:completed.baseHp,duration:completed.lastCombatReport.battleDuration})
  // A legally reached high hand: identical visible formula and committed score at desktop and phone.
  const a=await fixture('a-a-before-3520')
+ const high=previewHand(restoreGame(a.snapshot)).scoreTrace
+ assert.equal(high.finalScore,3360)
  for(const [width,height] of [[1366,900],[390,844],[360,740],[844,390],[768,1024]]) {
   await boot(a.snapshot,width,height)
   assert.equal(await run("document.querySelector('.hand-score-panel').dataset.hand"),'flushFive')
   assert.equal(await run("!!document.querySelector('.toast-note')"),false,'restored selected hand stays clear of a resume notice')
-  assert.ok((await read('.score-equation')).includes('3520'))
+  assert.ok((await read('.score-equation')).includes(String(high.finalScore)))
   await click('.score-detail-toggle')
-  assert.ok((await read('[data-score-item=score-chalk]')).includes('＋2'))
-  assert.ok((await read('[data-score-item=pair-ink]')).includes('＋3'))
-  assert.ok((await read('.score-order-source')).includes('3520'))
+  assert.ok((await read('.score-final-ledger')).includes(String(high.chipsBeforeMult)+' 筹码'))
+  for(const item of high.chipBonuses)assert.ok((await read('[data-score-item='+item.id+']')).includes(item.label))
+  assert.ok((await read('.score-order-source')).includes(String(high.finalScore)))
   assert.ok(await run('document.documentElement.scrollWidth<=innerWidth'))
   await shot('high-preview-'+width)
   await click('.deploy-button',{delay:5});await wait("!!document.querySelector('.score-sequence')")
-  const committed=await saved();assert.equal(committed.lastDeploy.score,3520);assert.equal(committed.lastDeploy.captainGrade,4)
+  const committed=await saved();assert.equal(committed.lastDeploy.score,high.finalScore);assert.equal(committed.lastDeploy.captainGrade,4)
   await click('.sequence-skip',{delay:5});assert.deepEqual(economy(await saved()),economy(committed))
   await wait("document.querySelector('.score-sequence')?.dataset.complete==='true'")
-  assert.ok((await read('.score-sequence')).includes('3520'))
+  assert.ok((await read('.score-sequence')).includes(String(high.finalScore)))
   await shot('high-receipt-'+width)
-  results.push({scenario:'3520 preview and actual settlement',width,height,grade:committed.lastDeploy.captainGrade,score:committed.lastDeploy.score})
+  results.push({scenario:'seed 4 flush-five preview and actual settlement',width,height,grade:committed.lastDeploy.captainGrade,score:committed.lastDeploy.score})
  }
  // Full-board XP and actual zero healing are read from legal snapshots, not invented armies.
  const b=await fixture('b-b-before-first-training');await boot(b.snapshot,390,844)

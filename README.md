@@ -60,7 +60,17 @@ npm run preview
 
 测试包含十二波推进与双首领技能、十二种牌型、六位小丑、66 种职业组合的双向融合、能力继承、品质融合、物品效果、存档验证和旧版迁移。浏览器中的动作观感与通关节奏还需要持续试玩反馈。
 
-下面保留各阶段的验收记录与对应脚本，旧脚本中的防线数值、24池及终幕商店口径仅对应当时版本；当前生命制、36池与连续十二波请运行本节末的 `check-life-builds-ui.mjs`。
+桌面整备可用 Alt + 工具栏序号打开对应工具，Esc 返回。选牌后展开「计分明细」可查看逐项来源。奖励和货架中的「详细效果」可以在作出选择前展开。
+
+桌面界面验收使用运行中的开发服务器和独立的 Chrome 测试目录。先运行路线脚本生成合法备战与交战快照，再生成两个桌面尺寸的截图、命中检查和字号记录。
+
+```bash
+node scripts/verify-builds.mjs
+node scripts/verify-endless.mjs
+LEGION_TEST_URL=http://127.0.0.1:5173 node scripts/check-interface-ui.mjs
+```
+
+打开 `output/ui-review/index.html` 可逐页查看原始截图。以下保留历次验收记录。当前生命制、36 项奖励池与连续十二波另见 `check-life-builds-ui.mjs`。
 
 早期体验优化的修改文件、统计口径和人工试玩项目见 [验收记录](docs/experience-optimization-2026-11-23.md)。生成离线版后，可用 Node 22+ 与本机 Chrome 复跑隔离浏览器验收，不会使用日常浏览器资料。
 

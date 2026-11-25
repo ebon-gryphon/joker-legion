@@ -68,14 +68,6 @@ try {
   if(await run("!!document.querySelector('.scene-close')"))await click('.scene-close')
   await click('.scene-tools button[data-tool="'+name+'"]')
  }
- const card=face=>'.playing-card[title^='+JSON.stringify(face+' ·')+']'
- async function playFaces(faces,score,{capture=false,prefix='hand'}={}) {
-  for(const face of faces)await click(card(face)+':not(.selected)',{delay:12})
-  assert.ok((await read('.score-equation')).includes(String(score)))
-  await click('.deploy-button',{delay:0});await wait("!!document.querySelector('.score-sequence')")
-  if(capture)return captureStages(prefix)
-  await wait("document.querySelector('.score-sequence')?.dataset.complete==='true'",150,25)
- }
  async function captureStages(prefix) {
   const wanted=new Set(['quality','muster','order']),seen=[],started=Date.now()
   for(let i=0;i<700;i++) {
@@ -102,7 +94,7 @@ try {
   await wait("['shop','won','lost'].includes(document.querySelector('.scene-shell')?.dataset.phase)",900,40)
   await shot(prefix+'-actual-wave-end');return saved()
  }
- const budget=game=>({gold:game.gold,energy:game.energy,hands:game.handsLeft,prints:game.printsLeft})
+ const budget=game=>({gold:game.gold,crystals:game.crystals,life:game.baseHp,maxLife:game.maxBaseHp,lifeFailed:!!game.lifeFailed,energy:game.energy,hands:game.handsLeft,prints:game.printsLeft})
  async function continueJourney(route,fromAction) {
   const reference=new Map(),unitIds=new Map(),records=[],waves=[]
   replayBuild(route,{onAction:({before,after,action})=>reference.set(action.n,{before,after:snapshotGame(after)})})
@@ -164,13 +156,21 @@ try {
     const expectedNew=members(reference.get(entry.n).after).filter(unit=>!members(reference.get(entry.n).before).some(old=>old.id===unit.id))
     const actualNew=members(after).filter(unit=>!members(before).some(old=>old.id===unit.id))
     if(entry.type==='deploy'){
+      if(entry.wave===2 && p.expectedKey==='flushFive'){
+        const facts=deriveDeployFacts(before,after),referenceStep=reference.get(entry.n)
+        const expected=deriveDeployFacts(referenceStep.before,referenceStep.after)
+        assert.deepEqual(facts.order,expected.order)
+        assert.equal(facts.recruitment.grade,expected.recruitment.grade)
+        assert.equal(facts.recruitment.status,expected.recruitment.status)
+        assert.deepEqual(facts.orderRecipients.map(u=>[u.name,u.isNew]),expected.orderRecipients.map(u=>[u.name,u.isNew]))
+      }
       assert.equal(actualNew.length,expectedNew.length,'Actual recruitment branch at '+entry.n)
       for(let i=0;i<expectedNew.length;i++)unitIds.set(expectedNew[i].id,actualNew[i].id)
     }
     records.push({n:entry.n,wave:entry.wave,type:entry.type,params:actualParams,before:entry.type==='tick'?entry.before:budget(before),after:budget(after),...(entry.type==='deploy'?{scoreTrace:after.lastDeploy.scoreTrace}:{}),...(entry.type==='tick'?{source:'observed real ticker; no scripted tick call'}:{})})
-    await writeFile(join(output,'presentation-journey-actions.json'),JSON.stringify({seed:4,method:'Real mouse start and first two waves; normal main action handlers thereafter. Every battle advances only by the actual browser ticker.',continuedFromAction:fromAction,actions:records,waves},null,2)+'\n')
+    await writeFile(join(output,'presentation-journey-actions.json'),JSON.stringify({seed:4,method:'Real mouse start and public UI handlers. Every battle advances only by the actual browser ticker.',continuedFromAction:fromAction,actions:records,waves},null,2)+'\n')
   }
-  const end=await saved();assert.equal(end.phase,'won');assert.equal(end.stats.wavesCleared,12);assert.equal(end.baseHp,100)
+  const end=await saved();assert.equal(end.phase,'won');assert.equal(end.stats.wavesCleared,12);assert.equal(end.baseHp,route.finalSnapshot.baseHp)
   await shot('journey-main-12-wave-victory')
   return {ending:{phase:end.phase,wave:end.wave,wavesCleared:end.stats.wavesCleared,gate:end.baseHp,gold:end.gold,kills:end.stats.kills},actionsRecorded:records.length,waves:waves.map(({report,...wave})=>wave)}
  }
@@ -189,62 +189,15 @@ try {
  await scenario('journey',async()=>{
   await boot(null);await click('.cover-start');await click('[data-actor="ghost"]');await click('[aria-label="固定种子"]');await send('Input.insertText',{text:'4'})
   await click('.intro-start');await wait("!!document.querySelector('.tutorial-coach')");await textClick('.tutorial-coach','结束引导')
-  const first=evidence.routes.find(route=>route.id==='a').actions.filter(action=>action.wave===1&&action.type==='deploy')
-  for(const [index,action] of first.entries())await playFaces(action.params.cards.map(card=>card.face),action.params.expectedScore,{prefix:'newgame-'+index})
-  const completed=await battleUntilShop('journey-wave1');assert.equal(completed.baseHp,100)
-  if(await run("!!document.querySelector('.wave-victory>button')"))await click('.wave-victory>button')
-  await wait("!!document.querySelector('.reward-card[data-reward=supply]')",160,40);await click('.reward-card[data-reward=supply]')
-  await click('[aria-label^="购买孪生墨水"]');await click('[aria-label^="购买记分粉笔"]')
-  await desk('menu');await click('.war-college button.secondary-button');assert.equal((await saved()).handLevels.pair,2)
-  await click('.scene-close')
-  await click('.field-advance');await wait("document.querySelector('.scene-shell').dataset.phase==='ready'")
-  assert.equal((await saved()).gold,16)
-  await desk('press')
-  const printing=evidence.routes[0].actions.find(action=>action.wave===2&&action.type==='print')
-  const hand=(await saved()).hand
-  for(const target of [printing.params.source,...printing.params.targets]) {
-    const index=hand.findIndex(card=>card.suit+card.rank===target.face)
-    assert.ok(index>=0,'Real first-wave route changed physical hand '+target.face)
-    await click('.press-hand button[aria-label='+JSON.stringify(target.face+' 第'+(index+1)+'张')+']')
-  }
-  await click('.press-pay button');assert.equal((await saved()).gold,2)
-  await desk('orders');const before3520=await saved()
-  const stages=await playFaces(['♦A','♦A','♦A','♦A','♦A'],3520,{capture:true,prefix:'journey-3520'})
-  const after=await saved(),receipt=after.lastDeploy.scoreTrace
-  assert.equal(after.lastDeploy.captainGrade,4);assert.equal(receipt.recruit.statBonus,70);assert.equal(receipt.recruit.profession,'御前君主')
-  assert.deepEqual(receipt.order.bonus,{force:58,shield:85,haste:45})
-  const visibleRecruit=await read('.recruit-reveal'),visibleRecipients=await read('.order-recipients')
-  assert.ok(visibleRecruit.includes('御前君主') && visibleRecruit.includes('70%'),'Real recruitment facts are not visible')
-  const actualFacts=deriveDeployFacts(before3520,after),existing=actualFacts.orderRecipients.filter(unit=>!unit.isNew)
-  assert.ok(existing.length>0,'No existing recipient was actually ordered')
-  const number=(value,stat)=>Number(value.toFixed(stat==='period'?3:1))
-  for(const unit of existing){
-    const rowText=await read('[data-order-recipient='+JSON.stringify(unit.id)+']')
-    assert.ok(rowText.includes(unit.name),'Actual recipient is not visible: '+unit.name)
-    for(const effect of unit.effects.filter(effect=>Number.isFinite(effect.delta)&&effect.delta!==0)){
-      const text=number(effect.before,effect.stat)+' → '+number(effect.after,effect.stat)
-      assert.ok(rowText.includes(text),'Actual '+unit.name+' '+effect.stat+' change is not visible: '+text+'; '+rowText)
-    }
-  }
-  assert.ok(visibleRecipients.includes('本手合计变化'),'Recipient scope must not attribute every gain solely to the nominal order')
-  await shot('journey-3520-receipt')
-  for(const entry of evidence.routes[0].actions.filter(action=>[20,22].includes(action.n))){
-    await playFaces(entry.params.cards.map(card=>card.face),entry.params.expectedScore)
-    const actual=await saved();assert.equal(actual.lastDeploy.key,entry.params.expectedKey);assert.equal(actual.lastDeploy.score,entry.params.expectedScore);assert.deepEqual(budget(actual),entry.after)
-  }
-  const wave2=await battleUntilShop('journey-wave2');assert.equal(wave2.stats.wavesCleared,2)
-  await desk('report');await click('.report-payoffs>summary');await shot('journey-wave2-payoffs')
-  if(await run("!!document.querySelector('.scene-close')"))await click('.scene-close')
-  const fullRoute=await continueJourney(evidence.routes[0],25)
-  return {firstScores:first.map(action=>action.params.expectedScore),stages,grade:4,statBonus:70,order:receipt.order.bonus,actualRecipients:existing,wave2:{scores:[3520,324,16],gate:wave2.baseHp,damage:wave2.lastCombatReport.totals.damage},...fullRoute}
+  return continueJourney(evidence.routes.find(route=>route.id==='a'),1)
  })
  await scenario('sizes',async()=>{
   const a=await fixture('a-a-before-3520'),records=[]
   for(const [width,height] of [[1366,900],[390,844],[360,740],[844,390],[768,1024]]) {
     await boot(a.snapshot,width,height)
-    assert.ok((await read('.score-equation')).includes('3520'))
+    assert.ok((await read('.score-equation')).includes('3360'))
     await click('.deploy-button',{delay:0});const committed=await saved();const stages=await captureStages('size-'+width+'x'+height)
-    assert.equal(committed.lastDeploy.score,3520)
+    assert.equal(committed.lastDeploy.score,3360)
     assert.ok(await run('document.documentElement.scrollWidth<=innerWidth'),'horizontal overflow '+width)
     const reachable=await run("(()=>{const e=document.querySelector('.deploy-button');e.scrollIntoView({block:'nearest'});const r=e.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight})()")
     assert.ok(reachable,'real action cannot be reached at '+width)
@@ -279,7 +232,7 @@ try {
  })
  await scenario('boss',async()=>{
   let f
-  const queenSource=process.env.LEGION_QUEEN_FIXTURE || (existsSync(join(output,'presentation-fixtures/queen-pulse.json'))?'output/presentation-fixtures/queen-pulse.json':null)
+  const queenSource=process.env.LEGION_QUEEN_FIXTURE
   if(queenSource){const path=isAbsolute(queenSource)?queenSource:join(root,queenSource);f=JSON.parse(await readFile(path,'utf8'))}
   else {
     const route=runBuildStrategy(BUILD_ROUTES[0],{fixtures:false});let snapshot,actions

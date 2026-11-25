@@ -129,7 +129,7 @@ function merge() {
     <div class="forge-stars">{{ grade(receipt.unit) }}</div><h3>{{ receipt.name }}</h3>
     <p>{{ receipt.from }} 已与 {{ receipt.other }} 合编。</p>
     <p v-if="receipt.unit.fusionJobs" class="forge-skill"><b>{{ fusionProfessionNames(receipt.unit).join(' ＋ ') }}</b>　各职业能力已保留，可继续融合其他职业。</p>
-    <div class="forge-stats"><span v-for="stat in receipt.stats" :key="stat.label">{{ stat.label }} <del>{{ stat.before }}</del> → <b>{{ stat.after }}</b></span></div>
+    <div class="forge-stats"><span v-for="stat in receipt.stats" :key="stat.label">{{ stat.label }} <del>{{ stat.before }}</del> → <b :class="{'ui-positive':stat.after>stat.before,'ui-loss':stat.after<stat.before}">{{ stat.after }}</b></span></div>
     <div class="forge-receipt-actions"><button class="secondary-button key-ink" @click="emit('close')"><KeyMark name="return"/>返回手牌</button><button ref="continueButton" class="gold-button key-command" @click="receipt = null"><KeyMark name="forge"/>继续整编</button></div>
   </section>
 
@@ -149,7 +149,7 @@ function merge() {
         <div><small>融合结果</small><h3>{{ displayName(ascendPair.leader) }}</h3><span>{{ QUALITIES[ascension.grade].name }} · {{ '★'.repeat(ascension.level) }} · {{ ascension.trainingXp }} 经验</span></div>
       <button class="key-command" @click="ascend"><KeyMark name="forge"/>免费融合为{{ QUALITIES[ascension.grade].name }}</button>
       </div>
-      <div class="forge-stats"><span v-for="stat in statRows(ascendPair.leader,ascension)" :key="stat.label">{{ stat.label }} <del>{{ stat.before }}</del> → <b>{{ stat.after }}</b></span></div>
+      <div class="forge-stats"><span v-for="stat in statRows(ascendPair.leader,ascension)" :key="stat.label">{{ stat.label }} <del>{{ stat.before }}</del> → <b :class="{'ui-positive':stat.after>stat.before,'ui-loss':stat.after<stat.before}">{{ stat.after }}</b></span></div>
       <MergeWarning v-if="ascendWarning" :warning="ascendWarning"/>
     </template>
     <p v-else class="forge-note">需要两名同品质的传说或神话，副手需解锁。候补席的成员也可互相融合。战阵中也可将副手直接拖到保留者身上。</p>
@@ -185,7 +185,7 @@ function merge() {
     <section class="forge-bench">
       <div class="forge-bench-scroll" tabindex="0" aria-label="融合预览与职业能力">
       <div class="forge-subhead"><h3>{{ outputName }}</h3><small>{{ isFusion ? '保留主兵身份与星级' : '同职业 · 最高三星' }}</small></div>
-      <p class="forge-note">{{ isFusion ? '不同职业，一星即可融合。保留经验与能力，属性继承比例见下方材料预览；融合兵可继续融合其他职业。同族的刀兵、枪兵与骑兵也能互相融合。' : '两名同职业、同星士兵合编。主将升一星并按预览比例继承副手属性，保留双方已经学会的能力。' }}</p>
+      <details class="forge-rule"><summary class="key-disclosure">材料与继承规则</summary><p class="forge-note">{{ isFusion ? '不同职业，一星即可融合。保留经验与能力，属性继承比例见下方材料预览；融合兵可继续融合其他职业。同族的刀兵、枪兵与骑兵也能互相融合。' : '两名同职业、同星士兵合编。主将升一星并按预览比例继承副手属性，保留双方已经学会的能力。' }}</p></details>
       <div class="forge-formula">
         <template v-for="(slot,index) in sourceList" :key="slot.label">
           <span v-if="index" class="forge-sign" aria-hidden="true">＋</span>
@@ -207,7 +207,7 @@ function merge() {
       <div v-if="isFusion && inheritedJobs.length" class="forge-skill forge-inherited"><b>融合后的职业能力</b>
         <p v-for="job in inheritedJobs" :key="job.name"><strong>{{ job.name }} · {{ job.skill }}</strong> {{ job.text }}</p>
       </div>
-      <div v-if="result" class="forge-stats"><span v-for="stat in stats" :key="stat.label">{{ stat.label }} <del>{{ stat.before }}</del> → <b>{{ stat.after }}</b></span></div>
+      <div v-if="result" class="forge-stats"><span v-for="stat in stats" :key="stat.label">{{ stat.label }} <del>{{ stat.before }}</del> → <b :class="{'ui-positive':stat.after>stat.before,'ui-loss':stat.after<stat.before}">{{ stat.after }}</b></span></div>
       </div>
       <footer class="forge-commit"><div class="forge-warning-stack"><MergeWarning v-if="consumptionWarning" compact :warning="consumptionWarning"/><small v-else>{{ isFusion ? '职业融合消耗副兵，保留主兵身份与品质；选定两人后可查看实际继承属性。' : '升星消耗一名同职业同星副兵，保留主兵品质；选定两人后可查看实际继承比例。' }}上锁的士兵不能作为材料。</small></div>
         <button class="gold-button key-command" :disabled="!result || !affordable" @click="merge"><KeyMark name="forge"/>{{ !result ? '材料未齐' : !affordable ? '还缺 '+(price-game.gold)+' 金币' : isFusion ? '消耗副兵并融合' : '消耗副兵升至'+result.level+'星' }}<small class="forge-price">{{ isFusion ? price+' 金币' : '免费' }}</small></button>

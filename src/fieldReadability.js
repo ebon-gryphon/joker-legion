@@ -21,9 +21,24 @@ export function enemyPaintOffsets(enemies) {
 }
 
 export function readableLabels(labels) {
-  const important=labels.filter(l=>l.unit || l.priority==='warning')
+  // Combine only overlapping landed damage on the same soldier. Unattributed
+  // numbers and healing keep their own labels and the existing collision budget.
+  const grouped=[], hits=new Map()
+  for (const label of labels) {
+    if (!label.damageTarget || !Number.isFinite(label.amount)) {grouped.push(label);continue}
+    const old=hits.get(label.damageTarget)
+    if (old && Math.abs(old.y-label.y)<18) {
+      old.amount+=label.amount
+      old.text=String(Math.round(old.amount))
+      old.alpha=Math.max(old.alpha,label.alpha)
+    } else {
+      const copy={...label}
+      hits.set(label.damageTarget,copy);grouped.push(copy)
+    }
+  }
+  const important=grouped.filter(l=>l.unit || l.priority==='warning')
   const selected=[...important]
-  for(const label of labels.filter(l=>!important.includes(l)).reverse()){
+  for(const label of grouped.filter(l=>!important.includes(l)).reverse()){
     if(selected.length-important.length>=5)break
     const half=Math.max(14,label.text.length*label.size/2)
     if(!selected.some(l=>Math.abs(l.x-label.x)<half+Math.max(14,l.text.length*l.size/2) && Math.abs(l.y-label.y)<18))selected.push(label)

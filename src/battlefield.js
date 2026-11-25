@@ -209,11 +209,23 @@ export function createBattlefield(canvas) {
     display.save()
     display.textAlign='center'; display.lineJoin='round'; display.strokeStyle='#191420'
     const nameBoxes = []
+    // Dim repeated ordinary names only in combat. Hover uses painted screen coordinates.
+    const ordinaryNames=new Set()
+    const repeatedNames=new Set()
+    if (game.phase==='battle') for (const label of labels) {
+      if (!label.ordinary) continue
+      if (ordinaryNames.has(label.text)) repeatedNames.add(label.text)
+      ordinaryNames.add(label.text)
+    }
     for (const label of (game.phase==='battle'?readableLabels(labels):labels)) {
       const size = Math.max(label.size, Math.min(label.size*1.55, label.size*scale))
       display.font = '700 ' + size + 'px system-ui, "PingFang SC", "Microsoft YaHei", sans-serif'
       display.lineWidth=Math.max(2.5,size*.22); display.globalAlpha=label.alpha ?? 1
       const anchorX=viewLeft + label.x*scale, anchorY=viewTop + label.y*scale
+      if (label.ordinary && repeatedNames.has(label.text) && label.unit!==options.selectedUnit) {
+        const hover=options.hoverPoint
+        if (!hover || Math.abs(hover.x-anchorX)>28*scale || hover.y<anchorY-size || hover.y>anchorY+55*scale) display.globalAlpha=.55
+      }
       let x=anchorX,y=anchorY
       if (label.unit || label.priority==='warning') {
         if (x < -10 || x > width+10) continue

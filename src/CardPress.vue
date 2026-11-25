@@ -28,23 +28,24 @@ function confirm() {
 <template>
   <h2 id="press-title">营地牌匠</h2>
   <p class="press-intro">选一张手牌作底本，再把其他手牌改印成它的点数和花色。改动保留到本次远征结束。</p>
-  <div class="press-wallet"><span>金币 <b>{{ game.gold }}</b></span><span>本波可改 <b>{{ game.printsLeft }} / {{ PRINTS_PER_WAVE }}</b> 张</span></div>
+  <div class="press-wallet"><span>金币 <b>{{ game.gold }}</b></span><span>本波可改 <b>{{ game.printsLeft }} / {{ game.printsBudget ?? PRINTS_PER_WAVE }}</b> 张</span></div>
   <div class="press-step"><strong>{{ !game.printsLeft ? '本波改印已用完' : source ? '选择要改印的手牌' : '选择底本' }}</strong>
     <button v-if="source" class="text-button key-link" @click="reset"><KeyMark name="cards"/>重选底本</button></div>
   <div class="press-hand">
     <button class="key-face" v-for="(card, index) in game.hand" :key="card.id" :aria-label="face(card) + ' 第' + (index+1) + '张'"
-      :disabled="!game.printsLeft || unavailable(card)" :aria-pressed="targets.includes(card.id) || card === source"
+      :title="unavailable(card)?(face(card)===face(source)?'与底本相同':'已选满本波可改数量'):undefined" :disabled="!game.printsLeft || unavailable(card)" :aria-pressed="targets.includes(card.id) || card === source"
       :class="{ source: card === source, chosen: targets.includes(card.id) }" @click="choose(card)">
       <b :class="{ warm: ['♥', '♦'].includes(card.suit) }">{{ face(card) }}</b>
       <PixelSprite :atlas="getCardDesign(card).atlas" :frame="getCardDesign(card).frame"/>
       <small>{{ card === source ? '底本' : targets.includes(card.id) ? '改为 ' + face(source) : getCardDesign(card).name }}</small>
     </button>
   </div>
+  <div v-if="source && targets.length" class="ui-flow" aria-live="polite"><span><small>原牌</small>{{ game.hand.filter(card=>targets.includes(card.id)).map(face).join('、') }}</span> → <span><small>改印结果</small>{{ face(source) }} × {{ targets.length }}</span></div>
   <p v-if="receipt" class="receipt" role="status">{{ receipt }}</p>
   <details v-if="Object.keys(game.cardEdits).length"><summary class="key-disclosure"><KeyMark name="order"/>本局已改动 {{ Object.keys(game.cardEdits).length }} 张</summary>
     <div class="edits"><span v-for="(current, original) in game.cardEdits" :key="original">{{ original }} → {{ current }}</span></div>
   </details>
-  <div class="press-pay"><small>每波第 1 至 4 张依次花费 2、3、4、5 金币。</small>
+  <div class="press-pay"><small>{{ game.printsLeft ? '本波下一张 '+printingCost(game,1)+' 金币，选牌后显示总价。' : '本波可用次数已用完。' }}</small>
     <button class="gold-button key-command" :disabled="!targets.length || game.gold < price" @click="confirm"><KeyMark name="press"/>
       {{ targets.length ? (game.gold < price ? '金币不足' : '改印 ' + targets.length + ' 张') + ' · ' + price + ' 金币' : '选择改印手牌' }}
     </button></div>

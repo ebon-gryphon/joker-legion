@@ -1,5 +1,6 @@
+<script setup>defineProps({secondary:Boolean})</script>
 <template>
-  <button type="button" class="cover-start key-command"><span aria-hidden="true">♦</span> 开始游戏 <span aria-hidden="true">♠</span></button>
+  <button type="button" class="cover-start key-court" :class="secondary?'key-ink':'key-command'"><span aria-hidden="true">♦</span> 开始新局 <span aria-hidden="true">♠</span></button>
 </template>
 
 <style scoped>

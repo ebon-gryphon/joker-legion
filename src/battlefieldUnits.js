@@ -136,7 +136,7 @@ export function drawUnit(c, unit, sample, time, lag, yMap, enemyArt, cameraTop, 
       rect(c,lockX+1,barY-5,5,4,'#f3c977');rect(c,lockX+2,barY-4,3,3,'#322734')
       rect(c,lockX,barY-2,7,6,'#f5d38b');rect(c,lockX+3,barY,1,3,'#413140')
     }
-    labels.push({unit:unit.id,text:label,x,y:barY-4,size:12,color:presentation?.pending?'#cfc3cb':unit.grade ? gradeOf(unit).color : (royal || unit.standard ? '#ffdc96' : '#f6f0e6')})
+    labels.push({unit:unit.id,ordinary:!unit.command && !unit.crowned && !unit.standard && !unit.fusion && (unit.grade || 0)<4,text:label,x,y:barY-4,size:12,color:presentation?.pending?'#cfc3cb':unit.grade ? gradeOf(unit).color : (royal || unit.standard ? '#ffdc96' : '#f6f0e6')})
   }
   if (unit.fusion) {
     for (let i = 0; i < 3; i++) rect(c, x - 8 + i * 6, barY + 5, 4, 2, i < unit.skillCharge ? faction : '#585064')

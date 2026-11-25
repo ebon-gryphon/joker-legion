@@ -14,7 +14,7 @@ const factionOf = suit => CARD_SUITS.find(faction => faction.suit === suit)
     <button v-for="(card, index) in cards" :key="card.id" class="playing-card key-face" :class="{ palming: palming && palmId === card.id, altered: game.palmedCard?.id === card.id, selected: game.selected.includes(card.id), unscored: game.selected.includes(card.id) && !preview.scoringIds.includes(card.id), red: card.suit === '♥' || card.suit === '♦' }"
         :style="{ '--card-index': index, '--faction': factionOf(card.suit).color }" :data-faction="cardDesign(card).atlas"
         :title="`${card.suit}${card.rank} · 计分点数 ${card.rank==='A'?11:Math.min(10,Number(card.rank)||10)} · 右键查看牌绘`" @contextmenu.prevent="emit('inspect',card)"
-        :aria-label="`${suitLabels[card.suit]}${card.rank}，手牌${game.selected.includes(card.id) ? '，已选择' : ''}`" :aria-pressed="game.selected.includes(card.id)"
+        :aria-label="`${suitLabels[card.suit]}${card.rank}，手牌${game.selected.includes(card.id) ? (preview.scoringIds.includes(card.id)?'，已选择，参与计分':'，已选择，随手牌') : ''}`" :aria-pressed="game.selected.includes(card.id)"
         :disabled="!ordersOpen || (!palming && !game.selected.includes(card.id) && game.selected.length >= 5)" @click="emit('choose',card.id)">
         <span class="hand-corner"><b class="hand-rank">{{ card.rank }}</b><SuitMark :suit="card.suit" class="hand-suit"/>
         </span>

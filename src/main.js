@@ -6,5 +6,6 @@ import './tactics.css'
 import './field.css'
 import './controls.css'
 import './scene.css'
+import './table-ui.css'
 
 createApp(LegionGame).mount('#app')

@@ -1,0 +1,222 @@
+/* Shared table materials, suit colours and control states. Game art keeps its own palette. */
+:root {
+  --ui-ink: #181518;
+  --ui-night: #211b24;
+  --ui-paper: #f3e8d8;
+  --ui-muted: #c4b9ad;
+  --ui-stitch: #54464b;
+  --ui-velvet: #54232f;
+  --ui-gold: #f1c77f;
+  --ui-crystal: #88d9ef;
+  --ui-ruby: #ff8299;
+  --ui-chip: #94caff;
+  --ui-mult: #ff9b9f;
+  --ui-life: #ffaa9e;
+  --ui-mint: #9fdbc4;
+  --ui-danger: #ff7380;
+  --ui-body: "PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  --ui-display: "Songti SC",STSong,"Noto Serif CJK SC",Georgia,serif;
+  --ui-1: 4px;
+  --ui-2: 8px;
+  --ui-3: 12px;
+  --ui-4: 16px;
+  --ui-6: 24px;
+  --ui-shadow: 0 12px 36px #100d11a8, inset 0 1px #ffffff0d;
+  --ui-panel: linear-gradient(115deg,#302328,#211d21 42%,#19181c);
+  --ui-card: linear-gradient(145deg,#392a2e,#292428 60%,#242024);
+  --ui-trim: linear-gradient(90deg,#743544 0%,#b97570 36%,#773b49 68%,#3b2530);
+}
+#app .scene-shell {font-family:var(--ui-body);font-variant-numeric:tabular-nums;color:var(--ui-paper)}
+#app :is(button,select,summary,input):focus-visible {outline:3px solid #a8e3ed;outline-offset:2px;z-index:2}
+#app button:not(:disabled), #app summary {touch-action:manipulation}
+#app :is(.scene-panel,.poker-modal,.modal,.sheet-modal,.card-codex,.brief-modal):not(.embedded-panel) {
+  color:var(--ui-paper);border:1px solid var(--ui-stitch);border-top:3px solid #954958;
+  background:var(--ui-panel);box-shadow:var(--ui-shadow);border-radius:6px;
+}
+#app :is(.scene-panel,.modal,.poker-modal,.desk-body,.score-details,.hand-scroll,.manual-grid) {scrollbar-color:#866674 #241e23;scrollbar-width:thin}
+#app :is(.modal,.poker-modal,.desk-body) {overscroll-behavior:contain}
+#app :is(.scene-panel,.modal,.poker-modal,.casting-stage,.manual-grid) :is(h2,h3,h4) {font-family:var(--ui-display);color:var(--ui-paper)}
+#app :is(.key-ink,.key-tab,.key-index,.key-link,.key-close,.key-price,.key-command,.key-select) {
+  font-family:var(--ui-body);text-shadow:none;letter-spacing:.015em;
+  transition:background-color 150ms,color 150ms,border-color 150ms,box-shadow 150ms;
+}
+#app :is(.key-ink,.key-tab,.key-index,.key-select,.key-close) {
+  color:var(--ui-paper);border:1px solid #65545a;border-image:none;background:#342c30;
+  border-radius:4px;box-shadow:inset 0 1px #ffffff0d;
+}
+#app .key-link {color:#d2c8ba;border-image:none;text-underline-offset:3px}
+#app :is(.key-ink,.key-tab,.key-index,.key-close,.key-select):enabled:hover {background:#49363c;border-color:#a07980}
+#app :is(.key-ink,.key-tab,.key-index)[aria-pressed="true"],#app .key-tab.active {
+  color:#fff2df;background:#693341;border-color:#bf8591;box-shadow:inset 0 -2px #cf8c99;
+}
+#app :is(.key-command,.ui-primary,.cover-play .deal-resume.ui-primary) {
+  border:1px solid #f1cb86;border-image:none;background:linear-gradient(#f8daa0,#e7b970);
+  color:#342320;text-shadow:none;border-radius:4px;box-shadow:inset 0 1px #fff0cd,0 2px #634137;
+}
+#app :is(.key-command,.ui-primary):enabled:hover {background:#ffe2aa;color:#291b17}
+#app :is(.key-price,.purchase-button) {background:#203b45;border:1px solid #497e8e;border-image:none;color:var(--ui-crystal);box-shadow:none;border-radius:4px}
+#app .key-price:enabled:hover {background:#294e5b;border-color:var(--ui-crystal)}
+#app :is(.ui-danger,.confirm-danger,.danger-button) {background:#55262f;color:#ffd5d4;border-color:#b35e69}
+#app button:enabled:active:not(.playing-card) {filter:brightness(.9)}
+#app :is(.key-price,.key-ink,.key-tab,.key-index,.key-command):disabled {opacity:1;background:#282428;color:#a99da2;border:1px dashed #51494e;box-shadow:none;cursor:not-allowed}
+#app .ui-card,#app :is(.stall-item,.reward-card,.legacy-grid article,.formation-card) {
+  background:var(--ui-card);border:1px solid var(--ui-stitch);border-image:none;border-radius:5px;box-shadow:inset 0 1px #ffffff09;color:var(--ui-paper);
+}
+#app .key-disclosure {color:#ded0c0;cursor:pointer;line-height:1.5;text-align:left}
+#app details[open]>.key-disclosure {color:var(--ui-paper)}
+.ui-tag,.ui-balance,.ui-price {display:inline-flex;align-items:center;gap:var(--ui-1);font:650 12px/1.5 var(--ui-body);font-variant-numeric:tabular-nums}
+.ui-tag {padding:1px 6px;border:1px solid var(--ui-stitch);border-radius:3px}
+#app .ui-balance {border:1px solid currentColor;padding:2px 8px;border-radius:12px}
+#app :is(.ui-ruby,.legacy-wallet b,.legacy-result h3,.legacy-result strong) {color:var(--ui-ruby)}
+#app :is(.ui-blue,.market-balance b,.crystal-resource span,.crystal-resource strong,.key-price b,[data-result-crystals]) {color:var(--ui-crystal)}
+#app :is(.gold-resource strong,[data-result-gold]) {color:var(--ui-gold)}
+#app :is(.player-life-resource .resource-icon,.player-life-resource strong,[data-result-life]) {color:var(--ui-life)}
+#app :is(.ui-positive,.score-order-effect,.market-success) {color:var(--ui-mint)}
+#app :is(.ui-loss,.market-unavailable,[role=alert]) {color:var(--ui-life)}
+#app .ui-muted {color:var(--ui-muted)}
+#app .cover-menu {color:var(--ui-paper)}
+#app .cover-play:has(.ui-primary) .cover-start {filter:saturate(.4);order:2}
+#app .cover-play .deal-resume.ui-primary {order:-1}
+#app .cover-play .deal-resume.ui-primary small {color:#584133}
+#app .cover-play .deal-resume {padding:8px 16px}
+#app .cover-menu .table-guides {align-items:stretch}
+#app .cover-wallet {margin-left:4px;color:var(--ui-ruby);font-size:12px}
+#app .scene-shell .field-head {background:linear-gradient(90deg,#231b21f7,#19191bf5 50%,#251c21f7);border-color:var(--ui-stitch);box-shadow:0 2px 8px #130f173d}
+#app .field-head .resource-strip>div {border-color:var(--ui-stitch);font-variant-numeric:tabular-nums}
+#app .scene-tools .key-tab {border-left:3px solid #89535b}
+#app .scene-tools kbd {font:600 12px/1.3 var(--ui-body);color:var(--ui-muted)}
+#app .shop-tabs {background:#261e23;border-color:var(--ui-stitch)}
+#app .hand-section .hand-score-panel {background:#211e22;border:1px solid var(--ui-stitch);border-left:3px solid #965865;border-radius:4px}
+#app .score-equation {gap:8px;margin-block:4px}
+#app .score-equation>.score-chips,#app .score-equation>.score-mult {padding:2px 8px;border-radius:3px}
+#app .score-chips {color:var(--ui-chip);background:#213a52}
+#app .score-mult {color:var(--ui-mult);background:#502b34}
+#app .score-equation .score-total {color:var(--ui-paper)}
+#app .hand-section .playing-card.selected {outline:2px solid var(--faction);outline-offset:1px;box-shadow:0 4px 0 #1a1116;transform:translateY(-7px)}
+#app .hand-section .playing-card.selected.unscored {outline:2px dashed #a49793}
+#app .hand-section .command-bar {background:#211d21;border-color:var(--ui-stitch)}
+#app .scene-shell .reward-card {text-align:left;opacity:1}
+#app .reward-card .reward-symbol {color:var(--ui-mint);background:#243b36;border-radius:4px;border:1px solid #49695d;display:grid;place-items:center}
+#app .reward-card:enabled:hover {border-color:var(--ui-mint);background:#2c3430}
+#app .reward-card .reward-plus {color:var(--ui-mint)}
+#app .stall-item.sold {opacity:.78}
+#app .stall-item .item-showcase {background:radial-gradient(ellipse at 50% 80%,#434247,#242125 76%)}
+#app .stall-stock {display:flex;gap:12px;color:var(--ui-muted);font:12px/1.5 var(--ui-body);margin:4px 0}
+#app .legacy-modal {width:min(840px,94vw);overflow:auto;max-height:90dvh;padding:var(--ui-6);text-align:left}
+.legacy-head,.legacy-wallet,.node-heading,.node-level {display:flex;align-items:center;justify-content:space-between;gap:var(--ui-2)}
+#app .legacy-head h2,.legacy-grid h3 {margin:0}
+.legacy-head p,.legacy-grid p {margin:4px 0}
+.legacy-wallet,.legacy-result {margin:var(--ui-3) 0;padding:12px 16px;background:#39232a;border-left:3px solid #aa566a}
+.legacy-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(202px,1fr));gap:var(--ui-3)}
+.legacy-grid article {display:flex;flex-direction:column;align-items:stretch;gap:var(--ui-2);padding:var(--ui-4)}
+.node-heading {justify-content:flex-start}.node-icon {width:32px;height:32px;display:grid;place-items:center;background:#3e2931;color:#f4bec4;border:1px solid #6d4552;font:700 20px Georgia}
+.node-level {justify-content:flex-start;color:var(--ui-muted);font-size:12px}
+.node-level i {display:block;width:14px;height:5px;background:#50454b}.node-level i.filled {background:var(--ui-ruby)}
+.legacy-grid .key-ink {margin-top:auto;min-height:36px}
+.legacy-grid article:has(button:enabled) .key-ink {color:#ffc4d0;background:#4d2935;border-color:#9a5e70}
+.ui-feedback {color:var(--ui-mint);font:13px/1.5 var(--ui-body);margin:8px 0 0}
+.legacy-result h3,.legacy-result p {margin:4px 0}
+.ui-flow {display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0}
+.ui-flow>span {padding:4px 8px;border-left:2px solid var(--ui-stitch);background:#342c31}
+.ui-flow small {display:block;color:var(--ui-muted)}
+.ui-settings {display:grid;gap:8px}.ui-settings>button {min-height:40px;text-align:left;padding:8px 12px}
+@media(min-width:1000px) and (min-height:650px) {
+  #app :is(.modal,.poker-modal,.scene-panel,.casting-controls,.trick-brief,.score-heading) {font:14px/1.5 var(--ui-body)}
+  #app :is(.modal,.poker-modal,.scene-panel,.casting-controls,.trick-brief) :is(p,li,dt,dd) {font-size:13px;line-height:1.5}
+  #app :is(.modal,.poker-modal,.scene-panel,.field-head,.casting-stage,.cover-menu) :is(small,.eyebrow,.card-key,.reward-duration,.reward-direction,.market-unavailable,.score-items-hint) {font-size:12px;line-height:1.4}
+  #app :is(.modal,.poker-modal,.scene-panel,.casting-stage) :is(.key-tab,.key-ink,.key-index,.key-price,.key-command) {font-size:14px;min-height:32px}
+  #app .key-command {font-weight:750}
+  #app .scene-shell[data-desk=orders] .scene-panel:has(.hand-section) {width:clamp(620px,53vw,880px)}
+  #app .scene-shell .hand-section .hand-cards {gap:8px;padding:12px 3px 6px}
+  #app .scene-shell .hand-heading h2 {font-size:22px}
+  #app .scene-shell .hand-section .command-actions .deploy-button {min-height:40px;font-size:16px}
+  #app .scene-tools .key-tab {display:flex;align-items:center;gap:6px;justify-content:flex-start}
+  #app .scene-tools kbd {margin-left:auto}
+  #app .hand-score-panel .score-equation b {font-size:26px}
+  #app .hand-score-panel .score-total b {font-size:32px}
+  #app .scene-shell .reward-grid {gap:12px}
+  #app .scene-shell .reward-card {padding:16px;align-items:start}
+}
+@media(max-width:999px) {#app .scene-tools kbd {display:none}}
+@media(prefers-reduced-motion:reduce) {
+  #app :is(button,summary,.ui-card,.playing-card) {transition:none!important}
+}
+
+
+/* Stitching and inset rails follow the existing printed tickets and stage curtains. */
+#app :is(.modal,.poker-modal,.codex-modal,.brief-modal,.scene-panel):not(.embedded-panel) {
+  background-image:var(--ui-trim),var(--ui-panel);
+  background-size:100% 3px,100% 100%;background-repeat:no-repeat;
+}
+#app .codex-modal {border:1px solid var(--ui-stitch);color:var(--ui-paper);box-shadow:var(--ui-shadow)}
+#app .settings-modal {max-width:456px;text-align:left}
+#app .settings-modal h2 {margin:0}
+#app .settings-modal .ui-settings {margin-block:16px}
+#app .settings-modal .ui-settings>button {display:flex;justify-content:flex-start}
+#app .settings-modal .ui-settings>button[aria-pressed=true]::after {content:'✓';margin-left:auto;color:var(--ui-mint)}
+#app .manual-topic {padding:12px 16px;align-self:start}
+#app .help-grid {align-content:start}
+#app .manual-topic p {margin-bottom:0}
+#app .report-headlines {display:flex;flex-wrap:wrap;gap:4px 12px;color:var(--ui-muted);margin-block:8px}
+#app .report-headlines b {color:var(--ui-paper)}
+#app .result-ledger,#app .soldier-contributions {padding:8px 0;text-align:left;border-block-start:1px solid var(--ui-stitch)}
+#app .result-modal .result-stats {margin-block:12px}
+#app .result-modal .result-leader {color:var(--ui-muted)}
+#app .legacy-result {text-align:left;border-radius:4px}
+#app .legacy-result strong {display:block;margin-top:8px}
+#app .result-modal .result-emblem {margin-block:0;font-size:34px}
+#app .ui-danger:enabled {background:#622c37;border-color:#bb6671;color:#ffe0dd}
+#app .joker-modal .key-price {background:transparent;color:var(--ui-crystal);border-style:dashed}
+#app .reward-card .reward-symbol {font:700 24px/1.2 var(--ui-display);width:36px;height:36px}
+#app .section-title,#app .desk-section-title,#app .forge-header {color:var(--ui-paper)}
+#app .scene-shell .resource-strip .resource-label strong {font-size:16px}
+#app .scene-shell .scene-menu .menu-actions {gap:8px}
+#app .modal-close,#app .forge-close,#app .scene-close {min-width:32px;min-height:32px}
+#app .forge-rule {text-align:left}
+#app .forge-warning-stack .merge-warning {border-left:3px solid #b56a72}
+#app :is(.forge-tile,.intel-unit,.formation-list button,.enemy-muster button) {border-color:var(--ui-stitch);background:var(--ui-card);color:var(--ui-paper)}
+#app :is(.formation-list,.enemy-muster,.forge-grid) button[aria-pressed=true] {background:#4c2d38;border:1px solid #ca8e99;box-shadow:inset 3px 0 #d3949d}
+@media(min-width:1000px) and (min-height:650px) {
+  #app .field-shell :is(.scene-panel,.modal,.poker-modal,.codex-modal,.field-head) :is(small,em,kbd,dt,th,td,.score-items-hint,.score-miss,.reward-tags em,.resource-label,.regen-label,.eyebrow,.forge-kicker,.toast-note) {font-size:12px;line-height:1.45}
+  #app .codex-modal :is(p,li) {font-size:13px}
+  #app .field-shell .cover-menu .cover-start {min-height:48px}
+  #app .field-shell .result-modal {width:min(760px,92vw);padding:24px 32px}
+  #app .field-shell .wave-victory {width:min(520px,100%);max-width:100%;margin-inline:auto}
+  #app .scene-panel:has(.wave-victory) {width:min(560px,90vw)}
+  #app .legacy-modal .legacy-grid .node-heading h3 {font-size:18px}
+}
+
+.cover-alternates {display:flex;gap:4px;order:3}
+#app .cover-alternates button {flex:1;min-height:32px;padding:4px 8px;background:#221a20e8;border:1px solid #685158;border-radius:3px;color:var(--ui-paper);font:13px/1.4 var(--ui-body)}
+@media(max-height:570px), (max-width:600px) {#app .cover-alternates {display:none}}
+@media(min-width:1000px) and (min-height:650px) {
+  #app .field-shell :is(.score-quality span,.cost-tag,.card-check,.score-item-row b,.key-disclosure,.forge-stats b,.merge-warning strong,.brief-title b,.codex-tabs button span,.codex-card>strong,.relic-count,.reward-plus,.field-report strong,.field-report span,.result-stats span,.member-dossier dt,.member-dossier dd) {font-size:12px;line-height:1.4}
+  #app .field-shell .reward-card strong {font:700 18px/1.4 var(--ui-display)}
+  #app .field-shell .purchase-button b {font-size:14px}
+  #app .field-shell .codex-card strong {font-size:13px;line-height:1.4}
+  #app .field-shell .hand-section .card-check {width:18px;height:18px}
+}
+@media (orientation:landscape) and (max-height:570px) {
+  #app .result-modal :is(.result-emblem,.eyebrow) {display:none}
+  #app .result-modal {padding:12px 20px}
+  #app .result-modal h2,#app .result-modal p {margin-block:4px}
+  #app .result-modal .result-stats {margin-block:4px}
+}
+#app .reward-grid .offer-card {display:flex;flex-direction:column;min-width:0}
+#app .reward-grid .reward-card {flex:1;width:100%;border:0;box-shadow:none;background:transparent}
+#app .reward-grid .offer-card:has(.reward-card:enabled:hover) {border-color:var(--ui-mint)}
+#app .offer-notes {padding:4px 12px 8px;text-align:left}
+#app .offer-notes p {margin:4px 0;color:var(--ui-muted)}
+#app .stall-item .offer-notes {grid-column:1/-1}
+.settings-volume {display:grid;grid-template-columns:auto minmax(70px,1fr) 4ch;align-items:center;gap:12px;padding:8px;color:var(--ui-paper)}
+.settings-volume input {width:100%;min-height:24px;accent-color:var(--ui-mint)}
+.settings-volume output {font-variant-numeric:tabular-nums;text-align:right}
+#app .scene-menu .ui-settings {margin:16px 0;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));align-items:center}
+@media(min-width:1000px) and (min-height:650px) {
+  #app .codex-modal .preview-sound,#app .codex-modal .member-role,#app .codex-modal .member-rule strong {font-size:12px;line-height:1.45}
+}
+
+#app .daily-record {margin-block:8px;color:var(--ui-muted);font:13px/1.5 var(--ui-body)}
+#app .daily-record p {margin:4px 0}
+
+#app .result-ledger .result-builds {max-height:none;overflow:visible}

@@ -4,7 +4,7 @@ defineProps({warning:{type:Object,required:true},compact:Boolean})
 <template>
   <section class="merge-warning" :class="{compact}" role="note" aria-label="副兵消耗与保留内容">
     <strong>{{ warning.title }}</strong>
-    <p>保留 {{ warning.leader.name }} · {{ warning.leader.quality }} · {{ warning.leader.level }}★<br/>消耗 {{ warning.donor.name }} · {{ warning.donor.quality }} · {{ warning.donor.level }}★ · #{{ warning.donor.id.split('-').pop() }}</p>
+    <p class="ui-flow"><span><small>保留主兵</small>{{ warning.leader.name }} · {{ warning.leader.quality }} · {{ warning.leader.level }}★</span><span class="ui-loss"><small>消耗副兵</small>{{ warning.donor.name }} · {{ warning.donor.quality }} · {{ warning.donor.level }}★ · #{{ warning.donor.id.split('-').pop() }}</span></p>
     <p>{{ warning.identity }}</p><p>{{ warning.attributes }}</p>
     <p>{{ warning.training }}</p>
     <p v-if="warning.donor.skills.length">副兵技能　{{ warning.donor.skills.join('、') }}</p>

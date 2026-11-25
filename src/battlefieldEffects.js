@@ -152,7 +152,7 @@ export function drawEffect(c, effect, time, yMap, reduced, lag, labels) {
   else if (type === 'telegraph') { c.globalAlpha = .3; diamond(c, x, y, effect.radius || 62, 24, '#d6758a') }
   if (effect.text && type !== 'projectile') {
     const large = type === 'burst' && String(effect.text).length > 3, yy = y - (large ? 30 : 24) - progress * 22
-    labels.push({text:effect.text,x,y:yy,size:large ? 16 : 13,color,alpha:Math.min(1,life*3)})
+    labels.push({damageTarget:type==='damage'?effect.target:null,amount:effect.amount,text:effect.text,x,y:yy,size:large ? 16 : 13,color,alpha:Math.min(1,life*3)})
   }
   c.restore()
 }

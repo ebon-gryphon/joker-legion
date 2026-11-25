@@ -14,7 +14,7 @@ export function presentationPhrase(kind,{grade=0,full=true}={}) {
   return []
 }
 export function createAudio() {
-  let context, master, preview, enabled = true
+  let context, master, output, preview, enabled = true, volume=1
   let music, score = null, subdued = false
   const playing = new Set(), recent = new Map(), presentationVoices = new Set()
   function quietBattle() {
@@ -27,8 +27,9 @@ export function createAudio() {
     try {
       if (!context) {
         context = new (window.AudioContext || window.webkitAudioContext)()
-        master = context.createGain(); master.gain.value = enabled ? .76 : 0; master.connect(context.destination)
-        music = createMusic(context)
+        output=context.createGain(); output.gain.value=volume; output.connect(context.destination)
+        master = context.createGain(); master.gain.value = enabled ? .76 : 0; master.connect(output)
+        music = createMusic(context,output)
         music.select(score, subdued)
       }
       if (context.state === 'suspended' || context.state === 'interrupted') context.resume().catch(() => {})
@@ -68,6 +69,7 @@ export function createAudio() {
   }
   return {
     unlock,
+    setVolume(value) { volume=Math.max(0,Math.min(1,value)); if(output)output.gain.setTargetAtTime(volume,context.currentTime,.02) },
     setScore(scene, quiet) {
       score = scene; subdued = quiet
       music?.select(scene, quiet)

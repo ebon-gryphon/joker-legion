@@ -33,9 +33,9 @@ function effects(item){
       <span class="score-mult"><b>{{ trace.mult }}</b><small>牌谱倍率</small></span><template v-if="finalBonus"><i aria-hidden="true">＋</i><span class="score-final-bonus"><b>{{ finalBonus.amount }}</b><small>奖励分</small></span></template><i aria-hidden="true">=</i>
       <span class="score-total"><b>{{ trace.finalScore }}</b><small>分</small></span>
     </div>
-    <p class="score-source-summary">基础 {{ trace.hand.baseChips }}<template v-if="trace.hand.levelChips"> ＋研习 {{ trace.hand.levelChips }}</template> ＋牌点 {{ points }}<template v-if="extra"> ＋道具 {{ extra }}</template>；全部筹码合计后乘倍率。<template v-if="finalBonus">{{ finalBonus.source }}另加 {{ displayNumber(finalBonus.percent*100) }}%（{{ finalBonus.amount }} 分）。</template></p>
-    <p v-if="passives.length" class="score-build-summary">本手持有 {{ passives.length }} 项构筑被动，可展开查看条件与实际触发。</p>
-    <div class="score-quality"><b>{{ quality.name }}保底</b><span v-if="trace.mode==='resolved' && trace.quality.rolled!==undefined">本手 {{ trace.quality.rolledName }}</span><span v-else-if="odds.length">升格机会：{{ odds.map(row=>row.name+' '+row.chance+'%').join(' · ') }}</span><span v-else>品质已确定</span></div>
+    <p v-if="details" class="score-source-summary">基础 {{ trace.hand.baseChips }}<template v-if="trace.hand.levelChips"> ＋研习 {{ trace.hand.levelChips }}</template> ＋牌点 {{ points }}<template v-if="extra"> ＋道具 {{ extra }}</template>；全部筹码合计后乘倍率。<template v-if="finalBonus">{{ finalBonus.source }}另加 {{ displayNumber(finalBonus.percent*100) }}%（{{ finalBonus.amount }} 分）。</template></p>
+    <p v-if="details && passives.length" class="score-build-summary">本手持有 {{ passives.length }} 项构筑被动，可展开查看条件与实际触发。</p>
+    <div class="score-quality"><b>{{ quality.name }}保底</b><span v-if="trace.mode==='resolved' && trace.quality.rolled!==undefined">本手 {{ trace.quality.rolledName }}</span><span v-else-if="odds.length && !details">有机会升格</span><span v-else-if="odds.length">升格机会：{{ odds.map(row=>row.name+' '+row.chance+'%').join(' · ') }}</span><span v-else>品质已确定</span></div>
     <p class="score-realized" :class="{overflow:outcome.overflow}" data-score-outcome>{{ outcome.summary }}</p>
     <p v-if="outcome.legendaryAlternative" class="score-conditional">{{ outcome.legendaryAlternative }}</p>
     <p class="score-order-effect">{{ trace.order.label }}<small v-if="trace.order.crownMultiplier>1"> · 已含同花王冠 25% 强化</small></p>

@@ -21,7 +21,7 @@ function inspect(type) {
 const selected = computed(() => FORMATION_BY_ID[props.inShop ? browsing.value : props.formation])
 const seconds = value => Number(value.toFixed(1))
 const intelRows = computed(() => [...props.intel.enemies].sort((a, b) => {
-  const priority = { finalBoss:3, boss: 2, bellkeeper: 1 }
+  const priority = { finalBoss:6, boss:5, cantor:4, hunter:3, bellkeeper:2, banner:1 }
   return (priority[b.type] || 0) - (priority[a.type] || 0) || b.count - a.count
 }))
 function choose(id) {
@@ -49,10 +49,13 @@ function choose(id) {
       </ul>
       <p v-if="intel.enemies.some(e=>e.type==='hunter')" class="brief-warning"><b>刺客追击</b> {{ quarryName || '等待友军入阵' }} · 优先牧师，其次游侠、术士。</p>
       <p v-if="wave.id>12 && schedule.some(e=>e.type==='bat')" class="brief-warning"><b>两翼夜袭</b> 夜翼从上下侧翼直飞我方。让近战守住侧翼，或用远程火力截击。</p>
+      <p v-if="intelRows.length" class="ui-positive"><b>{{ intelRows[0].name }}</b> · {{ ENEMY_CATALOG[intelRows[0].type].counter }}</p>
+      <details><summary class="key-disclosure">查看入场、时限与技能</summary>
       <p class="brief-warning"><b>整队出击</b> 开战时 {{ schedule.length }} 名敌军同时入场。</p>
       <p class="brief-warning"><b>限时 {{ wave.duration }} 秒</b> 时间到，普通残敌逐名按突破结算，每名损失 1 生命。生命降到 0 仍可继续，但不能再放入任何敌人。<template v-if="wave.boss">首领突破或超时仍存活会直接结束远征。</template></p>
       <p v-if="intel.bells.length" class="brief-warning"><b>鸣钟使</b> {{ intel.bells.map(seconds).join(' / ') }} 秒入场，首次蓄力 {{ BELL_WINDUP }} 秒。鸣钟会从右侧召唤流寇援军；援军可被击退，也会真实突破或在超时时结算。</p>
       <p v-if="intel.bossAt !== null" class="brief-warning"><b>{{ schedule.some(s=>s.type==='finalBoss') ? '缀命皇后' : '无冕之王' }}</b> {{ seconds(intel.bossAt) }} 秒入场。{{ schedule.some(s=>s.type==='finalBoss') ? '裁决锁定最强者；震荡蓄力时集中输出可打断，带盾可减伤。' : '半血后改为轰击后排，并延缓被击中者的行动。' }}</p>
+      </details>
     </section>
     <section class="brief-orders">
       <div class="brief-title"><h3>{{ inShop ? '阵型手册' : '选择阵型' }}</h3><b>{{ inShop ? '可预览' : '本波生效' }}</b></div>
